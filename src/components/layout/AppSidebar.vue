@@ -54,10 +54,6 @@
           <el-icon><SwitchButton /></el-icon>
           退出登录
         </el-button>
-        <el-button type="info" @click="handleExit" class="action-btn">
-          <el-icon><Close /></el-icon>
-          退出软件
-        </el-button>
       </div>
     </div>
   </el-drawer>

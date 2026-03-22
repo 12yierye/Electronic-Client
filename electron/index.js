@@ -31,9 +31,6 @@ function createWindow() {
 
   const menu = Menu.buildFromTemplate([
     { label: 'File', submenu: [
-      { label: 'Reload', role: 'reload', click: () => mainWindow.reload() },
-      { label: 'Relaunch', role: 'relaunch', click: () => { app.relaunch(); app.quit() } },
-      { type: 'separator' },
       { label: 'Quit', role: 'quit', click: () => app.quit() }
     ]},
     { label: 'Help', submenu: [

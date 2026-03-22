@@ -12,22 +12,19 @@
     <el-button 
       type="primary" 
       :icon="Promotion" 
-      circle 
       @click="handleSend"
       :disabled="!inputMessage.trim()"
-    />
+    >发送</el-button>
   </div>
 </template>
 
 <script setup>
-import { ref, inject } from 'vue'
+import { ref } from 'vue'
 import { Promotion } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 
 const aiStore = useAIStore()
 const inputMessage = ref('')
-
-const emit = defineEmits(['send'])
 
 const handleSend = () => {
   const message = inputMessage.value.trim()
@@ -42,7 +39,7 @@ const handleSend = () => {
   }, 1000)
 }
 
-const handleNewLine = (e) => {
+const handleNewLine = () => {
   // Shift + Enter 允许换行
 }
 </script>
@@ -56,25 +53,43 @@ const handleNewLine = (e) => {
   padding: 15px 30px;
   background: var(--bg-secondary);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 15px;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
   z-index: 100;
   
   .el-textarea {
     flex: 1;
+    min-height: 40px;
     
     :deep(.el-textarea__inner) {
       border-radius: 20px;
-      padding: 12px 20px;
+      padding: 10px 20px;
       resize: none;
       background: var(--bg-primary);
       color: var(--text-primary);
       border: 1px solid var(--text-secondary);
+      line-height: 1.5;
+      min-height: 40px;
+      max-height: 120px;
+      transition: all 0.3s ease;
       
       &:focus {
         border-color: var(--accent-color);
       }
+    }
+  }
+  
+  .el-button {
+    height: 40px;
+    padding: 0 20px;
+    flex-shrink: 0;
+    border-radius: 20px;
+    font-weight: 500;
+    
+    :deep(.el-icon) {
+      margin-right: 6px;
+      font-size: 16px;
     }
   }
 }

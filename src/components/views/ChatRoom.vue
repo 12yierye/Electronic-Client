@@ -395,10 +395,32 @@ onMounted(() => {
       padding: 15px 20px;
       background: var(--bg-secondary);
       display: flex;
+      align-items: center;
       gap: 10px;
       
       .el-input {
         flex: 1;
+        
+        :deep(.el-input__wrapper) {
+          border-radius: 20px;
+          background: var(--bg-primary);
+          
+          .el-input__inner {
+            color: var(--text-primary);
+          }
+        }
+      }
+      
+      .el-button {
+        height: 40px;
+        padding: 0 20px;
+        border-radius: 20px;
+        font-weight: 500;
+        
+        :deep(.el-icon) {
+          margin-right: 6px;
+          font-size: 16px;
+        }
       }
     }
   }
