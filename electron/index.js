@@ -36,11 +36,8 @@ function createWindow() {
       { type: 'separator' },
       { label: 'Quit', role: 'quit', click: () => app.quit() }
     ]},
-    { label: 'Window', submenu: [
-      { label: 'Fullscreen', role: 'fullscreen', click: () => mainWindow.fullScreen() }
-    ]},
     { label: 'Help', submenu: [
-      { label: 'About Electronic', click: () => createElectronWindow(API_BASE) },
+      { label: 'About Electronic', click: () => createElectronWindow('http://120.24.26.164') },
       { label: 'Electron Docs (zh-cn)', click: () => createElectronWindow('https://www.electronjs.org/zh/docs/latest') }
     ]}
   ])
