@@ -27,6 +27,7 @@
 <script setup>
 import { computed } from 'vue'
 import { ChatDotRound, Files, Setting, MagicStick, User } from '@element-plus/icons-vue'
+import { useI18n } from '../../composables/useI18n'
 
 const props = defineProps({
   currentView: {
@@ -40,13 +41,14 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['navigate', 'toggle-sidebar'])
+const { t } = useI18n()
 
-const navItems = [
-  { key: 'ai', icon: 'MagicStick', label: 'AI' },
-  { key: 'chat', icon: 'ChatDotRound', label: '聊天' },
-  { key: 'files', icon: 'Files', label: '文件' },
-  { key: 'settings', icon: 'Setting', label: '设置' }
-]
+const navItems = computed(() => [
+  { key: 'ai', icon: 'MagicStick', label: t('navigation.ai') },
+  { key: 'chat', icon: 'ChatDotRound', label: t('navigation.chat') },
+  { key: 'files', icon: 'Files', label: t('navigation.files') },
+  { key: 'settings', icon: 'Setting', label: t('navigation.settings') }
+])
 
 const handleNavigate = (view) => {
   emit('navigate', view)

@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref('dark')
-  const language = ref('en')
+  const language = ref('zh-CN')
   
   // 加载设置
   const loadSettings = () => {
@@ -11,7 +11,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (stored) {
       const settings = JSON.parse(stored)
       theme.value = settings.theme || 'dark'
-      language.value = settings.language || 'en'
+      language.value = settings.language || 'zh-CN'
     }
     applyTheme()
   }

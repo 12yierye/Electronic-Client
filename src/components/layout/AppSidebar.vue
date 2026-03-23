@@ -2,14 +2,14 @@
   <el-drawer
     :model-value="visible"
     @update:model-value="handleUpdateVisible"
-    title="用户信息"
+    :title="t('sidebar.title')"
     direction="rtl"
     size="300px"
     :show-close="false"
   >
     <template #header>
       <div class="sidebar-header">
-        <h3>用户信息</h3>
+        <h3>{{ t('sidebar.title') }}</h3>
       </div>
     </template>
     
@@ -20,8 +20,8 @@
           {{ userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}
         </el-avatar>
         <div class="user-details">
-          <div class="user-name">{{ userInfo?.username || '未登录' }}</div>
-          <div class="user-email">{{ userInfo?.email || 'user@example.com' }}</div>
+          <div class="user-name">{{ userInfo?.username || t('sidebar.notLoggedIn') }}</div>
+          <div class="user-email">{{ userInfo?.email || t('sidebar.unknownUser') }}</div>
         </div>
       </div>
       
@@ -30,18 +30,18 @@
       <!-- 连接状态 -->
       <div class="connection-status">
         <div class="status-header">
-          <h4>连接状态</h4>
+          <h4>{{ t('sidebar.connectionStatus') }}</h4>
           <div class="heartbeat-info">
             <el-icon size="12" color="#67c23a"><Loading /></el-icon>
-            <span class="heartbeat-text">心跳包 5秒</span>
+            <span class="heartbeat-text">{{ t('sidebar.heartbeat', { interval: 5 }) }}</span>
           </div>
         </div>
         <div class="status-item">
-          <span class="label">延迟:</span>
+          <span class="label">{{ t('sidebar.latency') }}</span>
           <span :class="['value', pingStatus]">{{ connectionInfo.ping }}ms</span>
         </div>
         <div class="status-item">
-          <span class="label">丢包率:</span>
+          <span class="label">{{ t('sidebar.packetLoss') }}</span>
           <span :class="['value', packetLossStatus]">{{ connectionInfo.packetLoss.toFixed(1) }}%</span>
         </div>
       </div>
@@ -52,7 +52,7 @@
       <div class="action-buttons">
         <el-button type="danger" @click="handleLogout" class="action-btn">
           <el-icon><SwitchButton /></el-icon>
-          退出登录
+          {{ t('sidebar.logout') }}
         </el-button>
       </div>
     </div>
@@ -62,6 +62,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { SwitchButton, Close, Loading } from '@element-plus/icons-vue'
+import { useI18n } from '../../composables/useI18n'
 
 const props = defineProps({
   visible: Boolean,
@@ -69,6 +70,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'logout', 'exit'])
+const { t } = useI18n()
 
 const defaultAvatar = ref('')
 const connectionInfo = ref({ ping: 50, packetLoss: 0.5 }) // 初始显示良好状态

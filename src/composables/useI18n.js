@@ -21,7 +21,7 @@ export function useI18n() {
   }
 
   // 翻译
-  const t = (key) => {
+  const t = (key, params = {}) => {
     const keys = key.split('.')
     let value = messages[currentLang.value]
 
@@ -33,7 +33,17 @@ export function useI18n() {
       }
     }
 
-    return value || key
+    let result = value || key
+    
+    // 替换参数
+    if (params && typeof params === 'object') {
+      Object.keys(params).forEach(paramKey => {
+        const placeholder = `{${paramKey}}`
+        result = result.replace(placeholder, params[paramKey])
+      })
+    }
+    
+    return result
   }
 
   // 获取当前语言

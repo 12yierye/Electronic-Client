@@ -11,6 +11,7 @@ app.disableHardwareAcceleration()
 
 let mainWindow = null
 const API_BASE = 'http://192.168.61.129:3000'
+const DOC_SERVER = 'http://120.24.26.164'
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -34,7 +35,7 @@ function createWindow() {
       { label: 'Quit', role: 'quit', click: () => app.quit() }
     ]},
     { label: 'Help', submenu: [
-      { label: 'About Electronic', click: () => createElectronWindow('http://120.24.26.164') },
+      { label: 'About Electronic', click: () => createElectronWindow(DOC_SERVER) },
       { label: 'Electron Docs (zh-cn)', click: () => createElectronWindow('https://www.electronjs.org/zh/docs/latest') }
     ]}
   ])

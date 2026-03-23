@@ -4,7 +4,7 @@
     <div v-if="messages.length === 0" class="welcome-section">
       <el-icon class="ai-icon" :size="60"><MagicStick /></el-icon>
       <h2>Electronic</h2>
-      <p class="intro">您的个人AI助手</p>
+      <p class="intro">{{ t('aiChat.personalAssistant') }}</p>
       <p class="greeting">{{ greeting }}</p>
     </div>
     
@@ -34,7 +34,7 @@
     <!-- 错误提示 -->
     <el-alert
       v-if="showError"
-      title="请输入内容"
+      :title="t('aiChat.inputRequired')"
       type="warning"
       show-icon
       closable
@@ -48,8 +48,10 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { MagicStick } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
+import { useI18n } from '../../composables/useI18n'
 
 const aiStore = useAIStore()
+const { t } = useI18n()
 
 const messagesContainer = ref(null)
 const showError = ref(false)

@@ -3,14 +3,14 @@
     <el-card class="login-card">
       <template #header>
         <div class="card-header">
-          <span>登录 Electronic</span>
+          <span>{{ t('login.title') }}</span>
         </div>
       </template>
-      <el-form :model="loginForm" :rules="rules" ref="formRef" label-width="0">
+      <el-form :model="loginForm" :rules="rules.value" ref="formRef" label-width="0">
         <el-form-item prop="username">
           <el-input
             v-model="loginForm.username"
-            placeholder="用户名"
+            :placeholder="t('login.username')"
             :prefix-icon="User"
           />
         </el-form-item>
@@ -18,14 +18,14 @@
           <el-input
             v-model="loginForm.password"
             type="password"
-            placeholder="密码"
+            :placeholder="t('login.password')"
             :prefix-icon="Lock"
             @keyup.enter="handleLogin"
           />
         </el-form-item>
         <el-form-item>
-          <el-checkbox v-model="autoLogin" :disabled="autoLoginSuccess">自动登录</el-checkbox>
-          <span v-if="autoLoginSuccess" class="auto-login-tip">自动登录已开启</span>
+          <el-checkbox v-model="autoLogin" :disabled="autoLoginSuccess">{{ t('login.autoLogin') }}</el-checkbox>
+          <span v-if="autoLoginSuccess" class="auto-login-tip">{{ t('login.autoLoginEnabled') }}</span>
         </el-form-item>
         <el-form-item>
           <el-button
@@ -35,12 +35,12 @@
             :disabled="autoLoginSuccess"
             @click="handleLogin"
           >
-            {{ autoLoginSuccess ? '自动登录中...' : '登录' }}
+            {{ autoLoginSuccess ? t('login.loggingIn') : t('login.login') }}
           </el-button>
         </el-form-item>
       </el-form>
       <div class="tips">
-        <span>默认服务器: {{ apiBase }}</span>
+        <span>{{ t('login.defaultServer') }} {{ apiBase }}</span>
       </div>
     </el-card>
   </div>
@@ -50,8 +50,10 @@
 import { ref, reactive, onMounted } from 'vue'
 import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from '../../composables/useI18n'
 
 const emit = defineEmits(['login-success', 'auto-login-success'])
+const { t } = useI18n()
 
 const formRef = ref(null)
 const loading = ref(false)
@@ -65,10 +67,10 @@ const loginForm = reactive({
   password: ''
 })
 
-const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
-}
+const rules = ref({
+  username: [{ required: true, message: t('login.usernameRequired'), trigger: 'blur' }],
+  password: [{ required: true, message: t('login.passwordRequired'), trigger: 'blur' }]
+})
 
 // 组件挂载时自动检查自动登录
 onMounted(async () => {

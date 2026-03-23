@@ -3,7 +3,7 @@
     <el-input
       v-model="inputMessage"
       type="textarea"
-      placeholder="按 Enter 发送消息..."
+      :placeholder="t('aiChat.enterToSend')"
       :rows="1"
       autosize
       @keydown.enter.exact="handleSend"
@@ -14,7 +14,7 @@
       :icon="Promotion" 
       @click="handleSend"
       :disabled="!inputMessage.trim()"
-    >发送</el-button>
+    >{{ t('common.send') }}</el-button>
   </div>
 </template>
 
@@ -22,8 +22,10 @@
 import { ref } from 'vue'
 import { Promotion } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
+import { useI18n } from '../../composables/useI18n'
 
 const aiStore = useAIStore()
+const { t } = useI18n()
 const inputMessage = ref('')
 
 const handleSend = () => {
@@ -35,7 +37,7 @@ const handleSend = () => {
   
   // 模拟 AI 回复
   setTimeout(() => {
-    aiStore.addAIMessage('这是AI的回复内容，可能与真实答案有所偏差，请谅解。')
+    aiStore.addAIMessage(t('aiChat.aiResponse'))
   }, 1000)
 }
 
