@@ -14,6 +14,9 @@ const API_BASE = 'http://192.168.61.129:3000'
 const DOC_SERVER = 'http://120.24.26.164'
 const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'  // LM Studio OpenAI-compatible API
 
+console.log('[Main] Electron 主进程启动')
+console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     title: 'Electronic',
@@ -197,7 +200,9 @@ ipcMain.handle('create-credential', async (event, username) => {
 })
 
 // 本地 AI 聊天 (LM Studio)
+console.log('[Main] 注册 ai-chat IPC 处理程序')
 ipcMain.handle('ai-chat', async (event, userMessage) => {
+  console.log('[AI Chat] 收到调用，消息:', userMessage)
   try {
     console.log('[AI Chat] 发送消息:', userMessage)
     const requestBody = {

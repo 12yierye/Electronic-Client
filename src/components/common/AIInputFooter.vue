@@ -42,6 +42,8 @@ const handleSend = async () => {
   
   // 调用本地 AI 模型回复
   try {
+    console.log('[Renderer] window.electronAPI:', window.electronAPI)
+    console.log('[Renderer] window.electronAPI.aiChat:', window.electronAPI?.aiChat)
     const result = await window.electronAPI.aiChat(message)
     if (result.success) {
       aiStore.addAIMessage(result.reply)

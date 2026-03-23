@@ -1,7 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+console.log('[Preload] 加载中...')
+
 // 暴露 API 给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
+  // 测试方法
+  testAI: () => {
+    console.log('[Preload] testAI 被调用')
+    return 'test OK'
+  },
   // 登录相关
   login: (username, password) => ipcRenderer.invoke('login', username, password),
   register: (userData) => ipcRenderer.invoke('register', userData),
