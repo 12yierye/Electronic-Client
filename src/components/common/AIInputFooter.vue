@@ -6,39 +6,53 @@
       :placeholder="t('aiChat.enterToSend')"
       :rows="1"
       autosize
+      :disabled="aiStore.isLoading"
       @keydown.enter.exact="handleSend"
       @keydown.shift.enter="handleNewLine"
     />
     <el-button 
       type="primary" 
-      :icon="Promotion" 
+      :icon="isSending ? Loading : Promotion" 
       @click="handleSend"
-      :disabled="!inputMessage.trim()"
-    >{{ t('common.send') }}</el-button>
+      :disabled="!inputMessage.trim() || aiStore.isLoading"
+    >
+      {{ isSending ? t('aiChat.thinking') : t('common.send') }}
+    </el-button>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import { Promotion } from '@element-plus/icons-vue'
+import { Promotion, Loading } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
 
 const aiStore = useAIStore()
 const { t } = useI18n()
 const inputMessage = ref('')
+const isSending = ref(false)
 
-const handleSend = () => {
+const handleSend = async () => {
   const message = inputMessage.value.trim()
-  if (!message) return
+  if (!message || isSending.value) return
   
+  isSending.value = true
   aiStore.addUserMessage(message)
   inputMessage.value = ''
   
-  // 模拟 AI 回复
-  setTimeout(() => {
-    aiStore.addAIMessage(t('aiChat.aiResponse'))
-  }, 1000)
+  // 调用本地 AI 模型回复
+  try {
+    const result = await window.electronAPI.aiChat(message)
+    if (result.success) {
+      aiStore.addAIMessage(result.reply)
+    } else {
+      aiStore.addAIMessage('抱歉，AI 响应失败: ' + result.message)
+    }
+  } catch (error) {
+    aiStore.addAIMessage('抱歉，连接 AI 失败: ' + error.message)
+  } finally {
+    isSending.value = false
+  }
 }
 
 const handleNewLine = () => {

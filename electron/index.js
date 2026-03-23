@@ -12,6 +12,7 @@ app.disableHardwareAcceleration()
 let mainWindow = null
 const API_BASE = 'http://192.168.61.129:3000'
 const DOC_SERVER = 'http://120.24.26.164'
+const LM_STUDIO_API = 'http://localhost:1234/v1'  // LM Studio OpenAI-compatible API
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -193,6 +194,42 @@ ipcMain.handle('create-credential', async (event, username) => {
     const response = await axios.post(`${API_BASE}/credential/create`, { username })
     return response.data
   } catch (error) { return { success: false, message: error.message } }
+})
+
+// 本地 AI 聊天 (LM Studio)
+ipcMain.handle('ai-chat', async (event, userMessage) => {
+  try {
+    const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, {
+      model: 'qwen3.5-35b-a3b',
+      messages: [
+        { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
+        { role: 'user', content: userMessage }
+      ],
+      temperature: 0.7
+    }, { timeout: 120000 })
+    const reply = response.data.choices[0].message.content.trim()
+    return { success: true, reply }
+  } catch (error) {
+    return { success: false, message: error.message }
+  }
+})
+
+// 本地 AI 函数生成 (LM Studio)
+ipcMain.handle('generate-function', async (event, prompt) => {
+  try {
+    const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, {
+      model: 'qwen3.5-35b-a3b',
+      messages: [
+        { role: 'system', content: '你是一个代码生成助手。根据用户需求，生成一个 JavaScript 函数。只返回函数代码，不要其他解释，不要任何markdown代码块标记。函数要可以直接用 new Function() 执行。' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.3
+    }, { timeout: 120000 })
+    const code = response.data.choices[0].message.content.trim()
+    return { success: true, code }
+  } catch (error) {
+    return { success: false, message: error.message }
+  }
 })
 
 app.setUserTasks([

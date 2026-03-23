@@ -39,7 +39,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 凭证验证
   verifyCredential: (username, token) => ipcRenderer.invoke('verify-credential', username, token),
   getUserByUsername: (username) => ipcRenderer.invoke('get-user-by-username', username),
-  createCredential: (username) => ipcRenderer.invoke('create-credential', username)
+  createCredential: (username) => ipcRenderer.invoke('create-credential', username),
+
+  // 本地 AI 聊天
+  aiChat: (message) => ipcRenderer.invoke('ai-chat', message),
+
+  // 本地 AI 函数生成
+  generateFunction: (prompt) => ipcRenderer.invoke('generate-function', prompt)
 })
 
 console.log('Preload script loaded')
