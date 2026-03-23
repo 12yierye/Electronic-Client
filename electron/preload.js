@@ -1,6 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-console.log('[Preload] 加载中...')
+// 在页面中注入可见的提示
+window.onload = () => {
+  const info = document.createElement('div')
+  info.id = 'preload-info'
+  info.style.cssText = 'position:fixed;top:0;left:0;background:#ff0;padding:5px;z-index:99999;'
+  info.textContent = '[Preload] 已加载 - ' + new Date().toISOString()
+  document.body.appendChild(info)
+  console.log('[Preload] 加载完成')
+}
 
 // 暴露 API 给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {

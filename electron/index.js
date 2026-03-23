@@ -18,6 +18,9 @@ console.log('[Main] Electron 主进程启动')
 console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
 
 function createWindow() {
+  const preloadPath = join(__dirname, 'preload.js')
+  console.log('[Main] preload 路径:', preloadPath)
+  
   mainWindow = new BrowserWindow({
     title: 'Electronic',
     width: 1100,
@@ -25,13 +28,21 @@ function createWindow() {
     minWidth: 850,
     minHeight: 500,
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: preloadPath,
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false,
       cache: false,
       devTools: true
     }
+  })
+  
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('[Main] 页面加载完成')
+  })
+  
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDesc) => {
+    console.log('[Main] 页面加载失败:', errorCode, errorDesc)
   })
 
   const menu = Menu.buildFromTemplate([
@@ -257,6 +268,12 @@ app.setUserTasks([
   { program: process.execPath, arguments: '--relaunch', iconPath: process.execPath, iconIndex: 0, title: 'Relaunch', description: 'Relaunch Electronic' }
 ])
 
-app.whenReady().then(() => { createWindow() })
+console.log('[Main] 准备启动应用...')
+app.whenReady().then(() => {
+  console.log('[Main] App ready，创建窗口...')
+  createWindow()
+}).catch(err => {
+  console.error('[Main] App ready 错误:', err)
+})
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
