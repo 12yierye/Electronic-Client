@@ -199,17 +199,25 @@ ipcMain.handle('create-credential', async (event, username) => {
 // 本地 AI 聊天 (LM Studio)
 ipcMain.handle('ai-chat', async (event, userMessage) => {
   try {
-    const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, {
-      model: 'qwen3.5-35b-a3b',
+    console.log('[AI Chat] 发送消息:', userMessage)
+    const requestBody = {
+      model: 'gguf',
       messages: [
         { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
         { role: 'user', content: userMessage }
       ],
       temperature: 0.7
-    }, { timeout: 120000 })
+    }
+    console.log('[AI Chat] 请求体:', JSON.stringify(requestBody, null, 2))
+    const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, requestBody, { timeout: 120000 })
+    console.log('[AI Chat] LM Studio 响应状态:', response.status)
+    console.log('[AI Chat] LM Studio 响应数据:', JSON.stringify(response.data, null, 2))
     const reply = response.data.choices[0].message.content.trim()
+    console.log('[AI Chat] 提取的回复:', reply)
     return { success: true, reply }
   } catch (error) {
+    console.error('[AI Chat] 错误:', error.message)
+    console.error('[AI Chat] 错误详情:', error.response?.data || error.request || error)
     return { success: false, message: error.message }
   }
 })
@@ -217,17 +225,25 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
 // 本地 AI 函数生成 (LM Studio)
 ipcMain.handle('generate-function', async (event, prompt) => {
   try {
-    const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, {
-      model: 'qwen3.5-35b-a3b',
+    console.log('[Generate Function] 发送提示词:', prompt)
+    const requestBody = {
+      model: 'gguf',
       messages: [
         { role: 'system', content: '你是一个代码生成助手。根据用户需求，生成一个 JavaScript 函数。只返回函数代码，不要其他解释，不要任何markdown代码块标记。函数要可以直接用 new Function() 执行。' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.3
-    }, { timeout: 120000 })
+    }
+    console.log('[Generate Function] 请求体:', JSON.stringify(requestBody, null, 2))
+    const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, requestBody, { timeout: 120000 })
+    console.log('[Generate Function] LM Studio 响应状态:', response.status)
+    console.log('[Generate Function] LM Studio 响应数据:', JSON.stringify(response.data, null, 2))
     const code = response.data.choices[0].message.content.trim()
+    console.log('[Generate Function] 提取的代码:', code)
     return { success: true, code }
   } catch (error) {
+    console.error('[Generate Function] 错误:', error.message)
+    console.error('[Generate Function] 错误详情:', error.response?.data || error.request || error)
     return { success: false, message: error.message }
   }
 })

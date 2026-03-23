@@ -202,7 +202,6 @@ const handleLogin = async () => {
 }
 
 // 暴露检查自动登录方法
-import { defineExpose } from 'vue'
 defineExpose({ checkAutoLogin })
 </script>
 
