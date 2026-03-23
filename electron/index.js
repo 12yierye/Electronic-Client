@@ -12,7 +12,7 @@ app.disableHardwareAcceleration()
 let mainWindow = null
 const API_BASE = 'http://192.168.61.129:3000'
 const DOC_SERVER = 'http://120.24.26.164'
-const LM_STUDIO_API = 'http://localhost:1234/v1'  // LM Studio OpenAI-compatible API
+const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'  // LM Studio OpenAI-compatible API
 
 function createWindow() {
   mainWindow = new BrowserWindow({
