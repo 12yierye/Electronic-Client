@@ -27,17 +27,13 @@ export default defineConfig(({ mode }) => {
             }
           },
           {
-            entry: 'electron/preload.js',
+            entry: 'electron/preload.cjs',
             onstart(options) {
               options.reload()
             },
             vite: {
               build: {
                 outDir: 'dist-electron',
-                lib: {
-                  entry: 'electron/preload.js',
-                  formats: ['cjs']
-                },
                 rollupOptions: {
                   external: ['electron']
                 }
