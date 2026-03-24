@@ -40,7 +40,7 @@
         </el-form-item>
       </el-form>
       <div class="footer-links">
-        <span class="register-link" @click="handleRegister">{{ t('login.register') || '注册账号' }}</span>
+        <span class="register-link" @click="handleRegister">{{ t('login.register') || '注册' }}</span>
         <span>{{ t('login.defaultServer') }} {{ apiBase }}</span>
       </div>
     </el-card>

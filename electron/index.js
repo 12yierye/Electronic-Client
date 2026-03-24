@@ -18,6 +18,18 @@ const MODEL_ID = 'qwen3.5-0.8b'
 console.log('[Main] Electron 主进程启动')
 console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
 
+// 忽略 EPERM 错误（通常是试图终止不存在的进程）
+process.on('uncaughtException', (error) => {
+  if (error.code === 'EPERM' && (error.message.includes('kill') || error.message.includes('not found'))) {
+    return // 忽略 kill 相关的 EPERM 错误
+  }
+  console.error('[Main] 未捕获的异常:', error)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Main] 未处理的 Promise 拒绝:', reason)
+})
+
 function createWindow() {
   const preloadPath = join(__dirname, 'preload.cjs')
   console.log('[Main] __dirname:', __dirname)
@@ -142,7 +154,17 @@ ipcMain.handle('register', async (event, userData) => {
   return await validateRegister(userData)
 })
 
-ipcMain.on('logout', () => { mainWindow?.close(); mainWindow = null; global.userInfo = null })
+ipcMain.on('logout', () => {
+  if (mainWindow) {
+    mainWindow.close()
+    mainWindow = null
+  }
+  global.userInfo = null
+  // 退出登录时清除自动登录凭证，避免退出后又自动登录
+  // 渲染进程会自动清除 localStorage
+  // 退出登录不是结束进程，而是重新打开登录窗口
+  createWindow()
+})
 ipcMain.on('exit-app', () => app.quit())
 ipcMain.on('set-user', (event, userInfo) => { global.userInfo = userInfo })
 

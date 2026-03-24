@@ -103,7 +103,8 @@ const handleLogout = () => {
   userInfo.value = null
   isLoggedIn.value = false
   localStorage.removeItem('userInfo')
-  // 退出登录时保留自动登录凭证，下次可以直接登录
+  // 退出登录时清除自动登录凭证，避免退出后又自动登录
+  localStorage.removeItem('autoLoginCredential')
 }
 
 // 处理退出应用
