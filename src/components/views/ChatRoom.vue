@@ -11,9 +11,17 @@
           </el-radio-group>
           
           <el-radio-group v-model="activeTab" size="small">
-            <el-radio-button label="friends">好友</el-radio-button>
-            <el-radio-button label="add">添加好友</el-radio-button>
-            <el-radio-button label="requests">申请</el-radio-button>
+            <!-- 公网模式显示：好友、添加好友、申请 -->
+            <template v-if="chatMode === 'public'">
+              <el-radio-button label="friends">好友</el-radio-button>
+              <el-radio-button label="add">添加好友</el-radio-button>
+              <el-radio-button label="requests">申请</el-radio-button>
+            </template>
+            <!-- 内网模式显示：用户、群聊 -->
+            <template v-else>
+              <el-radio-button label="users">用户</el-radio-button>
+              <el-radio-button label="groups">群聊</el-radio-button>
+            </template>
           </el-radio-group>
         </div>
         
@@ -30,46 +38,72 @@
         
         <!-- 好友/用户列表 -->
         <div class="user-list">
-          <template v-if="activeTab === 'friends'">
-            <!-- 公网好友列表 -->
-            <template v-if="chatMode === 'public'">
-              <div 
-                v-for="friend in friendsList" 
-                :key="friend.username"
-                :class="['user-item', { active: selectedUser?.username === friend.username }]"
-                @click="selectUser(friend, 'public')"
-              >
-                <el-avatar :size="40">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
-                <div class="user-info">
-                  <div class="user-name">{{ friend.username }}</div>
-                </div>
-                <el-icon 
-                  v-if="friend.starred" 
-                  class="star-icon starred"
-                ><Star /></el-icon>
+          <!-- 公网：好友列表 -->
+          <template v-if="chatMode === 'public' && activeTab === 'friends'">
+            <div 
+              v-for="friend in friendsList" 
+              :key="friend.username"
+              :class="['user-item', { active: selectedUser?.username === friend.username }]"
+              @click="selectUser(friend, 'public')"
+            >
+              <el-avatar :size="40">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
+              <div class="user-info">
+                <div class="user-name">{{ friend.username }}</div>
               </div>
-              <el-empty v-if="friendsList.length === 0" description="暂无好友" />
-            </template>
-            
-            <!-- 内网好友列表 -->
-            <template v-else>
-              <div 
-                v-for="friend in lanFriendsList" 
-                :key="friend.username"
-                :class="['user-item', { active: selectedUser?.username === friend.username }]"
-                @click="selectUser(friend, 'lan')"
-              >
-                <el-avatar :size="40">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
-                <div class="user-info">
-                  <div class="user-name">{{ friend.username }}</div>
-                  <div class="user-role">内网</div>
-                </div>
-              </div>
-              <el-empty v-if="lanFriendsList.length === 0" description="内网中暂无在线用户" />
-            </template>
+              <el-icon 
+                v-if="friend.starred" 
+                class="star-icon starred"
+              ><Star /></el-icon>
+            </div>
+            <el-empty v-if="friendsList.length === 0" description="暂无好友" />
           </template>
           
-          <template v-else-if="activeTab === 'add'">
+          <!-- 内网：用户列表 -->
+          <template v-else-if="chatMode === 'lan' && activeTab === 'users'">
+            <div 
+              v-for="user in lanFriendsList" 
+              :key="user.username"
+              :class="['user-item', { active: selectedUser?.username === user.username }]"
+              @click="selectUser(user, 'lan')"
+            >
+              <el-avatar :size="40">{{ user.username.charAt(0).toUpperCase() }}</el-avatar>
+              <div class="user-info">
+                <div class="user-name">{{ user.username }}</div>
+                <div class="user-role">
+                  <span v-if="user.online" class="online-status">在线</span>
+                  <span v-else>离线</span>
+                </div>
+              </div>
+            </div>
+            <el-empty v-if="lanFriendsList.length === 0" description="内网中暂无用户" />
+          </template>
+          
+          <!-- 内网：群聊列表 -->
+          <template v-else-if="chatMode === 'lan' && activeTab === 'groups'">
+            <div class="group-actions">
+              <el-button type="primary" size="small" @click="showCreateGroupDialog = true">
+                创建群聊
+              </el-button>
+            </div>
+            <div 
+              v-for="group in lanGroupsList" 
+              :key="group.id"
+              :class="['user-item', { active: selectedGroup?.id === group.id }]"
+              @click="selectGroup(group)"
+            >
+              <el-avatar :size="40" style="background: var(--accent-color)">
+                <el-icon><ChatDotRound /></el-icon>
+              </el-avatar>
+              <div class="user-info">
+                <div class="user-name">{{ group.name }}</div>
+                <div class="user-role">{{ group.members.length }} 人</div>
+              </div>
+            </div>
+            <el-empty v-if="lanGroupsList.length === 0" description="暂无群聊" />
+          </template>
+          
+          <!-- 公网：添加好友 -->
+          <template v-else-if="chatMode === 'public' && activeTab === 'add'">
             <div 
               v-for="user in filteredUsers" 
               :key="user.username"
@@ -86,7 +120,8 @@
             <el-empty v-if="filteredUsers.length === 0" description="未找到用户" />
           </template>
           
-          <template v-else>
+          <!-- 公网：好友申请 -->
+          <template v-else-if="chatMode === 'public' && activeTab === 'requests'">
             <div 
               v-for="request in friendRequests" 
               :key="request.id"
@@ -115,17 +150,22 @@
       <el-main>
         <div class="chat-main">
           <div class="chat-header">
-            <span v-if="selectedUser">{{ selectedUser.username }}</span>
-            <span v-else class="placeholder">选择一个用户开始聊天</span>
+            <span v-if="selectedGroup">{{ selectedGroup.name }}</span>
+            <span v-else-if="selectedUser">{{ selectedUser.username }}</span>
+            <span v-else class="placeholder">选择一个用户或群聊开始聊天</span>
           </div>
           
           <div class="chat-messages" ref="chatMessagesRef">
-            <template v-if="selectedUser">
+            <template v-if="selectedUser || selectedGroup">
               <div 
                 v-for="msg in chatMessages" 
                 :key="msg.id"
-                :class="['chat-message', msg.sender === currentUsername ? 'sent' : 'received']"
+                :class="['chat-message', msg.from === currentUsername ? 'sent' : 'received']"
               >
+                <!-- 群聊显示发送者 -->
+                <div v-if="selectedGroup && msg.from !== currentUsername" class="message-sender">
+                  {{ msg.from }}
+                </div>
                 <!-- 图片消息 -->
                 <div v-if="isImageMessage(msg.message)" class="message-content image-message">
                   <img :src="msg.message" alt="图片" @load="onImageLoad" />
@@ -136,13 +176,13 @@
               </div>
               <el-empty v-if="chatMessages.length === 0" description="暂无聊天记录" />
             </template>
-            <el-empty v-else description="选择一个用户开始聊天" />
+            <el-empty v-else description="选择一个用户或群聊开始聊天" />
           </div>
           
           <div class="chat-input">
-            <!-- 图片上传按钮 -->
+            <!-- 图片上传按钮（仅私聊时显示） -->
             <el-upload
-              v-if="selectedUser"
+              v-if="selectedUser && !selectedGroup"
               class="image-uploader"
               :show-file-list="false"
               :auto-upload="false"
@@ -154,25 +194,57 @@
             <el-input
               v-model="inputMessage"
               placeholder="输入消息..."
-              :disabled="!selectedUser"
-              @keydown.enter.exact="sendMessage"
+              :disabled="!selectedUser && !selectedGroup"
+              @keydown.enter.exact="handleSendMessage"
             />
             <el-button 
               type="primary" 
               :icon="Promotion" 
-              :disabled="!selectedUser || !inputMessage.trim()"
-              @click="sendMessage"
+              :disabled="(!selectedUser && !selectedGroup) || !inputMessage.trim()"
+              @click="handleSendMessage"
             />
           </div>
         </div>
       </el-main>
     </el-container>
+    
+    <!-- 创建群聊对话框 -->
+    <el-dialog
+      v-model="showCreateGroupDialog"
+      title="创建群聊"
+      width="400px"
+    >
+      <el-form label-width="80px">
+        <el-form-item label="群名称">
+          <el-input v-model="newGroupName" placeholder="请输入群名称" />
+        </el-form-item>
+        <el-form-item label="群成员">
+          <el-select
+            v-model="newGroupMembers"
+            multiple
+            placeholder="选择群成员"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="user in lanFriendsList"
+              :key="user.username"
+              :label="user.username"
+              :value="user.username"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCreateGroupDialog = false">取消</el-button>
+        <el-button type="primary" @click="createGroup">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Search, Star, Promotion, Picture } from '@element-plus/icons-vue'
+import { Search, Star, Promotion, Picture, ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 // 状态
@@ -182,12 +254,17 @@ const useLanChat = ref(false)
 const lanSettings = ref({ useLanChat: false, lanServerIP: '', lanServerPort: '3001' })
 const searchQuery = ref('')
 const selectedUser = ref(null)
+const selectedGroup = ref(null)  // 选中的群聊
 const inputMessage = ref('')
 const friendsList = ref([])
 const allUsersList = ref([])
 const friendRequests = ref([])
 const chatMessages = ref([])
-const lanFriendsList = ref([])  // 内网好友列表
+const lanFriendsList = ref([])  // 内网用户列表
+const lanGroupsList = ref([])   // 内网群聊列表
+const showCreateGroupDialog = ref(false)  // 创建群聊对话框
+const newGroupName = ref('')    // 新群名称
+const newGroupMembers = ref([]) // 新群成员
 
 // 计算属性
 const currentUsername = computed(() => {
@@ -435,23 +512,27 @@ onMounted(() => {
 const handleChatModeChange = async (mode) => {
   chatMessages.value = []
   selectedUser.value = null
+  selectedGroup.value = null
   
   if (mode === 'lan') {
     // 切换到内网聊天
+    activeTab.value = 'users'
     await loadLanFriendsList()
+    await loadLanGroupsList()
   } else {
     // 切换到公网聊天
+    activeTab.value = 'friends'
     await loadFriendsList()
   }
 }
 
-// 加载内网好友列表
+// 加载内网用户列表
 const loadLanFriendsList = async () => {
   if (!lanSettings.value.useLanChat || !lanSettings.value.lanServerIP) return
   
   try {
     const response = await fetch(
-      `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/friends`,
+      `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/friends?username=${encodeURIComponent(currentUsername.value)}`,
       {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
@@ -462,7 +543,130 @@ const loadLanFriendsList = async () => {
       lanFriendsList.value = data.friends || []
     }
   } catch (error) {
-    console.error('加载内网好友失败:', error)
+    console.error('加载内网用户失败:', error)
+  }
+}
+
+// 加载内网群聊列表
+const loadLanGroupsList = async () => {
+  if (!lanSettings.value.useLanChat || !lanSettings.value.lanServerIP) return
+  
+  try {
+    const response = await fetch(
+      `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/groups?username=${encodeURIComponent(currentUsername.value)}`,
+      {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      }
+    )
+    const data = await response.json()
+    if (data.success) {
+      lanGroupsList.value = data.groups || []
+    }
+  } catch (error) {
+    console.error('加载内网群聊失败:', error)
+  }
+}
+
+// 选择群聊
+const selectGroup = async (group) => {
+  selectedGroup.value = group
+  selectedUser.value = null
+  await loadGroupMessages()
+}
+
+// 加载群聊消息
+const loadGroupMessages = async () => {
+  if (!selectedGroup.value || !lanSettings.value.useLanChat) return
+  
+  try {
+    const response = await fetch(
+      `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/group-messages?groupId=${encodeURIComponent(selectedGroup.value.id)}`,
+      { method: 'GET' }
+    )
+    const data = await response.json()
+    if (data.success) {
+      chatMessages.value = data.messages || []
+    }
+  } catch (error) {
+    console.error('加载群聊消息失败:', error)
+  }
+}
+
+// 发送群聊消息
+const sendGroupMessage = async () => {
+  const message = inputMessage.value.trim()
+  if (!message || !selectedGroup.value || !lanSettings.value.useLanChat) return
+  
+  try {
+    const response = await fetch(
+      `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/group-messages`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId: selectedGroup.value.id,
+          from: currentUsername.value,
+          message: message,
+          type: 'text'
+        })
+      }
+    )
+    const data = await response.json()
+    if (data.success) {
+      chatMessages.value.push(data.data)
+      inputMessage.value = ''
+    }
+  } catch (error) {
+    console.error('发送群聊消息失败:', error)
+    ElMessage.error('发送失败')
+  }
+}
+
+// 创建群聊
+const createGroup = async () => {
+  if (!newGroupName.value.trim()) {
+    ElMessage.warning('请输入群名称')
+    return
+  }
+  
+  try {
+    const response = await fetch(
+      `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/groups`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newGroupName.value.trim(),
+          creator: currentUsername.value,
+          members: newGroupMembers.value
+        })
+      }
+    )
+    const data = await response.json()
+    if (data.success) {
+      ElMessage.success('群聊创建成功')
+      showCreateGroupDialog.value = false
+      newGroupName.value = ''
+      newGroupMembers.value = []
+      await loadLanGroupsList()
+    } else {
+      ElMessage.error(data.message || '创建失败')
+    }
+  } catch (error) {
+    console.error('创建群聊失败:', error)
+    ElMessage.error('创建失败')
+  }
+}
+
+// 发送消息（根据当前选择判断是私聊还是群聊）
+const handleSendMessage = () => {
+  if (selectedGroup.value) {
+    sendGroupMessage()
+  } else if (selectedUser.value?.chatMode === 'lan') {
+    sendLanMessage()
+  } else {
+    sendMessage()
   }
 }
 </script>
@@ -604,6 +808,12 @@ const loadLanFriendsList = async () => {
               }
             }
           }
+        }
+        
+        .message-sender {
+          font-size: 12px;
+          color: var(--text-secondary);
+          margin-bottom: 3px;
         }
         
         .message-time {

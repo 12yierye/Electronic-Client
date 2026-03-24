@@ -221,6 +221,21 @@ ipcMain.handle('get-friends-list', async (event, username) => {
   catch (error) { return { success: false, message: error.message } }
 })
 
+ipcMain.handle('get-friend-requests', async (event, username, type) => {
+  try { return (await axios.get(`${API_BASE}/friends/requests?username=${username}&type=${type || 'received'}`)).data }
+  catch (error) { return { success: false, message: error.message } }
+})
+
+ipcMain.handle('handle-friend-request', async (event, requestId, action) => {
+  try { return (await axios.post(`${API_BASE}/friends/requests/handle`, { requestId, action })).data }
+  catch (error) { return { success: false, message: error.message } }
+})
+
+ipcMain.handle('send-friend-request', async (event, sender, receiver) => {
+  try { return (await axios.post(`${API_BASE}/friends/requests/send`, { sender, receiver })).data }
+  catch (error) { return { success: false, message: error.message } }
+})
+
 ipcMain.handle('search-users', async (event, searchTerm) => {
   try { return (await axios.get(`${API_BASE}/users/search?q=${searchTerm}`)).data }
   catch (error) { return { success: false, message: error.message } }
@@ -233,6 +248,17 @@ ipcMain.handle('add-friend', async (event, currentUser, friendUsername) => {
 
 ipcMain.handle('remove-friend', async (event, currentUser, friendUsername) => {
   try { return (await axios.post(`${API_BASE}/users/friends/remove`, { currentUser, friendUsername })).data }
+  catch (error) { return { success: false, message: error.message } }
+})
+
+// 星标用户
+ipcMain.handle('star-user', async (event, currentUser, starredUsername) => {
+  try { return (await axios.post(`${API_BASE}/users/star`, { currentUser, starredUsername })).data }
+  catch (error) { return { success: false, message: error.message } }
+})
+
+ipcMain.handle('get-starred-users', async (event, username) => {
+  try { return (await axios.get(`${API_BASE}/users/starred?username=${username}`)).data }
   catch (error) { return { success: false, message: error.message } }
 })
 
