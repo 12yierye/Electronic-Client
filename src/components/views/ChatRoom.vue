@@ -564,6 +564,7 @@ const loadLanFriendsList = async () => {
       .chat-message {
         margin-bottom: 15px;
         max-width: 70%;
+        width: fit-content;
         
         &.sent {
           margin-left: auto;
@@ -585,6 +586,7 @@ const loadLanFriendsList = async () => {
           padding: 10px 15px;
           border-radius: 18px;
           word-break: break-word;
+          min-width: 60px;
           
           &.image-message {
             padding: 5px;

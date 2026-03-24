@@ -34,11 +34,10 @@ const isSending = ref(false)
 
 // 按Enter发送消息，空消息时不换行
 const handleEnterKey = (e) => {
+  e.preventDefault() // 阻止默认换行行为
   const message = inputMessage.value.trim()
-  if (!message) {
-    e.preventDefault() // 空消息时阻止换行
-    return
-  }
+  if (!message || isSending.value) return
+  
   // 有消息时调用发送
   handleSend()
 }
