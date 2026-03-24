@@ -235,7 +235,7 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
   try {
     console.log('[AI Chat] 发送消息:', userMessage)
     const requestBody = {
-      model: 'qwen3.5-0.8b',
+      model: 'qwen3.5-35b-a3b',
       messages: [
         { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
         { role: 'user', content: userMessage }
@@ -261,7 +261,7 @@ ipcMain.handle('generate-function', async (event, prompt) => {
   try {
     console.log('[Generate Function] 发送提示词:', prompt)
     const requestBody = {
-      model: 'qwen3.5-0.8b',
+      model: 'qwen3.5-35b-a3b',
       messages: [
         { role: 'system', content: '你是一个代码生成助手。根据用户需求，生成一个 JavaScript 函数。只返回函数代码，不要其他解释，不要任何markdown代码块标记。函数要可以直接用 new Function() 执行。' },
         { role: 'user', content: prompt }
