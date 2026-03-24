@@ -54,8 +54,13 @@
               @click="handleDownload(row)"
               :loading="downloadingFiles.includes(row.name)"
             >
-              <el-icon><Download /></el-icon>
-              下载
+              <template v-if="downloadProgress[row.name] !== undefined">
+                {{ downloadProgress[row.name] }}%
+              </template>
+              <template v-else>
+                <el-icon><Download /></el-icon>
+                下载
+              </template>
             </el-button>
             <el-button 
               size="small" 
@@ -83,6 +88,7 @@ const uploadRef = ref(null)
 const files = ref([])
 const fileList = ref([])
 const downloadingFiles = ref([])
+const downloadProgress = ref({})
 const currentUsername = ref('')
 
 const STORAGE_KEY = 'uploadedFiles'
@@ -166,6 +172,18 @@ const handleDownload = async (file) => {
   
   downloadingFiles.value.push(file.name)
   
+  // 设置下载进度
+  downloadProgress.value[file.name] = 0
+  
+  // 监听下载进度（如果支持）
+  if (window.electronAPI && window.electronAPI.onDownloadProgress) {
+    window.electronAPI.onDownloadProgress((data) => {
+      if (data.filename === file.name) {
+        downloadProgress.value[file.name] = data.percentCompleted
+      }
+    })
+  }
+  
   try {
     const result = await window.electronAPI.downloadFile(currentUsername.value, file.name)
     if (result.success) {
@@ -174,9 +192,11 @@ const handleDownload = async (file) => {
       ElMessage.error(result.message)
     }
   } catch (error) {
-    ElMessage.error(error.message)
+    ElMessage.error('下载中断: ' + error.message)
+    // 清理不完整的文件由服务端处理
   } finally {
     downloadingFiles.value = downloadingFiles.value.filter(f => f !== file.name)
+    delete downloadProgress.value[file.name]
   }
 }
 

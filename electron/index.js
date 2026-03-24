@@ -13,6 +13,7 @@ let mainWindow = null
 const API_BASE = 'http://192.168.61.129:3000'
 const DOC_SERVER = 'http://120.24.26.164'
 const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'  // LM Studio OpenAI-compatible API
+const MODEL_ID = 'qwen3.5-0.8b'
 
 console.log('[Main] Electron 主进程启动')
 console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
@@ -146,13 +147,54 @@ ipcMain.on('exit-app', () => app.quit())
 ipcMain.on('set-user', (event, userInfo) => { global.userInfo = userInfo })
 
 ipcMain.handle('download-file', async (event, username, filename) => {
+  const downloadsDir = join(app.getPath('downloads'), 'Electronic')
+  const tempFilename = filename + '.part'
+  const finalPath = join(downloadsDir, filename)
+  const tempPath = join(downloadsDir, tempFilename)
+  
   try {
-    const response = await axios({ method: 'GET', url: `${API_BASE}/user/download/${encodeURIComponent(filename)}`, responseType: 'arraybuffer' })
-    const downloadsDir = join(app.getPath('downloads'), 'Electronic')
-    if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true })
-    fs.writeFileSync(join(downloadsDir, filename), response.data)
-    return { success: true, message: '文件下载成功' }
-  } catch (error) { return { success: false, message: error.message } }
+    // 确保下载目录存在
+    if (!fs.existsSync(downloadsDir)) {
+      fs.mkdirSync(downloadsDir, { recursive: true })
+    }
+    
+    // 使用流进行下载，支持中断处理
+    const response = await axios({
+      method: 'GET',
+      url: `${API_BASE}/user/download/${encodeURIComponent(filename)}`,
+      responseType: 'stream',
+      onDownloadProgress: (progressEvent) => {
+        // 可以通过 webContents 发送进度到渲染进程
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        event.sender.send('download-progress', { filename, percentCompleted })
+      }
+    })
+    
+    // 使用流写入文件
+    const writer = fs.createWriteStream(tempPath)
+    
+    return new Promise((resolve, reject) => {
+      response.data.pipe(writer)
+      writer.on('finish', () => {
+        // 下载完成，重命名为正式文件名
+        fs.renameSync(tempPath, finalPath)
+        resolve({ success: true, message: '文件下载成功' })
+      })
+      writer.on('error', (err) => {
+        // 写入失败，删除临时文件
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath)
+        }
+        reject(err)
+      })
+    })
+  } catch (error) {
+    // 下载出错，删除临时文件
+    if (fs.existsSync(tempPath)) {
+      fs.unlinkSync(tempPath)
+    }
+    return { success: false, message: error.message }
+  }
 })
 
 ipcMain.handle('upload-file', async (event, username, filename, fileData) => {
@@ -235,7 +277,7 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
   try {
     console.log('[AI Chat] 发送消息:', userMessage)
     const requestBody = {
-      model: 'qwen3.5-35b-a3b',
+      model: MODEL_ID,
       messages: [
         { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
         { role: 'user', content: userMessage }
@@ -261,7 +303,7 @@ ipcMain.handle('generate-function', async (event, prompt) => {
   try {
     console.log('[Generate Function] 发送提示词:', prompt)
     const requestBody = {
-      model: 'qwen3.5-35b-a3b',
+      model: MODEL_ID,
       messages: [
         { role: 'system', content: '你是一个代码生成助手。根据用户需求，生成一个 JavaScript 函数。只返回函数代码，不要其他解释，不要任何markdown代码块标记。函数要可以直接用 new Function() 执行。' },
         { role: 'user', content: prompt }

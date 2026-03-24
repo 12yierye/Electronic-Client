@@ -42,13 +42,12 @@ const handleSend = async () => {
   
   // 调用本地 AI 模型回复
   try {
-    console.log('[Renderer] window.electronAPI:', window.electronAPI)
-    console.log('[Renderer] window.electronAPI.aiChat:', window.electronAPI?.aiChat)
     console.log('[Renderer] 调用 aiChat，消息:', message)
     const result = await window.electronAPI.aiChat(message)
     console.log('[Renderer] aiChat 返回:', result)
     if (result.success) {
-      aiStore.addAIMessage(result.reply)
+      // 支持思考内容和Markdown
+      aiStore.addAIMessage(result.reply, result.thinking || '')
     } else {
       aiStore.addAIMessage('抱歉，AI 响应失败: ' + result.message)
     }

@@ -1,5 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { marked } from 'marked'
+
+// 配置marked选项
+marked.setOptions({
+  breaks: true,
+  gfm: true
+})
 
 export const useAIStore = defineStore('ai', () => {
   const messages = ref([])
@@ -15,14 +22,27 @@ export const useAIStore = defineStore('ai', () => {
     })
   }
   
-  // 添加 AI 消息
-  const addAIMessage = (content) => {
+  // 添加 AI 消息（支持Markdown和思考内容）
+  const addAIMessage = (content, thinking = '') => {
+    // 将Markdown转换为HTML
+    const htmlContent = marked(content)
     messages.value.push({
       id: Date.now(),
       role: 'ai',
       content,
+      htmlContent,
+      thinking,
+      showThinking: false,
       timestamp: new Date().toISOString()
     })
+  }
+  
+  // 切换思考内容显示
+  const toggleThinking = (messageId) => {
+    const msg = messages.value.find(m => m.id === messageId)
+    if (msg) {
+      msg.showThinking = !msg.showThinking
+    }
   }
   
   // 清空消息
@@ -65,6 +85,7 @@ export const useAIStore = defineStore('ai', () => {
     isLoading,
     addUserMessage,
     addAIMessage,
+    toggleThinking,
     clearMessages,
     getGreeting
   }
