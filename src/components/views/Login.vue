@@ -39,10 +39,30 @@
           </el-button>
         </el-form-item>
       </el-form>
-      <div class="tips">
+      <div class="footer-links">
+        <span class="register-link" @click="handleRegister">{{ t('login.register') || '注册账号' }}</span>
         <span>{{ t('login.defaultServer') }} {{ apiBase }}</span>
       </div>
     </el-card>
+
+    <!-- 注册对话框 -->
+    <el-dialog v-model="registerDialogVisible" title="注册账号" width="400px">
+      <el-form :model="registerForm" :rules="registerRules" ref="registerFormRef" label-width="80px">
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="registerForm.username" placeholder="请输入用户名" />
+        </el-form-item>
+        <el-form-item label="密码" prop="password">
+          <el-input v-model="registerForm.password" type="password" placeholder="请输入密码" />
+        </el-form-item>
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="registerForm.email" placeholder="请输入邮箱" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="registerDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="registerLoading" @click="handleRegisterSubmit">注册</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -62,6 +82,24 @@ const autoLoginChecked = ref(false) // 是否已检查过自动登录
 const autoLoginSuccess = ref(false) // 自动登录是否成功
 const apiBase = 'http://192.168.61.129:3000'
 
+// 注册相关
+const registerDialogVisible = ref(false)
+const registerLoading = ref(false)
+const registerFormRef = ref(null)
+const registerForm = reactive({
+  username: '',
+  password: '',
+  email: ''
+})
+const registerRules = {
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '请输入有效的邮箱地址', trigger: 'blur' }
+  ]
+}
+
 const loginForm = reactive({
   username: '',
   password: ''
@@ -71,6 +109,43 @@ const rules = ref({
   username: [{ required: true, message: t('login.usernameRequired'), trigger: 'blur' }],
   password: [{ required: true, message: t('login.passwordRequired'), trigger: 'blur' }]
 })
+
+// 处理注册点击
+const handleRegister = () => {
+  registerForm.username = ''
+  registerForm.password = ''
+  registerForm.email = ''
+  registerDialogVisible.value = true
+}
+
+// 提交注册
+const handleRegisterSubmit = async () => {
+  if (!registerFormRef.value) return
+
+  await registerFormRef.value.validate(async (valid) => {
+    if (!valid) return
+
+    registerLoading.value = true
+    try {
+      const result = await window.electronAPI.register({
+        username: registerForm.username,
+        password: registerForm.password,
+        email: registerForm.email
+      })
+
+      if (result.success) {
+        ElMessage.success('注册成功，请登录')
+        registerDialogVisible.value = false
+      } else {
+        ElMessage.error(result.message || '注册失败')
+      }
+    } catch (error) {
+      ElMessage.error('注册失败: ' + error.message)
+    } finally {
+      registerLoading.value = false
+    }
+  })
+}
 
 // 组件挂载时自动检查自动登录
 onMounted(async () => {
@@ -159,6 +234,7 @@ const handleLogin = async () => {
 
     loading.value = true
     try {
+      // 服务器登录（admin 用户需在服务器上创建）
       const result = await window.electronAPI.login(loginForm.username, loginForm.password)
       if (result.success) {
         localStorage.setItem('userInfo', JSON.stringify(result.user))
@@ -223,10 +299,20 @@ defineExpose({ checkAutoLogin })
     font-weight: bold;
   }
   
-  .tips {
+  .footer-links {
     text-align: center;
     color: #999;
     font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .register-link {
+    color: #409eff;
+    cursor: pointer;
+    &:hover {
+      text-decoration: underline;
+    }
   }
 
   :deep(.el-checkbox) {
