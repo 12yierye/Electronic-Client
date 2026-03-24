@@ -1,17 +1,21 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+console.log('[Preload] 开始执行...')
+console.log('[Preload] contextBridge:', typeof contextBridge)
+console.log('[Preload] ipcRenderer:', typeof ipcRenderer)
+
 // 在页面中注入可见的提示
 window.onload = () => {
   const info = document.createElement('div')
   info.id = 'preload-info'
-  info.style.cssText = 'position:fixed;top:0;left:0;background:#ff0;padding:5px;z-index:99999;'
-  info.textContent = '[Preload] 已加载 - ' + new Date().toISOString()
+  info.style.cssText = 'position:fixed;top:0;left:0;background:#f0f;padding:5px;z-index:99999;'
+  info.textContent = '[Preload] onload 执行 - ' + new Date().toISOString()
   document.body.appendChild(info)
-  console.log('[Preload] 加载完成')
+  console.log('[Preload] onload 完成')
 }
 
 // 暴露 API 给渲染进程
-contextBridge.exposeInMainWorld('electronAPI', {
+const api = {
   // 测试方法
   testAI: () => {
     console.log('[Preload] testAI 被调用')
@@ -61,6 +65,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 本地 AI 函数生成
   generateFunction: (prompt) => ipcRenderer.invoke('generate-function', prompt)
-})
+}
+
+console.log('[Preload] API 对象:', api)
+console.log('[Preload] aiChat 方法:', api.aiChat)
+
+contextBridge.exposeInMainWorld('electronAPI', api)
 
 console.log('Preload script loaded')

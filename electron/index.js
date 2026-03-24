@@ -19,7 +19,9 @@ console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
 
 function createWindow() {
   const preloadPath = join(__dirname, 'preload.js')
+  console.log('[Main] __dirname:', __dirname)
   console.log('[Main] preload 路径:', preloadPath)
+  console.log('[Main] preload 文件存在:', fs.existsSync(preloadPath))
   
   mainWindow = new BrowserWindow({
     title: 'Electronic',
@@ -63,6 +65,8 @@ function createWindow() {
     mainWindow.loadFile(join(__dirname, '../dist/index.html'))
   }
 
+  mainWindow.webContents.openDevTools()
+  
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
     if (global.userInfo) {
@@ -71,6 +75,20 @@ function createWindow() {
       `)
     }
   })
+  
+  // 延迟检查 preload 是否执行
+  setTimeout(() => {
+    mainWindow.webContents.executeJavaScript(`
+      console.log('[Renderer] electronAPI 存在:', typeof window.electronAPI)
+      console.log('[Renderer] electronAPI.aiChat:', typeof window.electronAPI?.aiChat)
+      if (window.electronAPI) {
+        console.log('[Renderer] 可用方法:', Object.keys(window.electronAPI).join(', '))
+      }
+      window.electronAPI && window.electronAPI.testAI ? 'PRELOAD_OK' : 'PRELOAD_MISSING'
+    `).then(result => {
+      console.log('[Main] Preload 状态:', result)
+    }).catch(e => console.log('[Main] 检查失败:', e.message))
+  }, 2000)
 }
 
 function createElectronWindow(URL) {

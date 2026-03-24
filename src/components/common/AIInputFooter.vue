@@ -44,7 +44,9 @@ const handleSend = async () => {
   try {
     console.log('[Renderer] window.electronAPI:', window.electronAPI)
     console.log('[Renderer] window.electronAPI.aiChat:', window.electronAPI?.aiChat)
+    console.log('[Renderer] 调用 aiChat，消息:', message)
     const result = await window.electronAPI.aiChat(message)
+    console.log('[Renderer] aiChat 返回:', result)
     if (result.success) {
       aiStore.addAIMessage(result.reply)
     } else {
