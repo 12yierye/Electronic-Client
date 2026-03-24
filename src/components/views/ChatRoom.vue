@@ -196,9 +196,11 @@ const currentUsername = computed(() => {
 })
 
 const filteredUsers = computed(() => {
-  if (!searchQuery.value) return allUsersList.value
+  // 排除当前用户
+  const users = allUsersList.value.filter(u => u.username !== currentUsername.value)
+  if (!searchQuery.value) return users
   const query = searchQuery.value.toLowerCase()
-  return allUsersList.value.filter(u => 
+  return users.filter(u => 
     u.username.toLowerCase().includes(query) ||
     u.email?.toLowerCase().includes(query)
   )

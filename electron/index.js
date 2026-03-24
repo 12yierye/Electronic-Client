@@ -36,7 +36,7 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: false,
       cache: false,
-      devTools: true
+      devTools: false
     }
   })
   

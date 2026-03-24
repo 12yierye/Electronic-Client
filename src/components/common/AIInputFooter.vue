@@ -7,7 +7,7 @@
       :rows="1"
       autosize
       :disabled="aiStore.isLoading"
-      @keydown.enter.exact="handleSend"
+      @keydown.enter.exact="handleEnterKey"
       @keydown.shift.enter="handleNewLine"
     />
     <el-button 
@@ -31,6 +31,17 @@ const aiStore = useAIStore()
 const { t } = useI18n()
 const inputMessage = ref('')
 const isSending = ref(false)
+
+// 按Enter发送消息，空消息时不换行
+const handleEnterKey = (e) => {
+  const message = inputMessage.value.trim()
+  if (!message) {
+    e.preventDefault() // 空消息时阻止换行
+    return
+  }
+  // 有消息时调用发送
+  handleSend()
+}
 
 const handleSend = async () => {
   const message = inputMessage.value.trim()
