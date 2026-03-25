@@ -5,11 +5,13 @@
       <el-aside width="280px">
         <div class="chat-tabs">
           <!-- 聊天模式切换 -->
-          <el-radio-group v-model="chatMode" size="small" @change="handleChatModeChange">
-            <el-radio-button label="public">公网</el-radio-button>
-            <el-radio-button v-if="useLanChat" label="lan">内网</el-radio-button>
-          </el-radio-group>
-          
+          <div class="mode-switch-row">
+            <el-radio-group v-model="chatMode" size="small" @change="handleChatModeChange">
+              <el-radio-button label="public">公网</el-radio-button>
+              <el-radio-button v-if="useLanChat" label="lan">内网</el-radio-button>
+            </el-radio-group>
+          </div>
+
           <el-radio-group v-model="activeTab" size="small">
             <!-- 公网模式显示：好友、添加好友、申请 -->
             <template v-if="chatMode === 'public'">
@@ -85,8 +87,8 @@
                 创建群聊
               </el-button>
             </div>
-            <div 
-              v-for="group in lanGroupsList" 
+            <div
+              v-for="group in filteredLanGroupsList"
               :key="group.id"
               :class="['user-item', { active: selectedGroup?.id === group.id }]"
               @click="selectGroup(group)"
@@ -99,7 +101,7 @@
                 <div class="user-role">{{ group.members.length }} 人</div>
               </div>
             </div>
-            <el-empty v-if="lanGroupsList.length === 0" description="暂无群聊" />
+            <el-empty v-if="filteredLanGroupsList.length === 0" description="暂无群聊" />
           </template>
           
           <!-- 公网：添加好友 -->
@@ -153,6 +155,23 @@
             <span v-if="selectedGroup">{{ selectedGroup.name }}</span>
             <span v-else-if="selectedUser">{{ selectedUser.username }}</span>
             <span v-else class="placeholder">选择一个用户或群聊开始聊天</span>
+            <!-- 群聊操作按钮 -->
+            <div v-if="selectedGroup" class="group-actions">
+              <el-button
+                v-if="selectedGroup.creator === currentUsername"
+                type="danger"
+                size="small"
+                @click="handleDisbandGroup"
+              >
+                解散群聊
+              </el-button>
+              <el-button
+                size="small"
+                @click="handleDeleteGroup"
+              >
+                删除聊天
+              </el-button>
+            </div>
           </div>
           
           <div class="chat-messages" ref="chatMessagesRef">
@@ -265,6 +284,7 @@ const lanGroupsList = ref([])   // 内网群聊列表
 const showCreateGroupDialog = ref(false)  // 创建群聊对话框
 const newGroupName = ref('')    // 新群名称
 const newGroupMembers = ref([]) // 新群成员
+const deletedGroupIds = ref([]) // 用户删除的群聊ID列表
 
 // 计算属性
 const currentUsername = computed(() => {
@@ -497,11 +517,17 @@ onMounted(() => {
     lanSettings.value = JSON.parse(savedLanSettings)
     useLanChat.value = lanSettings.value.useLanChat
   }
-  
+
+  // 加载已删除的群聊ID
+  const savedDeletedGroups = localStorage.getItem('deletedGroupIds')
+  if (savedDeletedGroups) {
+    deletedGroupIds.value = JSON.parse(savedDeletedGroups)
+  }
+
   loadFriendsList()
   loadAllUsers()
   loadFriendRequests()
-  
+
   // 如果启用了内网聊天，加载内网好友
   if (useLanChat.value) {
     loadLanFriendsList()
@@ -578,7 +604,14 @@ const selectGroup = async (group) => {
 // 加载群聊消息
 const loadGroupMessages = async () => {
   if (!selectedGroup.value || !lanSettings.value.useLanChat) return
-  
+
+  // 检查是否已从列表中隐藏，如果是则重新显示
+  const groupId = selectedGroup.value.id
+  if (deletedGroupIds.value.includes(groupId)) {
+    deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
+    localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
+  }
+
   try {
     const response = await fetch(
       `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/group-messages?groupId=${encodeURIComponent(selectedGroup.value.id)}`,
@@ -597,7 +630,14 @@ const loadGroupMessages = async () => {
 const sendGroupMessage = async () => {
   const message = inputMessage.value.trim()
   if (!message || !selectedGroup.value || !lanSettings.value.useLanChat) return
-  
+
+  // 检查是否已从列表中隐藏，如果是则重新显示
+  const groupId = selectedGroup.value.id
+  if (deletedGroupIds.value.includes(groupId)) {
+    deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
+    localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
+  }
+
   try {
     const response = await fetch(
       `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/group-messages`,
@@ -669,6 +709,69 @@ const handleSendMessage = () => {
     sendMessage()
   }
 }
+
+// 删除群聊（本地隐藏，有新消息时重新显示）
+const handleDeleteGroup = () => {
+  if (!selectedGroup.value) return
+
+  const groupId = selectedGroup.value.id
+  // 添加到已删除列表
+  if (!deletedGroupIds.value.includes(groupId)) {
+    deletedGroupIds.value.push(groupId)
+    localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
+  }
+
+  // 清除选中状态
+  selectedGroup.value = null
+  chatMessages.value = []
+
+  // 刷新群聊列表（会自动过滤已删除的）
+  loadLanGroupsList()
+
+  ElMessage.success('群聊已隐藏')
+}
+
+// 解散群聊（仅创建者可见）
+const handleDisbandGroup = async () => {
+  if (!selectedGroup.value) return
+
+  try {
+    const response = await fetch(
+      `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/groups/${selectedGroup.value.id}`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUsername.value })
+      }
+    )
+    const data = await response.json()
+    if (data.success) {
+      ElMessage.success('群聊已解散')
+
+      // 从已删除列表中移除（如果存在）
+      const groupId = selectedGroup.value.id
+      deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
+      localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
+
+      // 清除选中状态
+      selectedGroup.value = null
+      chatMessages.value = []
+
+      // 刷新群聊列表
+      await loadLanGroupsList()
+    } else {
+      ElMessage.error(data.message || '解散失败')
+    }
+  } catch (error) {
+    console.error('解散群聊失败:', error)
+    ElMessage.error('解散群聊失败')
+  }
+}
+
+// 过滤群聊列表（排除已删除的）
+const filteredLanGroupsList = computed(() => {
+  return lanGroupsList.value.filter(group => !deletedGroupIds.value.includes(group.id))
+})
 </script>
 
 <style lang="scss" scoped>
@@ -689,6 +792,10 @@ const handleSendMessage = () => {
   .chat-tabs {
     padding: 15px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+    .mode-switch-row {
+      margin-bottom: 10px;
+    }
   }
   
   .search-box {
@@ -754,9 +861,17 @@ const handleSendMessage = () => {
       font-size: 16px;
       font-weight: 500;
       color: var(--text-primary);
-      
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+
       .placeholder {
         color: var(--text-secondary);
+      }
+
+      .group-actions {
+        display: flex;
+        gap: 8px;
       }
     }
     

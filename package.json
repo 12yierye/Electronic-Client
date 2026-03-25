@@ -33,6 +33,7 @@
   "build": {
     "appId": "com.electronic.app",
     "productName": "Electronic",
+    "asar": false,
     "directories": {
       "output": "dist"
     },

@@ -31,7 +31,9 @@ process.on('unhandledRejection', (reason, promise) => {
 })
 
 function createWindow() {
-  const preloadPath = join(__dirname, 'preload.js')
+  // 开发模式用 preload.cjs，生产模式用 preload.js
+  const isDev = process.env.VITE_DEV_SERVER_URL
+  const preloadPath = join(__dirname, isDev ? 'preload.cjs' : 'preload.js')
   console.log('[Main] __dirname:', __dirname)
   console.log('[Main] preload 路径:', preloadPath)
   console.log('[Main] preload 文件存在:', fs.existsSync(preloadPath))
