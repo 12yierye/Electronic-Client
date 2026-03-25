@@ -322,6 +322,8 @@ ipcMain.handle('create-credential', async (event, username) => {
 
 // 本地 AI 聊天 (LM Studio)
 console.log('[Main] 注册 ai-chat IPC 处理程序')
+
+// 非流式响应（保留兼容）
 ipcMain.handle('ai-chat', async (event, userMessage) => {
   console.log('[AI Chat] 收到调用，消息:', userMessage)
   try {
@@ -344,6 +346,81 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
   } catch (error) {
     console.error('[AI Chat] 错误:', error.message)
     console.error('[AI Chat] 错误详情:', error.response?.data || error.request || error)
+    return { success: false, message: error.message }
+  }
+})
+
+// 流式响应 AI 聊天
+ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
+  console.log('[AI Chat Stream] 收到调用，消息:', userMessage)
+
+  const requestBody = {
+    model: MODEL_ID,
+    messages: [
+      { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
+      { role: 'user', content: userMessage }
+    ],
+    temperature: 0.7,
+    stream: true
+  }
+
+  try {
+    const response = await axios.post(
+      `${LM_STUDIO_API}/chat/completions`,
+      requestBody,
+      {
+        responseType: 'stream',
+        timeout: 120000
+      }
+    )
+
+    return new Promise((resolve) => {
+      let fullReply = ''
+
+      response.data.on('data', (chunk) => {
+        const lines = chunk.toString().split('\n').filter(line => line.trim() !== '')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') {
+              // 流结束
+              event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply })
+              resolve({ success: true, reply: fullReply })
+              return
+            }
+
+            try {
+              const parsed = JSON.parse(data)
+              const content = parsed.choices?.[0]?.delta?.content || ''
+              if (content) {
+                fullReply += content
+                // 发送增量内容给前端
+                event.sender.send('ai-chat-stream-chunk', { content })
+              }
+            } catch (e) {
+              // 忽略解析错误
+            }
+          }
+        }
+      })
+
+      response.data.on('end', () => {
+        if (fullReply) {
+          event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply })
+        }
+        resolve({ success: true, reply: fullReply })
+      })
+
+      response.data.on('error', (err) => {
+        console.error('[AI Chat Stream] 流错误:', err.message)
+        event.sender.send('ai-chat-stream-error', { message: err.message })
+        resolve({ success: false, message: err.message })
+      })
+    })
+  } catch (error) {
+    console.error('[AI Chat Stream] 错误:', error.message)
+    event.sender.send('ai-chat-stream-error', { message: error.message })
     return { success: false, message: error.message }
   }
 })

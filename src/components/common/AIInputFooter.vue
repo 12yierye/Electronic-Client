@@ -22,7 +22,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { Promotion, Loading } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
@@ -37,7 +37,7 @@ const handleEnterKey = (e) => {
   e.preventDefault() // 阻止默认换行行为
   const message = inputMessage.value.trim()
   if (!message || isSending.value) return
-  
+
   // 有消息时调用发送
   handleSend()
 }
@@ -45,28 +45,63 @@ const handleEnterKey = (e) => {
 const handleSend = async () => {
   const message = inputMessage.value.trim()
   if (!message || isSending.value) return
-  
+
   isSending.value = true
   aiStore.addUserMessage(message)
   inputMessage.value = ''
-  
-  // 调用本地 AI 模型回复
+
+  // 先清理旧的监听器，再设置新的
+  if (window.electronAPI.removeAIChatStreamListener) {
+    window.electronAPI.removeAIChatStreamListener()
+  }
+
+  // 设置流式监听器
+  if (window.electronAPI.onAIChatStreamChunk) {
+    window.electronAPI.onAIChatStreamChunk((data) => {
+      if (data.done) {
+        // 流结束
+        aiStore.endStreamingMessage()
+      } else {
+        // 追加流式内容
+        aiStore.appendStreamingContent(data.content)
+      }
+    })
+  }
+
+  // 调用本地 AI 模型流式回复
   try {
-    console.log('[Renderer] 调用 aiChat，消息:', message)
-    const result = await window.electronAPI.aiChat(message)
-    console.log('[Renderer] aiChat 返回:', result)
-    if (result.success) {
-      // 支持思考内容和Markdown
-      aiStore.addAIMessage(result.reply, result.thinking || '')
-    } else {
+    console.log('[Renderer] 调用 aiChatStream，消息:', message)
+
+    // 先创建空的 AI 消息占位
+    aiStore.startStreamingMessage()
+
+    const result = await window.electronAPI.aiChatStream(message)
+    console.log('[Renderer] aiChatStream 返回:', result)
+
+    if (!result.success) {
+      // 流式失败，添加错误消息
+      aiStore.endStreamingMessage()
       aiStore.addAIMessage('抱歉，AI 响应失败: ' + result.message)
     }
+    // 如果成功，流式监听器会自动处理
   } catch (error) {
+    aiStore.endStreamingMessage()
     aiStore.addAIMessage('抱歉，连接 AI 失败: ' + error.message)
   } finally {
     isSending.value = false
+    // 清理监听器
+    if (window.electronAPI.removeAIChatStreamListener) {
+      window.electronAPI.removeAIChatStreamListener()
+    }
   }
 }
+
+// 组件卸载时清理监听器
+onUnmounted(() => {
+  if (window.electronAPI.removeAIChatStreamListener) {
+    window.electronAPI.removeAIChatStreamListener()
+  }
+})
 
 const handleNewLine = () => {
   // Shift + Enter 允许换行

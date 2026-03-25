@@ -63,6 +63,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 本地 AI 聊天
   aiChat: (message) => ipcRenderer.invoke('ai-chat', message),
 
+  // 流式 AI 聊天
+  aiChatStream: (message) => ipcRenderer.invoke('ai-chat-stream', message),
+
+  // 流式聊天事件监听
+  onAIChatStreamChunk: (callback) => {
+    ipcRenderer.on('ai-chat-stream-chunk', (event, data) => callback(data))
+  },
+
+  // 移除流式聊天监听
+  removeAIChatStreamListener: () => {
+    ipcRenderer.removeAllListeners('ai-chat-stream-chunk')
+    ipcRenderer.removeAllListeners('ai-chat-stream-error')
+  },
+
   // 本地 AI 函数生成
   generateFunction: (prompt) => ipcRenderer.invoke('generate-function', prompt)
 })
