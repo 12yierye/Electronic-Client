@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "electron": "vite --mode electron",
-    "build": "vite build && electron-builder",
+    "build": "vite build --mode electron && electron-builder",
     "preview": "vite preview",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -44,6 +44,9 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
-    ]
+    ],
+    "extraMetadata": {
+      "main": "dist-electron/index.js"
+    }
   }
 }

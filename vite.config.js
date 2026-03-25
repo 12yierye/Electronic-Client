@@ -6,41 +6,47 @@ import { resolve } from 'path'
 
 export default defineConfig(({ mode }) => {
   const isElectron = mode === 'electron'
-  
+
+  const electronPlugin = electron([
+    {
+      entry: 'electron/index.js',
+      onstart(options) {
+        if (process.env.NODE_ENV !== 'production') {
+          options.startup()
+        }
+      },
+      vite: {
+        build: {
+          outDir: 'dist-electron',
+          rollupOptions: {
+            external: ['electron']
+          }
+        }
+      }
+    },
+    {
+      entry: 'electron/preload.cjs',
+      onstart(options) {
+        if (process.env.NODE_ENV !== 'production') {
+          options.reload()
+        }
+      },
+      vite: {
+        build: {
+          outDir: 'dist-electron',
+          rollupOptions: {
+            external: ['electron']
+          }
+        }
+      }
+    }
+  ])
+
   return {
     plugins: [
       vue(),
       ...(isElectron ? [
-        electron([
-          {
-            entry: 'electron/index.js',
-            onstart(options) {
-              options.startup()
-            },
-            vite: {
-              build: {
-                outDir: 'dist-electron',
-                rollupOptions: {
-                  external: ['electron']
-                }
-              }
-            }
-          },
-          {
-            entry: 'electron/preload.cjs',
-            onstart(options) {
-              options.reload()
-            },
-            vite: {
-              build: {
-                outDir: 'dist-electron',
-                rollupOptions: {
-                  external: ['electron']
-                }
-              }
-            }
-          }
-        ]),
+        electronPlugin,
         renderer()
       ] : [])
     ],
