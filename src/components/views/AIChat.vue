@@ -41,15 +41,13 @@
             </div>
             
             <!-- 消息内容 - 支持Markdown -->
-            <div class="message-bubble" :class="{ 'is-html': msg.htmlContent, 'is-streaming': msg.isStreaming }">
+            <div class="message-bubble" :class="{ 'is-html': msg.htmlContent }">
               <template v-if="msg.htmlContent">
                 <div class="markdown-content" v-html="msg.htmlContent"></div>
               </template>
               <template v-else>
                 {{ msg.content }}
               </template>
-              <!-- 流式输出时的光标动画 -->
-              <span v-if="msg.isStreaming" class="streaming-cursor">▌</span>
             </div>
           </div>
         </div>
@@ -216,22 +214,6 @@ onMounted(() => {
           
           &.is-html {
             padding: 12px 18px;
-          }
-
-          &.is-streaming {
-            min-height: 24px;
-          }
-
-          .streaming-cursor {
-            display: inline-block;
-            animation: blink 1s infinite;
-            color: var(--accent-color);
-            margin-left: 2px;
-          }
-
-          @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
           }
           
           // Markdown 样式
