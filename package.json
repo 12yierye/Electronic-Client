@@ -1,6 +1,7 @@
 {
   "name": "electronic-vue",
   "version": "1.0.0",
+  "author": "FireOut",
   "description": "Electronic - Vue + ElementPlus",
   "main": "electron/index.js",
   "type": "module",
