@@ -13,7 +13,14 @@ let mainWindow = null
 const API_BASE = 'http://192.168.61.129:3000'
 const DOC_SERVER = 'http://120.24.26.164'
 const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'  // LM Studio OpenAI-compatible API
-const MODEL_ID = 'qwen3.5-0.8b'
+
+// 默认模型列表（按优先级排序）
+const MODEL_PREFERENCES = [
+  'qwen3.5-35b-a3b',
+  'qwen3.5-9b',
+  'qwen3.5-0.8b'
+]
+const MODEL_ID = MODEL_PREFERENCES[0] // 最高优先级默认模型
 
 console.log('[Main] Electron 主进程启动')
 console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
@@ -326,16 +333,37 @@ console.log('[Main] 注册 ai-chat IPC 处理程序')
 // 非流式响应（保留兼容）
 ipcMain.handle('ai-chat', async (event, userMessage) => {
   console.log('[AI Chat] 收到调用，消息:', userMessage)
+
+  // 自动获取当前运行的模型
+  let currentModel = MODEL_ID
+  try {
+    const modelResponse = await axios.get(`${LM_STUDIO_API}/model`, { timeout: 5000 })
+    if (modelResponse.data && modelResponse.data.model) {
+      currentModel = modelResponse.data.model
+      console.log('[AI Chat] 使用当前模型:', currentModel)
+    } else {
+      console.log('[AI Chat] 未检测到运行中的模型，使用默认模型:', MODEL_ID)
+    }
+  } catch (error) {
+    console.log('[AI Chat] 获取模型失败，使用默认模型:', MODEL_ID)
+  }
+
   try {
     console.log('[AI Chat] 发送消息:', userMessage)
+    // 基础请求参数
     const requestBody = {
-      model: MODEL_ID,
+      model: currentModel,
       messages: [
         { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
         { role: 'user', content: userMessage }
-      ],
-      temperature: 0.7
+      ]
     }
+
+    // Qwen3 系列模型可能不支持 temperature 参数
+    if (!currentModel.toLowerCase().includes('qwen3') && !currentModel.toLowerCase().includes('qwen')) {
+      requestBody.temperature = 0.7
+    }
+
     console.log('[AI Chat] 请求体:', JSON.stringify(requestBody, null, 2))
     const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, requestBody, { timeout: 120000 })
     console.log('[AI Chat] LM Studio 响应状态:', response.status)
@@ -350,18 +378,54 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
   }
 })
 
+// 获取当前运行的模型
+ipcMain.handle('get-current-model', async () => {
+  try {
+    // LM Studio 提供了获取当前加载模型的 API
+    const response = await axios.get(`${LM_STUDIO_API}/model`, { timeout: 5000 })
+    if (response.data && response.data.model) {
+      console.log('[Get Current Model] 当前模型:', response.data.model)
+      return { success: true, model: response.data.model }
+    }
+    return { success: false, message: '未加载模型' }
+  } catch (error) {
+    console.error('[Get Current Model] 错误:', error.message)
+    return { success: false, message: error.message }
+  }
+})
+
 // 流式响应 AI 聊天
 ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
   console.log('[AI Chat Stream] 收到调用，消息:', userMessage)
 
+  // 自动获取当前运行的模型
+  let currentModel = MODEL_ID
+  try {
+    const modelResponse = await axios.get(`${LM_STUDIO_API}/model`, { timeout: 5000 })
+    if (modelResponse.data && modelResponse.data.model) {
+      currentModel = modelResponse.data.model
+      console.log('[AI Chat Stream] 使用当前模型:', currentModel)
+    } else {
+      console.log('[AI Chat Stream] 未检测到运行中的模型，使用默认模型:', MODEL_ID)
+    }
+  } catch (error) {
+    console.log('[AI Chat Stream] 获取模型失败，使用默认模型:', MODEL_ID)
+  }
+
+  // 基础请求参数
   const requestBody = {
-    model: MODEL_ID,
+    model: currentModel,
     messages: [
       { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
       { role: 'user', content: userMessage }
     ],
-    temperature: 0.7,
     stream: true
+  }
+
+  // Qwen3 系列模型可能不支持 temperature 参数，使用 min_p 或其他参数
+  // 只有非 Qwen3 模型才添加 temperature
+  if (!currentModel.toLowerCase().includes('qwen3') && !currentModel.toLowerCase().includes('qwen')) {
+    requestBody.temperature = 0.7
   }
 
   try {
@@ -376,6 +440,7 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
 
     return new Promise((resolve) => {
       let fullReply = ''
+      let fullReasoning = ''
 
       response.data.on('data', (chunk) => {
         const lines = chunk.toString().split('\n').filter(line => line.trim() !== '')
@@ -385,14 +450,21 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
             const data = line.slice(6)
             if (data === '[DONE]') {
               // 流结束
-              event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply })
-              resolve({ success: true, reply: fullReply })
+              event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply, reasoning: fullReasoning })
+              resolve({ success: true, reply: fullReply, reasoning: fullReasoning })
               return
             }
 
             try {
               const parsed = JSON.parse(data)
               const content = parsed.choices?.[0]?.delta?.content || ''
+              const reasoning = parsed.choices?.[0]?.delta?.reasoning_content || ''
+
+              if (reasoning) {
+                fullReasoning += reasoning
+                // 发送思考内容给前端
+                event.sender.send('ai-chat-stream-chunk', { reasoning })
+              }
               if (content) {
                 fullReply += content
                 // 发送增量内容给前端
@@ -406,10 +478,10 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
       })
 
       response.data.on('end', () => {
-        if (fullReply) {
-          event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply })
+        if (fullReply || fullReasoning) {
+          event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply, reasoning: fullReasoning })
         }
-        resolve({ success: true, reply: fullReply })
+        resolve({ success: true, reply: fullReply, reasoning: fullReasoning })
       })
 
       response.data.on('error', (err) => {

@@ -62,8 +62,14 @@ const handleSend = async () => {
         // 流结束
         aiStore.endStreamingMessage()
       } else {
+        // 追加思考内容
+        if (data.reasoning) {
+          aiStore.appendReasoningContent(data.reasoning)
+        }
         // 追加流式内容
-        aiStore.appendStreamingContent(data.content)
+        if (data.content) {
+          aiStore.appendStreamingContent(data.content)
+        }
       }
     })
   }

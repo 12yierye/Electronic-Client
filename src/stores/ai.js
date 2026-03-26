@@ -53,7 +53,7 @@ export const useAIStore = defineStore('ai', () => {
       content: '',
       htmlContent: '',
       thinking,
-      showThinking: false,
+      showThinking: true, // 默认展开思考内容
       timestamp: new Date().toISOString(),
       isStreaming: true
     })
@@ -93,6 +93,16 @@ export const useAIStore = defineStore('ai', () => {
     if (msg) {
       msg.content += content
       msg.htmlContent = marked(msg.content)
+    }
+  }
+
+  // 追加思考内容
+  const appendReasoningContent = (reasoning) => {
+    if (!currentStreamingMessage) return
+
+    const msg = messages.value.find(m => m.id === currentStreamingMessage)
+    if (msg) {
+      msg.thinking = (msg.thinking || '') + reasoning
     }
   }
 
@@ -147,6 +157,7 @@ export const useAIStore = defineStore('ai', () => {
     startStreamingMessage,
     updateStreamingMessage,
     appendStreamingContent,
+    appendReasoningContent,
     endStreamingMessage,
     toggleThinking,
     clearMessages,
