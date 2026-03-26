@@ -11,8 +11,24 @@ marked.setOptions({
 export const useAIStore = defineStore('ai', () => {
   const messages = ref([])
   const isLoading = ref(false)
+  const currentModel = ref('') // 当前运行的模型
   let currentStreamingMessage = null // 当前正在流式输出的消息
   let messageIdCounter = 0 // 消息ID计数器，确保唯一性
+
+  // 获取当前运行的模型
+  const fetchCurrentModel = async () => {
+    if (window.electronAPI?.getCurrentModel) {
+      try {
+        const result = await window.electronAPI.getCurrentModel()
+        if (result.success) {
+          currentModel.value = result.model
+          console.log('[AI Store] 当前模型:', result.model)
+        }
+      } catch (e) {
+        console.error('[AI Store] 获取模型失败:', e)
+      }
+    }
+  }
 
   // 生成唯一的消息ID
   const generateMessageId = () => {
@@ -152,6 +168,8 @@ export const useAIStore = defineStore('ai', () => {
   return {
     messages,
     isLoading,
+    currentModel,
+    fetchCurrentModel,
     addUserMessage,
     addAIMessage,
     startStreamingMessage,

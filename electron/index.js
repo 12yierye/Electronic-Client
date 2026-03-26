@@ -14,14 +14,6 @@ const API_BASE = 'http://192.168.61.129:3000'
 const DOC_SERVER = 'http://120.24.26.164'
 const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'  // LM Studio OpenAI-compatible API
 
-// 默认模型列表（按优先级排序）
-const MODEL_PREFERENCES = [
-  'qwen3.5-35b-a3b',
-  'qwen3.5-9b',
-  'qwen3.5-0.8b'
-]
-const MODEL_ID = MODEL_PREFERENCES[0] // 最高优先级默认模型
-
 console.log('[Main] Electron 主进程启动')
 console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
 
@@ -335,17 +327,19 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
   console.log('[AI Chat] 收到调用，消息:', userMessage)
 
   // 自动获取当前运行的模型
-  let currentModel = MODEL_ID
+  let currentModel = null
   try {
     const modelResponse = await axios.get(`${LM_STUDIO_API}/model`, { timeout: 5000 })
     if (modelResponse.data && modelResponse.data.model) {
       currentModel = modelResponse.data.model
       console.log('[AI Chat] 使用当前模型:', currentModel)
     } else {
-      console.log('[AI Chat] 未检测到运行中的模型，使用默认模型:', MODEL_ID)
+      console.log('[AI Chat] 未检测到运行中的模型')
+      return { success: false, message: '请先在 LM Studio 中加载模型' }
     }
   } catch (error) {
-    console.log('[AI Chat] 获取模型失败，使用默认模型:', MODEL_ID)
+    console.log('[AI Chat] 获取模型失败:', error.message)
+    return { success: false, message: '无法连接到 LM Studio，请确保 LM Studio 正在运行' }
   }
 
   try {
@@ -356,12 +350,21 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
       messages: [
         { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
         { role: 'user', content: userMessage }
-      ]
+      ],
+      max_tokens: 8192
     }
 
     // Qwen3 系列模型可能不支持 temperature 参数
     if (!currentModel.toLowerCase().includes('qwen3') && !currentModel.toLowerCase().includes('qwen')) {
       requestBody.temperature = 0.7
+    }
+
+    // Qwen3 模型添加额外参数
+    if (currentModel.toLowerCase().includes('qwen3') || currentModel.toLowerCase().includes('qwen')) {
+      requestBody.extra_body = {
+        enable_thinking: true,
+        thinking_budget: 4096
+      }
     }
 
     console.log('[AI Chat] 请求体:', JSON.stringify(requestBody, null, 2))
@@ -399,17 +402,19 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
   console.log('[AI Chat Stream] 收到调用，消息:', userMessage)
 
   // 自动获取当前运行的模型
-  let currentModel = MODEL_ID
+  let currentModel = null
   try {
     const modelResponse = await axios.get(`${LM_STUDIO_API}/model`, { timeout: 5000 })
     if (modelResponse.data && modelResponse.data.model) {
       currentModel = modelResponse.data.model
       console.log('[AI Chat Stream] 使用当前模型:', currentModel)
     } else {
-      console.log('[AI Chat Stream] 未检测到运行中的模型，使用默认模型:', MODEL_ID)
+      console.log('[AI Chat Stream] 未检测到运行中的模型')
+      return { success: false, message: '请先在 LM Studio 中加载模型' }
     }
   } catch (error) {
-    console.log('[AI Chat Stream] 获取模型失败，使用默认模型:', MODEL_ID)
+    console.log('[AI Chat Stream] 获取模型失败:', error.message)
+    return { success: false, message: '无法连接到 LM Studio，请确保 LM Studio 正在运行' }
   }
 
   // 检查用户消息是否可能包含定时发送意图
@@ -465,13 +470,23 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage }
     ],
-    stream: true
+    stream: true,
+    // 设置较高的 max_tokens 防止输出被截断
+    max_tokens: 8192
   }
 
   // Qwen3 系列模型可能不支持 temperature 参数，使用 min_p 或其他参数
   // 只有非 Qwen3 模型才添加 temperature
   if (!currentModel.toLowerCase().includes('qwen3') && !currentModel.toLowerCase().includes('qwen')) {
     requestBody.temperature = 0.7
+  }
+
+  // Qwen3 模型添加额外参数
+  if (currentModel.toLowerCase().includes('qwen3') || currentModel.toLowerCase().includes('qwen')) {
+    requestBody.extra_body = {
+      enable_thinking: true,
+      thinking_budget: 4096
+    }
   }
 
   try {
@@ -560,9 +575,23 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
 // 本地 AI 函数生成 (LM Studio)
 ipcMain.handle('generate-function', async (event, prompt) => {
   try {
+    // 先获取当前运行的模型
+    let currentModel = null
+    try {
+      const modelResponse = await axios.get(`${LM_STUDIO_API}/model`, { timeout: 5000 })
+      if (modelResponse.data && modelResponse.data.model) {
+        currentModel = modelResponse.data.model
+      } else {
+        return { success: false, message: '请先在 LM Studio 中加载模型' }
+      }
+    } catch (e) {
+      return { success: false, message: '无法连接到 LM Studio' }
+    }
+
+    console.log('[Generate Function] 使用模型:', currentModel)
     console.log('[Generate Function] 发送提示词:', prompt)
     const requestBody = {
-      model: MODEL_ID,
+      model: currentModel,
       messages: [
         { role: 'system', content: '你是一个代码生成助手。根据用户需求，生成一个 JavaScript 函数。只返回函数代码，不要其他解释，不要任何markdown代码块标记。函数要可以直接用 new Function() 执行。' },
         { role: 'user', content: prompt }

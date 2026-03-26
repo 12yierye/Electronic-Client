@@ -6,6 +6,12 @@
       <h2>Electronic</h2>
       <p class="intro">{{ t('aiChat.personalAssistant') }}</p>
       <p class="greeting">{{ greeting }}</p>
+      <p v-if="aiStore.currentModel" class="current-model">
+        <el-tag type="info" effect="plain">
+          <el-icon class="model-icon"><Monitor /></el-icon>
+          {{ aiStore.currentModel }}
+        </el-tag>
+      </p>
     </div>
     
     <!-- 消息列表 -->
@@ -69,7 +75,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
-import { MagicStick, ArrowDown, ArrowRight } from '@element-plus/icons-vue'
+import { MagicStick, ArrowDown, ArrowRight, Monitor } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
 
@@ -99,6 +105,8 @@ watch(messages, () => {
 
 onMounted(() => {
   scrollToBottom()
+  // 获取当前运行的模型
+  aiStore.fetchCurrentModel()
 })
 </script>
 
@@ -137,6 +145,22 @@ onMounted(() => {
       font-size: 20px;
       color: var(--accent-color);
       font-weight: 500;
+    }
+
+    .current-model {
+      margin-top: 12px;
+
+      .el-tag {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        padding: 8px 16px;
+
+        .model-icon {
+          font-size: 16px;
+        }
+      }
     }
   }
   

@@ -80,6 +80,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 本地 AI 函数生成
   generateFunction: (prompt) => ipcRenderer.invoke('generate-function', prompt),
 
+  // 获取当前运行的模型
+  getCurrentModel: () => ipcRenderer.invoke('get-current-model'),
+
   // 定时发送文件
   scheduleFileSend: (scheduleTime, targetUser, filename, currentUser) =>
     ipcRenderer.invoke('schedule-file-send', scheduleTime, targetUser, filename, currentUser),
