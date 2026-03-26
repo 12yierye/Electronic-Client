@@ -88,6 +88,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scheduleMessageSend: (scheduleTime, targetUser, content, currentUser) =>
     ipcRenderer.invoke('schedule-message-send', scheduleTime, targetUser, content, currentUser),
 
+  // 立即发送文件
+  sendFileNow: (targetUser, filename, currentUser) =>
+    ipcRenderer.invoke('send-file-now', targetUser, filename, currentUser),
+
+  // 立即发送文字消息
+  sendMessageNow: (targetUser, content, currentUser) =>
+    ipcRenderer.invoke('send-message-now', targetUser, content, currentUser),
+
   // 获取用户文件列表
   getUserFiles: (username) => ipcRenderer.invoke('get-user-files', username)
 })

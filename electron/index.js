@@ -418,26 +418,38 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
   const hasUserPattern = /向\s*\S+|发给\s*\S+|发送给\s*\S+/.test(userMessage)
   const likelyScheduledIntent = hasTimePattern && hasSendPattern && hasUserPattern
 
+  // 检查是否是立即发送（没有时间关键词）
+  const hasImmediateSendPattern = /^(?!.*\d{1,2}:\d{2}).*(?:发送|发给|发送给)\s+\S+/i.test(userMessage)
+  const likelyImmediateIntent = hasImmediateSendPattern && hasUserPattern
+
   // 构造 system prompt，根据意图类型选择
   let systemPrompt = '你是一个友好的AI助手，请用中文回答用户的问题。'
 
-  if (likelyScheduledIntent) {
-    // 如果检测到可能是定时发送意图，添加function calling指导
+  if (likelyScheduledIntent || likelyImmediateIntent) {
+    // 如果检测到可能是发送意图，添加function calling指导
     systemPrompt = `你是一个友好的AI助手。
 当用户表达以下意图时，请按指定格式返回函数名，不要返回其他内容：
 
-1. 定时发送文件意图：用户想在某个时间向某人发送文件
-   - 关键词：时间（如"15:30"）、发送文件、文件名（如"报告.docx"）、接收人
+1. 定时发送文件意图：用户想在某个具体时间（如"15:30"、"1分钟后"）向某人发送文件
+   - 关键词：时间（如"15:30"、"1分钟后"）、发送文件、文件名、接收人
    - 返回格式：FUNCTION:schedule_file_send
 
-2. 定时发送文字消息意图：用户想在某个时间向某人发送文字消息
+2. 立即发送文件意图：用户想现在立即向某人发送文件（没有指定具体时间）
+   - 关键词：发送文件、文件名、接收人（无时间或"现在"、"立即"）
+   - 返回格式：FUNCTION:send_file_now
+
+3. 定时发送文字消息意图：用户想在某个时间向某人发送文字消息
    - 关键词：时间、发送消息/文字、接收人
    - 返回格式：FUNCTION:schedule_message_send
 
-3. 普通聊天：上述情况之外
+4. 立即发送文字消息意图：用户想现在立即向某人发送文字消息
+   - 关键词：发送消息/文字、接收人（无时间或"现在"、"立即"）
+   - 返回格式：FUNCTION:send_message_now
+
+5. 普通聊天：上述情况之外
    - 正常回复用户问题，不要返回任何 FUNCTION: 开头的标记
 
-请根据用户消息判断意图并返回相应格式。`
+请根据用户消息判断意图并返回相应格式。如果用户只是询问如何操作，请正常回答。`
 
     // 发送意图识别结果给前端
     event.sender.send('ai-chat-stream-chunk', { 
@@ -514,7 +526,7 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
       response.data.on('end', () => {
         if (fullReply || fullReasoning) {
           // 检测模型返回的函数名
-          const functionMatch = fullReply.match(/FUNCTION:\s*(schedule_file_send|schedule_message_send)/)
+          const functionMatch = fullReply.match(/FUNCTION:\s*(schedule_file_send|schedule_message_send|send_file_now|send_message_now)/)
           if (functionMatch) {
             const functionName = functionMatch[1]
             console.log('[AI Chat Stream] 检测到函数调用:', functionName)
@@ -709,6 +721,81 @@ ipcMain.handle('schedule-message-send', async (event, scheduleTime, targetUser, 
     return { success: true, taskId, scheduleTime }
   } catch (error) {
     console.error('[Schedule Message Send] 错误:', error.message)
+    return { success: false, message: error.message }
+  }
+})
+
+// 立即发送文件（无定时）
+ipcMain.handle('send-file-now', async (event, targetUser, filename, currentUser) => {
+  try {
+    console.log('[Send File Now] 立即发送文件:', { targetUser, filename, currentUser })
+
+    // 获取发送者的文件
+    const filesResponse = await axios.get(`${API_BASE}/user/files/${currentUser}`)
+    if (!filesResponse.data.success || !filesResponse.data.files) {
+      return { success: false, message: '无法获取文件列表' }
+    }
+
+    const fileInfo = filesResponse.data.files.find(f => f.filename === filename)
+    if (!fileInfo) {
+      return { success: false, message: `文件 "${filename}" 不存在` }
+    }
+
+    // 1. 下载文件然后发送给目标用户
+    const downloadResponse = await axios.get(
+      `${API_BASE}/user/download?username=${currentUser}&filename=${filename}`,
+      { responseType: 'arraybuffer' }
+    )
+
+    // 2. 上传到目标用户
+    await axios.post(
+      `${API_BASE}/user/upload?username=${targetUser}&filename=${filename}`,
+      downloadResponse.data,
+      { headers: { 'Content-Type': 'application/octet-stream' } }
+    )
+
+    console.log('[Send File Now] 文件发送成功:', filename, '->', targetUser)
+
+    // 3. 发送聊天消息记录（双方都能看到）
+    const chatMessageData = {
+      sender: currentUser,
+      receiver: targetUser,
+      content: `[发送文件] ${filename}`,
+      type: 'file',
+      fileInfo: {
+        filename: filename,
+        isScheduled: false
+      }
+    }
+    await axios.post(`${API_BASE}/chat/send`, chatMessageData)
+
+    console.log('[Send File Now] 聊天记录已创建')
+    return { success: true, message: `文件 "${filename}" 已发送给 "${targetUser}"` }
+  } catch (error) {
+    console.error('[Send File Now] 错误:', error.message)
+    return { success: false, message: error.message }
+  }
+})
+
+// 立即发送文字消息（无定时）
+ipcMain.handle('send-message-now', async (event, targetUser, content, currentUser) => {
+  try {
+    console.log('[Send Message Now] 立即发送消息:', { targetUser, content, currentUser })
+
+    // 发送聊天消息（双方都能看到）
+    const chatMessageData = {
+      sender: currentUser,
+      receiver: targetUser,
+      content: content,
+      type: 'text',
+      isScheduled: false
+    }
+    await axios.post(`${API_BASE}/chat/send`, chatMessageData)
+
+    console.log('[Send Message Now] 消息发送成功:', content, '->', targetUser)
+    return { success: true, message: `消息已发送给 "${targetUser}"` }
+  } catch (error) {
+    console.error('[Send Message Now] 错误:', error.message)
     return { success: false, message: error.message }
   }
 })

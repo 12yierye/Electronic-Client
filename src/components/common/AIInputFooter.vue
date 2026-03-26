@@ -34,7 +34,7 @@ const { t } = useI18n()
 const inputMessage = ref('')
 const isSending = ref(false)
 
-// 解析定时发送意图（文件或文字）
+// 解析发送意图（定时或立即）
 const parseScheduledIntent = (message) => {
   // 统一将全角冒号转换为半角
   const normalizedMessage = message.replace(/：/g, ':')
@@ -42,14 +42,15 @@ const parseScheduledIntent = (message) => {
   console.log('[parseScheduledIntent] 原始消息:', message)
   console.log('[parseScheduledIntent] 规范化后:', normalizedMessage)
 
-  // 时间模式 - 支持 00:00 或 在00:00 格式
+  // 时间模式 - 支持 00:00 或 在00:00 格式，以及"1分钟后"等
   const timePatterns = [
     /在\s*(\d{1,2}:\d{2})/,
-    /(\d{1,2}:\d{2})/
+    /(\d{1,2}:\d{2})/,
+    /(\d+)\s*分钟\s*后/
   ]
 
   // 文件扩展名列表
-  const fileExtensions = ['docx', 'xlsx', 'pdf', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'zip', 'rar', '7z', 'pptx', 'doc', 'xls', 'csv']
+  const fileExtensions = ['docx', 'xlsx', 'pdf', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'zip', 'rar', '7z', 'pptx', 'doc', 'xls', 'csv', 'npmrc']
 
   // 匹配文件名模式
   const fileNamePattern = new RegExp(
@@ -57,16 +58,8 @@ const parseScheduledIntent = (message) => {
     'i'
   )
 
-  // 用户名模式 - 匹配到发送/说/发等关键词之前
-  const userPatterns = [
-    /向\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/,
-    /发给\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/,
-    /发送给\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/,
-    /向\s*(\S+?)(?:发送|发给|发送给|说|发|$)/,
-    /(\S+?)(?:发送|发给|发送给|说|发)/
-  ]
-
   let time = null
+  let minutesLater = null
   let targetUser = null
   let filename = null
   let content = null
@@ -76,16 +69,15 @@ const parseScheduledIntent = (message) => {
   for (const pattern of timePatterns) {
     const match = normalizedMessage.match(pattern)
     if (match) {
-      time = match[1]
+      if (match[1] && pattern.toString().includes('分钟')) {
+        minutesLater = parseInt(match[1])
+        time = minutesLater
+      } else {
+        time = match[1] || match[0]
+      }
       console.log('[parseScheduledIntent] 提取到时间:', time)
       break
     }
-  }
-
-  // 如果没有时间，直接返回
-  if (!time) {
-    console.log('[parseScheduledIntent] 未提取到时间')
-    return null
   }
 
   // 提取文件名
@@ -119,18 +111,40 @@ const parseScheduledIntent = (message) => {
     }
   }
 
+  // 判断是定时发送还是立即发送
+  const hasTime = time !== null || minutesLater !== null
+
   // 返回结果
-  if (isFile && time && targetUser && filename) {
+  if (isFile && hasTime && targetUser && filename) {
+    if (minutesLater) {
+      console.log('[parseScheduledIntent] 识别为立即发送文件:', { type: 'file', immediate: true, minutesLater, targetUser, filename })
+      return { type: 'file', immediate: true, minutesLater, targetUser, filename }
+    }
     console.log('[parseScheduledIntent] 识别为定时发送文件:', { type: 'file', time, targetUser, filename })
     return { type: 'file', time, targetUser, filename }
   }
 
-  if (time && targetUser && content) {
+  if (hasTime && targetUser && content) {
+    if (minutesLater) {
+      console.log('[parseScheduledIntent] 识别为立即发送文字:', { type: 'text', immediate: true, minutesLater, targetUser, content })
+      return { type: 'text', immediate: true, minutesLater, targetUser, content }
+    }
     console.log('[parseScheduledIntent] 识别为定时发送文字:', { type: 'text', time, targetUser, content })
     return { type: 'text', time, targetUser, content }
   }
 
-  console.log('[parseScheduledIntent] 无法识别定时发送意图')
+  // 支持立即发送（无时间关键词）
+  if (!hasTime && isFile && targetUser && filename) {
+    console.log('[parseScheduledIntent] 识别为立即发送文件（无时间）:', { type: 'file', immediate: true, targetUser, filename })
+    return { type: 'file', immediate: true, targetUser, filename }
+  }
+
+  if (!hasTime && targetUser && content) {
+    console.log('[parseScheduledIntent] 识别为立即发送文字（无时间）:', { type: 'text', immediate: true, targetUser, content })
+    return { type: 'text', immediate: true, targetUser, content }
+  }
+
+  console.log('[parseScheduledIntent] 无法识别发送意图')
   return null
 }
 
@@ -182,23 +196,35 @@ const handleSend = async () => {
         const params = parseScheduledIntent(message)
         
         if (params) {
-          // 解析时间
-          const [hours, minutes] = params.time.split(':').map(Number)
-          const now = new Date()
-          let scheduleDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0)
-          if (scheduleDate <= now) {
-            scheduleDate.setDate(scheduleDate.getDate() + 1)
-          }
-          const scheduleTime = scheduleDate.toISOString()
-          const timeStr = `${scheduleDate.getHours().toString().padStart(2, '0')}:${scheduleDate.getMinutes().toString().padStart(2, '0')}`
+          let scheduleTime = null
+          let timeStr = ''
 
-          // 执行对应的定时发送任务
+          // 如果是定时发送（有具体时间）
+          if (params.time) {
+            const [hours, minutes] = params.time.split(':').map(Number)
+            const now = new Date()
+            let scheduleDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0)
+            if (scheduleDate <= now) {
+              scheduleDate.setDate(scheduleDate.getDate() + 1)
+            }
+            scheduleTime = scheduleDate.toISOString()
+            timeStr = `${scheduleDate.getHours().toString().padStart(2, '0')}:${scheduleDate.getMinutes().toString().padStart(2, '0')}`
+          } else if (params.minutesLater) {
+            // 如果是"X分钟后"
+            const now = new Date()
+            now.setMinutes(now.getMinutes() + params.minutesLater)
+            scheduleTime = now.toISOString()
+            timeStr = `${params.minutesLater}分钟后`
+          }
+          // 如果是立即发送（无时间），scheduleTime 为 null
+
+          // 执行对应的发送任务
           executeFunctionCall(data.functionCall, params, scheduleTime, timeStr, currentUsername)
         } else {
           // 参数解析失败，提示用户格式不对
           aiStore.endStreamingMessage()
           aiStore.addUserMessage(message)
-          aiStore.addAIMessage(`我理解了，您想要定时发送消息。但是您的表达格式不太对，请按照以下格式告诉我：\n\n📁 **定时发送文件**：\n"在 15:30 向 张三 发送 报告.docx"\n"15:30 发给李四 文档.xlsx"\n\n💬 **定时发送文字**：\n"在 15:30 向 张三 说 你好"\n"15:30 向李四 说 明天开会"\n\n请重新告诉我吧！`)
+          aiStore.addAIMessage(`我理解了，您想要发送消息。但是您的表达格式不太对，请按照以下格式告诉我：\n\n📁 **发送文件**：\n"向 张三 发送 报告.docx"\n"发给李四 文档.xlsx"\n\n⏰ **定时发送文件**：\n"在 15:30 向 张三 发送 报告.docx"\n"1分钟后向李四发送文档.xlsx"\n\n💬 **发送文字**：\n"向 张三 说 你好"\n\n请重新告诉我吧！`)
         }
         return
       }
@@ -299,6 +325,43 @@ const executeFunctionCall = async (functionName, params, scheduleTime, timeStr, 
     } else {
       aiStore.addAIMessage(`抱歉，设置定时发送失败: ${result.message}`)
     }
+
+  } else if (functionName === 'send_file_now') {
+    // 立即发送文件
+    console.log('[Renderer] 执行立即发送文件:', params)
+
+    const filesResult = await window.electronAPI.getUserFiles(currentUsername)
+    if (!filesResult.success || !filesResult.files) {
+      aiStore.addAIMessage(`抱歉，无法获取您的文件列表。请先上传文件 "${params.filename}"。`)
+      return
+    }
+
+    const fileExists = filesResult.files.some(f => f.filename === params.filename)
+    if (!fileExists) {
+      aiStore.addAIMessage(`抱歉，我没有在您的文件列表中找到名为 "${params.filename}" 的文件。\n\n可能的原因：\n1. 文件名输入错误（请检查文件名是否正确，包括扩展名）\n2. 文件是7天前上传的（系统会自动删除7天前的文件）\n\n请重新上传文件后告诉我，或者检查文件名是否正确。`)
+      return
+    }
+
+    const result = await window.electronAPI.sendFileNow(params.targetUser, params.filename, currentUsername)
+
+    if (result.success) {
+      aiStore.addAIMessage(`好的！文件 "${params.filename}" 已立即发送给 "${params.targetUser}"。`)
+    } else {
+      aiStore.addAIMessage(`抱歉，发送文件失败: ${result.message}`)
+    }
+
+  } else if (functionName === 'send_message_now') {
+    // 立即发送文字消息
+    console.log('[Renderer] 执行立即发送文字:', params)
+
+    const result = await window.electronAPI.sendMessageNow(params.targetUser, params.content, currentUsername)
+
+    if (result.success) {
+      aiStore.addAIMessage(`好的！消息已立即发送给 "${params.targetUser}"。`)
+    } else {
+      aiStore.addAIMessage(`抱歉，发送消息失败: ${result.message}`)
+    }
+
   } else {
     // 未知函数名
     aiStore.addAIMessage(`抱歉，我无法执行该操作：${functionName}`)

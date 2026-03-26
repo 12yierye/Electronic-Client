@@ -515,9 +515,13 @@ const POLLING_INTERVAL = 2000 // 每2秒检查一次新消息
 
 // 轮询检查新消息
 const pollForNewMessages = async () => {
-  if (!selectedUser.value && !selectedGroup.value) return
-
   try {
+    // 1. 刷新群聊列表（始终刷新，以便看到新创建的群聊）
+    if (useLanChat.value && lanSettings.value.useLanChat && lanSettings.value.lanServerIP) {
+      await loadLanGroupsList()
+    }
+
+    // 2. 如果选中了聊天对象，刷新消息
     if (selectedGroup.value) {
       // 群聊消息
       await loadGroupMessages()
