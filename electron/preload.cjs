@@ -78,7 +78,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // 本地 AI 函数生成
-  generateFunction: (prompt) => ipcRenderer.invoke('generate-function', prompt)
+  generateFunction: (prompt) => ipcRenderer.invoke('generate-function', prompt),
+
+  // 定时发送文件
+  scheduleFileSend: (scheduleTime, targetUser, filename, currentUser) =>
+    ipcRenderer.invoke('schedule-file-send', scheduleTime, targetUser, filename, currentUser),
+
+  // 定时发送文字消息
+  scheduleMessageSend: (scheduleTime, targetUser, content, currentUser) =>
+    ipcRenderer.invoke('schedule-message-send', scheduleTime, targetUser, content, currentUser),
+
+  // 获取用户文件列表
+  getUserFiles: (username) => ipcRenderer.invoke('get-user-files', username)
 })
 
 console.log('Preload script loaded')

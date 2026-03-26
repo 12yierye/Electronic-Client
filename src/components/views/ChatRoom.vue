@@ -262,7 +262,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Search, Star, Promotion, Picture, ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
@@ -509,6 +509,47 @@ const onImageLoad = () => {
   // 滚动到底部
 }
 
+// 消息轮询
+let messagePollingInterval = null
+const POLLING_INTERVAL = 2000 // 每2秒检查一次新消息
+
+// 轮询检查新消息
+const pollForNewMessages = async () => {
+  if (!selectedUser.value && !selectedGroup.value) return
+
+  try {
+    if (selectedGroup.value) {
+      // 群聊消息
+      await loadGroupMessages()
+    } else if (selectedUser.value) {
+      // 私聊消息
+      if (selectedUser.value.chatMode === 'lan') {
+        await loadLanChatMessages()
+      } else {
+        await loadChatMessages()
+      }
+    }
+  } catch (error) {
+    // 忽略轮询错误
+  }
+}
+
+// 启动消息轮询
+const startMessagePolling = () => {
+  if (messagePollingInterval) return
+  messagePollingInterval = setInterval(pollForNewMessages, POLLING_INTERVAL)
+  console.log('[ChatRoom] 消息轮询已启动')
+}
+
+// 停止消息轮询
+const stopMessagePolling = () => {
+  if (messagePollingInterval) {
+    clearInterval(messagePollingInterval)
+    messagePollingInterval = null
+    console.log('[ChatRoom] 消息轮询已停止')
+  }
+}
+
 // 初始化
 onMounted(() => {
   // 加载内网设置
@@ -532,6 +573,14 @@ onMounted(() => {
   if (useLanChat.value) {
     loadLanFriendsList()
   }
+
+  // 启动消息轮询
+  startMessagePolling()
+})
+
+// 组件卸载时停止轮询
+onUnmounted(() => {
+  stopMessagePolling()
 })
 
 // 切换聊天模式

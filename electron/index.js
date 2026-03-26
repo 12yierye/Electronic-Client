@@ -412,11 +412,45 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
     console.log('[AI Chat Stream] 获取模型失败，使用默认模型:', MODEL_ID)
   }
 
+  // 检查用户消息是否可能包含定时发送意图
+  const hasTimePattern = /(\d{1,2}:\d{2})/.test(userMessage.replace(/：/g, ':'))
+  const hasSendPattern = /发送|发给|发送给|定时|说/.test(userMessage)
+  const hasUserPattern = /向\s*\S+|发给\s*\S+|发送给\s*\S+/.test(userMessage)
+  const likelyScheduledIntent = hasTimePattern && hasSendPattern && hasUserPattern
+
+  // 构造 system prompt，根据意图类型选择
+  let systemPrompt = '你是一个友好的AI助手，请用中文回答用户的问题。'
+
+  if (likelyScheduledIntent) {
+    // 如果检测到可能是定时发送意图，添加function calling指导
+    systemPrompt = `你是一个友好的AI助手。
+当用户表达以下意图时，请按指定格式返回函数名，不要返回其他内容：
+
+1. 定时发送文件意图：用户想在某个时间向某人发送文件
+   - 关键词：时间（如"15:30"）、发送文件、文件名（如"报告.docx"）、接收人
+   - 返回格式：FUNCTION:schedule_file_send
+
+2. 定时发送文字消息意图：用户想在某个时间向某人发送文字消息
+   - 关键词：时间、发送消息/文字、接收人
+   - 返回格式：FUNCTION:schedule_message_send
+
+3. 普通聊天：上述情况之外
+   - 正常回复用户问题，不要返回任何 FUNCTION: 开头的标记
+
+请根据用户消息判断意图并返回相应格式。`
+
+    // 发送意图识别结果给前端
+    event.sender.send('ai-chat-stream-chunk', { 
+      intentDetected: true,
+      likelyIntent: likelyScheduledIntent ? 'scheduled' : 'normal'
+    })
+  }
+
   // 基础请求参数
   const requestBody = {
     model: currentModel,
     messages: [
-      { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage }
     ],
     stream: true
@@ -479,7 +513,21 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
 
       response.data.on('end', () => {
         if (fullReply || fullReasoning) {
-          event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply, reasoning: fullReasoning })
+          // 检测模型返回的函数名
+          const functionMatch = fullReply.match(/FUNCTION:\s*(schedule_file_send|schedule_message_send)/)
+          if (functionMatch) {
+            const functionName = functionMatch[1]
+            console.log('[AI Chat Stream] 检测到函数调用:', functionName)
+            // 通知前端执行函数
+            event.sender.send('ai-chat-stream-chunk', { 
+              done: true, 
+              content: fullReply,
+              reasoning: fullReasoning,
+              functionCall: functionName
+            })
+          } else {
+            event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply, reasoning: fullReasoning })
+          }
         }
         resolve({ success: true, reply: fullReply, reasoning: fullReasoning })
       })
@@ -522,6 +570,210 @@ ipcMain.handle('generate-function', async (event, prompt) => {
     return { success: false, message: error.message }
   }
 })
+
+// 定时任务存储
+const scheduledTasks = new Map()
+
+// 获取用户文件列表
+ipcMain.handle('get-user-files', async (event, username) => {
+  try {
+    const response = await axios.get(`${API_BASE}/user/files/${username}`)
+    return response.data
+  } catch (error) {
+    console.error('[Get User Files] 错误:', error.message)
+    return { success: false, message: error.message }
+  }
+})
+
+// 定时发送文件
+ipcMain.handle('schedule-file-send', async (event, scheduleTime, targetUser, filename, currentUser) => {
+  try {
+    console.log('[Schedule File Send] 定时发送文件:', { scheduleTime, targetUser, filename, currentUser })
+
+    // 获取发送者的文件
+    const filesResponse = await axios.get(`${API_BASE}/user/files/${currentUser}`)
+    if (!filesResponse.data.success || !filesResponse.data.files) {
+      return { success: false, message: '无法获取文件列表' }
+    }
+
+    const fileInfo = filesResponse.data.files.find(f => f.filename === filename)
+    if (!fileInfo) {
+      return { success: false, message: `文件 "${filename}" 不存在` }
+    }
+
+    // 计算延迟时间
+    const delay = new Date(scheduleTime).getTime() - Date.now()
+    if (delay <= 0) {
+      return { success: false, message: '定时时间必须是未来时间' }
+    }
+
+    // 创建定时任务
+    const taskId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const task = setTimeout(async () => {
+      try {
+        // 1. 下载文件然后发送给目标用户
+        const downloadResponse = await axios.get(
+          `${API_BASE}/user/download?username=${currentUser}&filename=${filename}`,
+          { responseType: 'arraybuffer' }
+        )
+
+        // 2. 上传到目标用户
+        await axios.post(
+          `${API_BASE}/user/upload?username=${targetUser}&filename=${filename}`,
+          downloadResponse.data,
+          { headers: { 'Content-Type': 'application/octet-stream' } }
+        )
+
+        console.log('[Schedule File Send] 文件发送成功:', filename, '->', targetUser)
+
+        // 3. 发送聊天消息记录（双方都能看到）
+        const chatMessageData = {
+          sender: currentUser,
+          receiver: targetUser,
+          content: `[定时发送文件] ${filename}`,
+          type: 'file',
+          fileInfo: {
+            filename: filename,
+            isScheduled: true
+          }
+        }
+        await axios.post(`${API_BASE}/chat/send`, chatMessageData)
+
+        console.log('[Schedule File Send] 聊天记录已创建')
+        scheduledTasks.delete(taskId)
+      } catch (err) {
+        console.error('[Schedule File Send] 发送失败:', err.message)
+        scheduledTasks.delete(taskId)
+      }
+    }, delay)
+
+    scheduledTasks.set(taskId, {
+      task,
+      scheduleTime,
+      targetUser,
+      filename,
+      currentUser
+    })
+
+    console.log('[Schedule File Send] 任务已创建:', taskId, '将在', scheduleTime, '执行')
+    return { success: true, taskId, scheduleTime }
+  } catch (error) {
+    console.error('[Schedule File Send] 错误:', error.message)
+    return { success: false, message: error.message }
+  }
+})
+
+// 定时发送文字消息
+ipcMain.handle('schedule-message-send', async (event, scheduleTime, targetUser, content, currentUser) => {
+  try {
+    console.log('[Schedule Message Send] 定时发送消息:', { scheduleTime, targetUser, content, currentUser })
+
+    // 计算延迟时间
+    const delay = new Date(scheduleTime).getTime() - Date.now()
+    if (delay <= 0) {
+      return { success: false, message: '定时时间必须是未来时间' }
+    }
+
+    // 创建定时任务
+    const taskId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const task = setTimeout(async () => {
+      try {
+        // 发送聊天消息（双方都能看到）
+        const chatMessageData = {
+          sender: currentUser,
+          receiver: targetUser,
+          content: content,
+          type: 'text',
+          isScheduled: true
+        }
+        await axios.post(`${API_BASE}/chat/send`, chatMessageData)
+
+        console.log('[Schedule Message Send] 消息发送成功:', content, '->', targetUser)
+        scheduledTasks.delete(taskId)
+      } catch (err) {
+        console.error('[Schedule Message Send] 发送失败:', err.message)
+        scheduledTasks.delete(taskId)
+      }
+    }, delay)
+
+    scheduledTasks.set(taskId, {
+      task,
+      scheduleTime,
+      targetUser,
+      content,
+      currentUser,
+      type: 'message'
+    })
+
+    console.log('[Schedule Message Send] 任务已创建:', taskId, '将在', scheduleTime, '执行')
+    return { success: true, taskId, scheduleTime }
+  } catch (error) {
+    console.error('[Schedule Message Send] 错误:', error.message)
+    return { success: false, message: error.message }
+  }
+})
+
+// 解析用户消息中的定时发送文件意图
+function parseScheduledFileSendIntent(message) {
+  // 正则表达式匹配：
+  // - "在 XX:XX" 或 "XX:XX"
+  // - "向 XXX 发送" 或 "发给 XXX" 或 "发送给 XXX"
+  // - "名为 XXX" 或 "XXX.docx" 等文件名
+  
+  const timePatterns = [
+    /在\s*(\d{1,2}:\d{2})/,
+    /(\d{1,2}:\d{2})/
+  ]
+
+  const userPatterns = [
+    /向\s*(\S+?)(?:发送|发送文件|发文件)/,
+    /发给\s*(\S+?)(?:发送|发送文件|发文件)/,
+    /发送给\s*(\S+?)(?:\s|$|，|,)/
+  ]
+
+  const filePatterns = [
+    /名为\s*([^\s,，]+(?:\.docx|\.xlsx|\.pdf|\.txt|\.jpg|\.png|\.zip|\.rar))/,
+    /(?:发送|发)\s*([^\s,，]+\.docx)/,
+    /(?:发送|发)\s*([^\s,，]+\.xlsx)/,
+    /(?:发送|发)\s*([^\s,，]+\.pdf)/,
+    /(?:发送|发)\s*([^\s,，]+\.txt)/,
+    /(?:发送|发)\s*([^\s,，]+\.(?:jpg|png|gif))/,
+    /(?:发送|发)\s*([^\s,，]+\.(?:zip|rar|7z))/
+  ]
+
+  let time = null
+  let targetUser = null
+  let filename = null
+
+  for (const pattern of timePatterns) {
+    const match = message.match(pattern)
+    if (match) {
+      time = match[1]
+      break
+    }
+  }
+
+  for (const pattern of userPatterns) {
+    const match = message.match(pattern)
+    if (match) {
+      targetUser = match[1]
+      break
+    }
+  }
+
+  for (const pattern of filePatterns) {
+    const match = message.match(pattern)
+    if (match) {
+      filename = match[1]
+      break
+    }
+  }
+
+  if (time && targetUser && filename) {
+    return { time, targetUser, filename }
+  }
+  return null
+}
 
 app.setUserTasks([
   { program: process.execPath, arguments: '--relaunch', iconPath: process.execPath, iconIndex: 0, title: 'Relaunch', description: 'Relaunch Electronic' }

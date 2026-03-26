@@ -26,11 +26,113 @@ import { ref, onUnmounted } from 'vue'
 import { Promotion, Loading } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
+import { useUserStore } from '../../stores/user'
 
 const aiStore = useAIStore()
+const userStore = useUserStore()
 const { t } = useI18n()
 const inputMessage = ref('')
 const isSending = ref(false)
+
+// 解析定时发送意图（文件或文字）
+const parseScheduledIntent = (message) => {
+  // 统一将全角冒号转换为半角
+  const normalizedMessage = message.replace(/：/g, ':')
+
+  console.log('[parseScheduledIntent] 原始消息:', message)
+  console.log('[parseScheduledIntent] 规范化后:', normalizedMessage)
+
+  // 时间模式 - 支持 00:00 或 在00:00 格式
+  const timePatterns = [
+    /在\s*(\d{1,2}:\d{2})/,
+    /(\d{1,2}:\d{2})/
+  ]
+
+  // 文件扩展名列表
+  const fileExtensions = ['docx', 'xlsx', 'pdf', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'zip', 'rar', '7z', 'pptx', 'doc', 'xls', 'csv']
+
+  // 匹配文件名模式
+  const fileNamePattern = new RegExp(
+    `(?:名为|发送(?:给)?|发给|发送给)\\s*([^\\s,，]+(?:\\.(?:${fileExtensions.join('|')})))`,
+    'i'
+  )
+
+  // 用户名模式 - 匹配到发送/说/发等关键词之前
+  const userPatterns = [
+    /向\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/,
+    /发给\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/,
+    /发送给\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/,
+    /向\s*(\S+?)(?:发送|发给|发送给|说|发|$)/,
+    /(\S+?)(?:发送|发给|发送给|说|发)/
+  ]
+
+  let time = null
+  let targetUser = null
+  let filename = null
+  let content = null
+  let isFile = false
+
+  // 提取时间
+  for (const pattern of timePatterns) {
+    const match = normalizedMessage.match(pattern)
+    if (match) {
+      time = match[1]
+      console.log('[parseScheduledIntent] 提取到时间:', time)
+      break
+    }
+  }
+
+  // 如果没有时间，直接返回
+  if (!time) {
+    console.log('[parseScheduledIntent] 未提取到时间')
+    return null
+  }
+
+  // 提取文件名
+  const fileMatch = normalizedMessage.match(fileNamePattern)
+  if (fileMatch) {
+    filename = fileMatch[1]
+    isFile = true
+    console.log('[parseScheduledIntent] 提取到文件名:', filename)
+  }
+
+  // 提取用户名 - 优先提取"向XXX发送/说"格式
+  const userMatch1 = normalizedMessage.match(/向\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/)
+  if (userMatch1) {
+    targetUser = userMatch1[1]
+    console.log('[parseScheduledIntent] 提取到用户名:', targetUser)
+  } else {
+    // 尝试其他模式
+    const userMatch2 = normalizedMessage.match(/发给\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/)
+    if (userMatch2) {
+      targetUser = userMatch2[1]
+      console.log('[parseScheduledIntent] 提取到用户名:', targetUser)
+    }
+  }
+
+  // 提取文字内容（如果是文字消息）
+  if (!isFile) {
+    const textContentMatch = normalizedMessage.match(/说\s*(.+)$/)
+    if (textContentMatch) {
+      content = textContentMatch[1].trim()
+      console.log('[parseScheduledIntent] 提取到文字内容:', content)
+    }
+  }
+
+  // 返回结果
+  if (isFile && time && targetUser && filename) {
+    console.log('[parseScheduledIntent] 识别为定时发送文件:', { type: 'file', time, targetUser, filename })
+    return { type: 'file', time, targetUser, filename }
+  }
+
+  if (time && targetUser && content) {
+    console.log('[parseScheduledIntent] 识别为定时发送文字:', { type: 'text', time, targetUser, content })
+    return { type: 'text', time, targetUser, content }
+  }
+
+  console.log('[parseScheduledIntent] 无法识别定时发送意图')
+  return null
+}
 
 // 按Enter发送消息，空消息时不换行
 const handleEnterKey = (e) => {
@@ -46,6 +148,12 @@ const handleSend = async () => {
   const message = inputMessage.value.trim()
   if (!message || isSending.value) return
 
+  const currentUsername = userStore.userInfo?.username
+
+  // 直接发送消息给 AI，让 AI 判断意图
+  // AI 会返回 FUNCTION:schedule_file_send 或 FUNCTION:schedule_message_send
+  // 前端检测到函数调用后执行对应操作
+
   isSending.value = true
   aiStore.addUserMessage(message)
   inputMessage.value = ''
@@ -58,6 +166,43 @@ const handleSend = async () => {
   // 设置流式监听器
   if (window.electronAPI.onAIChatStreamChunk) {
     window.electronAPI.onAIChatStreamChunk((data) => {
+      // 检测到意图识别结果
+      if (data.likelyIntent === 'scheduled') {
+        console.log('[Renderer] AI 检测到定时发送意图，等待函数调用...')
+      }
+
+      // 检测到函数调用
+      if (data.functionCall) {
+        console.log('[Renderer] 检测到函数调用:', data.functionCall)
+        
+        // 从回复中提取参数
+        const fullContent = data.content || ''
+        
+        // 解析参数
+        const params = parseScheduledIntent(message)
+        
+        if (params) {
+          // 解析时间
+          const [hours, minutes] = params.time.split(':').map(Number)
+          const now = new Date()
+          let scheduleDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0)
+          if (scheduleDate <= now) {
+            scheduleDate.setDate(scheduleDate.getDate() + 1)
+          }
+          const scheduleTime = scheduleDate.toISOString()
+          const timeStr = `${scheduleDate.getHours().toString().padStart(2, '0')}:${scheduleDate.getMinutes().toString().padStart(2, '0')}`
+
+          // 执行对应的定时发送任务
+          executeFunctionCall(data.functionCall, params, scheduleTime, timeStr, currentUsername)
+        } else {
+          // 参数解析失败，提示用户格式不对
+          aiStore.endStreamingMessage()
+          aiStore.addUserMessage(message)
+          aiStore.addAIMessage(`我理解了，您想要定时发送消息。但是您的表达格式不太对，请按照以下格式告诉我：\n\n📁 **定时发送文件**：\n"在 15:30 向 张三 发送 报告.docx"\n"15:30 发给李四 文档.xlsx"\n\n💬 **定时发送文字**：\n"在 15:30 向 张三 说 你好"\n"15:30 向李四 说 明天开会"\n\n请重新告诉我吧！`)
+        }
+        return
+      }
+
       if (data.done) {
         // 流结束
         aiStore.endStreamingMessage()
@@ -111,6 +256,53 @@ onUnmounted(() => {
 
 const handleNewLine = () => {
   // Shift + Enter 允许换行
+}
+
+// 执行函数调用
+const executeFunctionCall = async (functionName, params, scheduleTime, timeStr, currentUsername) => {
+  console.log('[executeFunctionCall] 执行函数:', functionName, params)
+
+  if (functionName === 'schedule_file_send') {
+    // 定时发送文件
+    console.log('[Renderer] 执行定时发送文件:', params, '执行时间:', scheduleTime)
+
+    const filesResult = await window.electronAPI.getUserFiles(currentUsername)
+    if (!filesResult.success || !filesResult.files) {
+      aiStore.addUserMessage(message)
+      aiStore.addAIMessage(`抱歉，无法获取您的文件列表。请先上传文件 "${params.filename}"。`)
+      return
+    }
+
+    const fileExists = filesResult.files.some(f => f.filename === params.filename)
+    if (!fileExists) {
+      aiStore.addUserMessage(message)
+      aiStore.addAIMessage(`抱歉，我没有在您的文件列表中找到名为 "${params.filename}" 的文件。\n\n可能的原因：\n1. 文件名输入错误（请检查文件名是否正确，包括扩展名）\n2. 文件是7天前上传的（系统会自动删除7天前的文件）\n\n请重新上传文件后告诉我，或者检查文件名是否正确。`)
+      return
+    }
+
+    const result = await window.electronAPI.scheduleFileSend(scheduleTime, params.targetUser, params.filename, currentUsername)
+
+    if (result.success) {
+      aiStore.addAIMessage(`好的！我已安排在 ${timeStr} 向 "${params.targetUser}" 发送文件 "${params.filename}"。`)
+    } else {
+      aiStore.addAIMessage(`抱歉，设置定时发送失败: ${result.message}`)
+    }
+
+  } else if (functionName === 'schedule_message_send') {
+    // 定时发送文字消息
+    console.log('[Renderer] 执行定时发送文字:', params, '执行时间:', scheduleTime)
+
+    const result = await window.electronAPI.scheduleMessageSend(scheduleTime, params.targetUser, params.content, currentUsername)
+
+    if (result.success) {
+      aiStore.addAIMessage(`好的！我已安排在 ${timeStr} 向 "${params.targetUser}" 发送消息："${params.content}"。`)
+    } else {
+      aiStore.addAIMessage(`抱歉，设置定时发送失败: ${result.message}`)
+    }
+  } else {
+    // 未知函数名
+    aiStore.addAIMessage(`抱歉，我无法执行该操作：${functionName}`)
+  }
 }
 </script>
 
