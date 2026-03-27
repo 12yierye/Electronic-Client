@@ -12,18 +12,14 @@ app.disableHardwareAcceleration()
 let mainWindow = null
 const API_BASE = 'http://192.168.61.129:3000'
 const DOC_SERVER = 'http://120.24.26.164'
-const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'  // LM Studio OpenAI-compatible API
-
-// 获取当前运行模型的 API 端点
-const LM_STUDIO_MODEL_API = 'http://127.0.0.1:1234'  // LM Studio 本地 API
+const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'
 
 console.log('[Main] Electron 主进程启动')
 console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
 
-// 忽略 EPERM 错误（通常是试图终止不存在的进程）
 process.on('uncaughtException', (error) => {
   if (error.code === 'EPERM' && (error.message.includes('kill') || error.message.includes('not found'))) {
-    return // 忽略 kill 相关的 EPERM 错误
+    return
   }
   console.error('[Main] 未捕获的异常:', error)
 })
@@ -33,7 +29,6 @@ process.on('unhandledRejection', (reason, promise) => {
 })
 
 function createWindow() {
-  // 开发模式用 preload.cjs，生产模式用 preload.js
   const isDev = process.env.VITE_DEV_SERVER_URL
   const preloadPath = join(__dirname, isDev ? 'preload.cjs' : 'preload.js')
   console.log('[Main] __dirname:', __dirname)
@@ -333,14 +328,13 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
   let currentModel = null
   try {
     console.log('[AI Chat] 正在获取 LM Studio 模型...')
-    const modelResponse = await axios.get(`${LM_STUDIO_MODEL_API}/api/v0/model`, { timeout: 5000 })
+    // 尝试 /v1/models 端点
+    const modelResponse = await axios.get(`${LM_STUDIO_API}/models`, { timeout: 5000 })
     console.log('[AI Chat] LM Studio 响应状态:', modelResponse.status)
     console.log('[AI Chat] LM Studio 响应数据:', JSON.stringify(modelResponse.data))
     
-    if (modelResponse.data && modelResponse.data.model) {
-      currentModel = modelResponse.data.model
-      console.log('[AI Chat] 使用当前模型:', currentModel)
-    } else if (modelResponse.data && modelResponse.data.data && modelResponse.data.data.length > 0) {
+    if (modelResponse.data && modelResponse.data.data && modelResponse.data.data.length > 0) {
+      // 取第一个模型
       currentModel = modelResponse.data.data[0].id
       console.log('[AI Chat] 使用当前模型:', currentModel)
     } else {
@@ -395,13 +389,10 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
 // 获取当前运行的模型
 ipcMain.handle('get-current-model', async () => {
   try {
-    // LM Studio 本地 API 端点
-    const response = await axios.get(`${LM_STUDIO_MODEL_API}/api/v0/model`, { timeout: 5000 })
+    // 使用 /v1/models 端点
+    const response = await axios.get(`${LM_STUDIO_API}/models`, { timeout: 5000 })
     console.log('[Get Current Model] LM Studio 响应:', JSON.stringify(response.data))
-    if (response.data && response.data.model) {
-      console.log('[Get Current Model] 当前模型:', response.data.model)
-      return { success: true, model: response.data.model }
-    } else if (response.data && response.data.data && response.data.data.length > 0) {
+    if (response.data && response.data.data && response.data.data.length > 0) {
       const model = response.data.data[0].id
       console.log('[Get Current Model] 当前模型:', model)
       return { success: true, model }
@@ -421,16 +412,12 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
   let currentModel = null
   try {
     console.log('[AI Chat Stream] 正在获取 LM Studio 模型...')
-    // LM Studio 本地 API 端点
-    const modelResponse = await axios.get(`${LM_STUDIO_MODEL_API}/api/v0/model`, { timeout: 5000 })
+    // 尝试 /v1/models 端点
+    const modelResponse = await axios.get(`${LM_STUDIO_API}/models`, { timeout: 5000 })
     console.log('[AI Chat Stream] LM Studio 响应状态:', modelResponse.status)
     console.log('[AI Chat Stream] LM Studio 响应数据:', JSON.stringify(modelResponse.data))
     
-    if (modelResponse.data && modelResponse.data.model) {
-      currentModel = modelResponse.data.model
-      console.log('[AI Chat Stream] 使用当前模型:', currentModel)
-    } else if (modelResponse.data && modelResponse.data.data && modelResponse.data.data.length > 0) {
-      // 可能是 /v1/models 格式
+    if (modelResponse.data && modelResponse.data.data && modelResponse.data.data.length > 0) {
       currentModel = modelResponse.data.data[0].id
       console.log('[AI Chat Stream] 使用当前模型:', currentModel)
     } else {
@@ -604,10 +591,8 @@ ipcMain.handle('generate-function', async (event, prompt) => {
     // 先获取当前运行的模型
     let currentModel = null
     try {
-      const modelResponse = await axios.get(`${LM_STUDIO_MODEL_API}/api/v0/model`, { timeout: 5000 })
-      if (modelResponse.data && modelResponse.data.model) {
-        currentModel = modelResponse.data.model
-      } else if (modelResponse.data && modelResponse.data.data && modelResponse.data.data.length > 0) {
+      const modelResponse = await axios.get(`${LM_STUDIO_API}/models`, { timeout: 5000 })
+      if (modelResponse.data && modelResponse.data.data && modelResponse.data.data.length > 0) {
         currentModel = modelResponse.data.data[0].id
       } else {
         return { success: false, message: '请先在 LM Studio 中加载模型' }
