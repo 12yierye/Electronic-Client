@@ -10,7 +10,7 @@ app.setPath('userData', join(app.getPath('appData'), 'Electronic'))
 app.disableHardwareAcceleration()
 
 let mainWindow = null
-const API_BASE = process.env.API_URL || 'http://localhost:3000'
+const API_BASE = process.env.API_URL || 'http://192.168.61.129:3000'
 const DOC_SERVER = 'http://120.24.26.164'
 const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'
 
