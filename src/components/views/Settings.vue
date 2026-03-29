@@ -72,6 +72,15 @@
         </el-button>
       </el-form-item>
 
+      <!-- 好友搜索设置 -->
+      <el-divider />
+      <h3>好友搜索设置</h3>
+      
+      <el-form-item label="启用拼音搜索：">
+        <el-switch v-model="enablePinyinSearch" @change="savePinyinSearchSetting" />
+        <div class="setting-tip">开启后可以使用拼音搜索好友（例如输入"zhangsan"可搜索到"张三"）</div>
+      </el-form-item>
+
       <!-- 关于 -->
       <el-divider />
 
@@ -99,8 +108,9 @@ const theme = ref('dark')
 const language = ref('zh-CN')
 const useLanChat = ref(false)
 const lanServerIP = ref('')
-const lanServerPort = ref('3001')
+const lanServerPort = ref('3000')
 const testingLan = ref(false)
+const enablePinyinSearch = ref(false)
 
 const LAN_SETTINGS_KEY = 'lanChatSettings'
 
@@ -116,6 +126,7 @@ onMounted(() => {
     useLanChat.value = settings.useLanChat || false
     lanServerIP.value = settings.lanServerIP || ''
     lanServerPort.value = settings.lanServerPort || '3001'
+    enablePinyinSearch.value = settings.enablePinyinSearch || false
   }
 })
 
@@ -134,9 +145,15 @@ const saveLanSettings = () => {
   const settings = {
     useLanChat: useLanChat.value,
     lanServerIP: lanServerIP.value,
-    lanServerPort: lanServerPort.value
+    lanServerPort: lanServerPort.value,
+    enablePinyinSearch: enablePinyinSearch.value
   }
   localStorage.setItem(LAN_SETTINGS_KEY, JSON.stringify(settings))
+}
+
+// 保存拼音搜索设置
+const savePinyinSearchSetting = () => {
+  saveLanSettings()
 }
 
 // 内网聊天开关变化

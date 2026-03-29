@@ -51,6 +51,10 @@
               <el-avatar :size="40">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
               <div class="user-info">
                 <div class="user-name">{{ friend.username }}</div>
+                <div class="user-role">
+                  <span v-if="friend.online" class="online-status">在线</span>
+                  <span v-else>离线</span>
+                </div>
               </div>
               <el-icon 
                 v-if="friend.starred" 
@@ -106,8 +110,15 @@
           
           <!-- 公网：添加好友 -->
           <template v-else-if="chatMode === 'public' && activeTab === 'add'">
+            <div v-if="!searchQuery" class="recommended-tip">
+              猜你想加
+              <el-button size="small" text @click="showRecommended = !showRecommended">
+                {{ showRecommended ? '收起' : '显示' }}
+              </el-button>
+            </div>
             <div 
-              v-for="user in filteredUsers" 
+              v-for="user in showRecommended ? filteredUsers : []" 
+              v-show="showRecommended || searchQuery"
               :key="user.username"
               class="user-item"
             >
@@ -119,7 +130,7 @@
                 添加
               </el-button>
             </div>
-            <el-empty v-if="filteredUsers.length === 0" description="未找到用户" />
+            <el-empty v-if="filteredUsers.length === 0 && (showRecommended || searchQuery)" description="未找到用户" />
           </template>
           
           <!-- 公网：好友申请 -->
@@ -265,6 +276,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Search, Star, Promotion, Picture, ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { matchByPinyin } from '../../utils/pinyin'
 
 // 状态
 const activeTab = ref('friends')
@@ -285,6 +297,8 @@ const showCreateGroupDialog = ref(false)  // 创建群聊对话框
 const newGroupName = ref('')    // 新群名称
 const newGroupMembers = ref([]) // 新群成员
 const deletedGroupIds = ref([]) // 用户删除的群聊ID列表
+const showRecommended = ref(true) // 显示推荐好友
+const enablePinyinSearch = ref(false) // 是否启用拼音搜索
 
 // 计算属性
 const currentUsername = computed(() => {
@@ -295,12 +309,36 @@ const currentUsername = computed(() => {
 const filteredUsers = computed(() => {
   // 排除当前用户
   const users = allUsersList.value.filter(u => u.username !== currentUsername.value)
-  if (!searchQuery.value) return users
+  
+  // 如果没有搜索查询，显示推荐的10个随机用户（猜你想加）
+  if (!searchQuery.value) {
+    // 排除已经是好友的用户
+    const friendUsernames = friendsList.value.map(f => f.username)
+    const nonFriends = users.filter(u => !friendUsernames.includes(u.username))
+    
+    // 随机打乱并取前10个
+    const shuffled = [...nonFriends].sort(() => Math.random() - 0.5)
+    return shuffled.slice(0, 10)
+  }
+  
+  // 有搜索查询时进行搜索
   const query = searchQuery.value.toLowerCase()
-  return users.filter(u => 
-    u.username.toLowerCase().includes(query) ||
-    u.email?.toLowerCase().includes(query)
-  )
+  return users.filter(u => {
+    const username = u.username.toLowerCase()
+    const email = u.email?.toLowerCase() || ''
+    
+    // 直接匹配
+    if (username.includes(query) || email.includes(query)) {
+      return true
+    }
+    
+    // 拼音匹配（如果启用）
+    if (enablePinyinSearch.value) {
+      return matchByPinyin(u.username, query)
+    }
+    
+    return false
+  })
 })
 
 // 方法
@@ -561,6 +599,7 @@ onMounted(() => {
   if (savedLanSettings) {
     lanSettings.value = JSON.parse(savedLanSettings)
     useLanChat.value = lanSettings.value.useLanChat
+    enablePinyinSearch.value = lanSettings.value.enablePinyinSearch || false
   }
 
   // 加载已删除的群聊ID

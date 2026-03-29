@@ -10,11 +10,12 @@ app.setPath('userData', join(app.getPath('appData'), 'Electronic'))
 app.disableHardwareAcceleration()
 
 let mainWindow = null
-const API_BASE = 'http://192.168.61.129:3000'
+const API_BASE = process.env.API_URL || 'http://localhost:3000'
 const DOC_SERVER = 'http://120.24.26.164'
 const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'
 
 console.log('[Main] Electron 主进程启动')
+console.log('[Main] API 服务器地址:', API_BASE)
 console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
 
 process.on('uncaughtException', (error) => {
@@ -117,11 +118,29 @@ function createElectronWindow(URL) {
 async function validateLogin(username, password) {
   try {
     if (!username || !password) return { success: false, message: '用户名或密码不能为空' }
+    console.log('[Login] 尝试连接服务器:', API_BASE)
     const response = await axios.post(`${API_BASE}/login`, { username, password }, { timeout: 5000 })
+    console.log('[Login] 登录成功')
     return response.data
   } catch (err) {
+    console.error('[Login] 错误:', err.message)
+    console.error('[Login] 错误详情:', {
+      code: err.code,
+      message: err.message,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      baseURL: API_BASE
+    })
     if (err.response) return { success: false, message: err.response.data.message || '登录失败' }
-    if (err.request) return { success: false, message: '无法连接到服务器' }
+    if (err.request) {
+      if (err.code === 'ECONNREFUSED') {
+        return { success: false, message: '无法连接到服务器：请确保服务端正在运行在 ' + API_BASE }
+      } else if (err.code === 'ETIMEDOUT') {
+        return { success: false, message: '连接超时：服务器响应过慢' }
+      } else {
+        return { success: false, message: `无法连接到服务器 (${err.code})` }
+      }
+    }
     return { success: false, message: err.message }
   }
 }
@@ -233,14 +252,63 @@ ipcMain.handle('delete-file', async (event, username, filename) => {
 })
 
 ipcMain.handle('get-user-list', async () => {
-  try { return (await axios.get(`${API_BASE}/users`)).data } 
-  catch (error) { return { success: false, message: error.message } }
+  try { return (await axios.get(`${API_BASE}/users`)).data }
+  catch (error) {
+    console.error('[Get User List] 错误:', error.message)
+    console.error('[Get User List] 详细信息:', {
+      baseURL: API_BASE,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      code: error.code
+    })
+    return { success: false, message: error.message }
+  }
 })
 
 ipcMain.handle('get-friends-list', async (event, username) => {
   try { return (await axios.get(`${API_BASE}/users/friends?username=${username}`)).data }
   catch (error) { return { success: false, message: error.message } }
 })
+
+// 测试服务器连接
+ipcMain.handle('test-server-connection', async () => {
+  try {
+    console.log('[Test Connection] 尝试连接到:', API_BASE)
+    const response = await axios.get(`${API_BASE}/health`, { timeout: 3000 })
+    console.log('[Test Connection] 成功:', response.data)
+    return { success: true, message: '连接成功', data: response.data }
+  } catch (error) {
+    console.error('[Test Connection] 失败:', error.message)
+    console.error('[Test Connection] 错误详情:', {
+      code: error.code,
+      message: error.message,
+      status: error.response?.status,
+      baseURL: API_BASE
+    })
+    return {
+      success: false,
+      message: `连接失败 (${error.code})`,
+      details: {
+        code: error.code,
+        baseURL: API_BASE,
+        hint: getErrorHint(error.code)
+      }
+    }
+  }
+})
+
+// 获取错误提示
+function getErrorHint(errorCode) {
+  const hints = {
+    'ECONNREFUSED': '服务器未启动或端口未监听，请检查服务端是否运行',
+    'ETIMEDOUT': '连接超时，请检查网络或防火墙设置',
+    'ENOTFOUND': '无法解析服务器地址，请检查 API_BASE 配置',
+    'ECONNRESET': '连接被重置，可能是服务端主动断开',
+    'EHOSTUNREACH': '无法访问服务器地址',
+    'ENETUNREACH': '网络不可达'
+  }
+  return hints[errorCode] || '未知错误'
+}
 
 ipcMain.handle('get-friend-requests', async (event, username, type) => {
   try { return (await axios.get(`${API_BASE}/friends/requests?username=${username}&type=${type || 'received'}`)).data }
@@ -356,7 +424,7 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
         { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
         { role: 'user', content: userMessage }
       ],
-      max_tokens: 8192
+      max_tokens: 16384
     }
 
     // Qwen3 系列模型可能不支持 temperature 参数
@@ -485,7 +553,7 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
     ],
     stream: true,
     // 设置较高的 max_tokens 防止输出被截断
-    max_tokens: 8192
+    max_tokens: 16384
   }
 
   // Qwen3 系列模型可能不支持 temperature 参数，使用 min_p 或其他参数

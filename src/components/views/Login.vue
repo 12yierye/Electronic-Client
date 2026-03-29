@@ -77,6 +77,7 @@ const { t } = useI18n()
 
 const formRef = ref(null)
 const loading = ref(false)
+const testingConnection = ref(false)
 const autoLogin = ref(false)
 const autoLoginChecked = ref(false) // 是否已检查过自动登录
 const autoLoginSuccess = ref(false) // 自动登录是否成功

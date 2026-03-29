@@ -60,6 +60,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUserByUsername: (username) => ipcRenderer.invoke('get-user-by-username', username),
   createCredential: (username) => ipcRenderer.invoke('create-credential', username),
 
+  // 测试服务器连接
+  testServerConnection: () => ipcRenderer.invoke('test-server-connection'),
+
   // 本地 AI 聊天
   aiChat: (message) => ipcRenderer.invoke('ai-chat', message),
 
