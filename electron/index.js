@@ -9,6 +9,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 app.setPath('userData', join(app.getPath('appData'), 'Electronic'))
 app.disableHardwareAcceleration()
 
+// 清理旧的缓存目录
+const cleanOldCache = () => {
+  try {
+    const userDataPath = app.getPath('userData')
+    const cachePath = join(userDataPath, 'Cache')
+    if (fs.existsSync(cachePath)) {
+      fs.rmSync(cachePath, { recursive: true, force: true })
+      console.log('[Main] 旧缓存已清理')
+    }
+  } catch (error) {
+    console.log('[Main] 清理缓存失败（忽略）:', error.message)
+  }
+}
+
+cleanOldCache()
+
 let mainWindow = null
 const API_BASE = process.env.API_URL || 'http://192.168.61.129:3000'
 const DOC_SERVER = 'http://120.24.26.164'
@@ -17,6 +33,18 @@ const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'
 console.log('[Main] Electron 主进程启动')
 console.log('[Main] API 服务器地址:', API_BASE)
 console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
+
+// 检查是否需要禁用 GPU
+if (process.argv.includes('--disable-gpu') || process.argv.includes('--disable-gpu-renderer')) {
+  console.log('[Main] GPU 加速已通过命令行禁用')
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-software-rasterizer')
+} else {
+  // 默认禁用 GPU 以避免缓存错误
+  console.log('[Main] 默认禁用 GPU 以避免缓存权限错误')
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-software-rasterizer')
+}
 
 process.on('uncaughtException', (error) => {
   if (error.code === 'EPERM' && (error.message.includes('kill') || error.message.includes('not found'))) {
@@ -48,7 +76,9 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: false,
       cache: false,
-      devTools: false
+      devTools: false,
+      // 禁用各种缓存以避免权限问题
+      partition: 'persist:electronic-main'
     }
   })
   

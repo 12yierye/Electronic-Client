@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "electron": "vite --mode electron",
+    "electron:clean": "vite --mode electron -- --no-sandbox",
     "build": "vite build --mode electron && electron-builder",
     "preview": "vite preview",
     "postinstall": "electron-builder install-app-deps"

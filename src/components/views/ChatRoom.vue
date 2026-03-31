@@ -378,22 +378,31 @@ const selectUser = async (user, mode = chatMode.value) => {
   }
 }
 
-const loadChatMessages = async () => {
+const loadChatMessages = async (append = false) => {
   if (!selectedUser.value || !window.electronAPI) return
-  
+
   const result = await window.electronAPI.getChatMessages(
     currentUsername.value,
     selectedUser.value.username
   )
   if (result.success) {
-    chatMessages.value = result.messages || []
+    const newMessages = result.messages || []
+    if (append) {
+      // 追加新消息（去重）
+      const existingIds = new Set(chatMessages.value.map(m => m.id))
+      const uniqueNewMessages = newMessages.filter(m => m.id && !existingIds.has(m.id))
+      chatMessages.value = [...chatMessages.value, ...uniqueNewMessages]
+    } else {
+      // 完全替换（首次加载或手动切换时）
+      chatMessages.value = newMessages
+    }
   }
 }
 
 // 加载内网聊天消息
-const loadLanChatMessages = async () => {
+const loadLanChatMessages = async (append = false) => {
   if (!selectedUser.value || !lanSettings.value.useLanChat) return
-  
+
   try {
     const response = await fetch(
       `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/messages?from=${encodeURIComponent(currentUsername.value)}&to=${encodeURIComponent(selectedUser.value.username)}`,
@@ -401,7 +410,16 @@ const loadLanChatMessages = async () => {
     )
     const data = await response.json()
     if (data.success) {
-      chatMessages.value = data.messages || []
+      const newMessages = data.messages || []
+      if (append) {
+        // 追加新消息（去重）
+        const existingIds = new Set(chatMessages.value.map(m => m.id))
+        const uniqueNewMessages = newMessages.filter(m => m.id && !existingIds.has(m.id))
+        chatMessages.value = [...chatMessages.value, ...uniqueNewMessages]
+      } else {
+        // 完全替换（首次加载或手动切换时）
+        chatMessages.value = newMessages
+      }
     }
   } catch (error) {
     console.error('加载内网消息失败:', error)
@@ -559,16 +577,16 @@ const pollForNewMessages = async () => {
       await loadLanGroupsList()
     }
 
-    // 2. 如果选中了聊天对象，刷新消息
+    // 2. 如果选中了聊天对象，刷新消息（使用 append 追加新消息）
     if (selectedGroup.value) {
       // 群聊消息
-      await loadGroupMessages()
+      await loadGroupMessages(true)
     } else if (selectedUser.value) {
       // 私聊消息
       if (selectedUser.value.chatMode === 'lan') {
-        await loadLanChatMessages()
+        await loadLanChatMessages(true)
       } else {
-        await loadChatMessages()
+        await loadChatMessages(true)
       }
     }
   } catch (error) {
@@ -694,7 +712,7 @@ const selectGroup = async (group) => {
 }
 
 // 加载群聊消息
-const loadGroupMessages = async () => {
+const loadGroupMessages = async (append = false) => {
   if (!selectedGroup.value || !lanSettings.value.useLanChat) return
 
   // 检查是否已从列表中隐藏，如果是则重新显示
@@ -711,7 +729,16 @@ const loadGroupMessages = async () => {
     )
     const data = await response.json()
     if (data.success) {
-      chatMessages.value = data.messages || []
+      const newMessages = data.messages || []
+      if (append) {
+        // 追加新消息（去重）
+        const existingIds = new Set(chatMessages.value.map(m => m.id))
+        const uniqueNewMessages = newMessages.filter(m => m.id && !existingIds.has(m.id))
+        chatMessages.value = [...chatMessages.value, ...uniqueNewMessages]
+      } else {
+        // 完全替换（首次加载或手动切换时）
+        chatMessages.value = newMessages
+      }
     }
   } catch (error) {
     console.error('加载群聊消息失败:', error)
