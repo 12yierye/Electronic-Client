@@ -504,13 +504,26 @@ const handleImageSelect = async (file) => {
 
 const handleAddFriend = async (user) => {
   if (!window.electronAPI) return
-  
-  const result = await window.electronAPI.addFriend(currentUsername.value, user.username)
+
+  const result = await window.electronAPI.sendFriendRequest(currentUsername.value, user.username)
   if (result.success) {
-    ElMessage.success('添加成功')
-    await loadFriendsList()
+    ElMessage.success('好友申请已发送')
   } else {
-    ElMessage.error(result.message)
+    // 根据错误类型显示不同的提示
+    const errorMessage = result.message || '添加失败'
+    
+    // 如果是 500 错误且用户已经在内网好友列表中，显示更友好的提示
+    if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
+      // 检查是否是内网用户
+      const isLanFriend = lanFriendsList.value.some(u => u.username === user.username)
+      if (isLanFriend) {
+        ElMessage.info('对方已在您的内网好友列表中，可以直接聊天')
+      } else {
+        ElMessage.error(errorMessage)
+      }
+    } else {
+      ElMessage.error(errorMessage)
+    }
   }
 }
 
