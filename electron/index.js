@@ -70,6 +70,7 @@ function createWindow() {
     height: 600,
     minWidth: 850,
     minHeight: 500,
+    icon: join(__dirname, '../res/index/Electronic Client.ico'),
     webPreferences: {
       preload: preloadPath,
       nodeIntegration: false,
