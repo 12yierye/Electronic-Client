@@ -1064,6 +1064,11 @@ app.on('will-quit', () => {
     clearTimeout(taskInfo.task)
   }
   scheduledTasks.clear()
+
+  // 开发模式下结束父进程(Vite)，关闭终端
+  if (process.env.VITE_DEV_SERVER_URL) {
+    try { process.kill(process.ppid) } catch (_) {}
+  }
 })
 
 console.log('[Main] starting app...')

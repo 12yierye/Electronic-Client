@@ -4,7 +4,7 @@
     {
       "label": "Run Electron",
       "type": "shell",
-      "command": "npm run electron",
+      "command": "npm run electron ; exit 0",
       "group": {
         "kind": "build",
         "isDefault": true
