@@ -197,7 +197,7 @@ const handleSend = async () => {
       }
 
       if (data.done) {
-        // 流正常结束 — 在此处清理监听器，确保不丢失最后的数据
+        // 流正常结束 — 内容已通过增量 chunk 完整累积，done 只是信号
         streamEndedNormally = true
         aiStore.endStreamingMessage()
         isSending.value = false

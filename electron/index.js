@@ -577,10 +577,11 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
       let fullReply = ''
       let fullReasoning = ''
       let streamBuffer = '' // 缓冲区：处理跨 chunk 的 SSE 数据片段
+      let receivedDone = false // 标记是否已收到 [DONE]
 
       response.data.on('data', (chunk) => {
         streamBuffer += chunk.toString()
-        // 只在遇到完整行时才处理（以 \n\n 或最后一个完整 \n 分割）
+        // 只在遇到完整行时才处理（以 \n 分割，保留最后一个不完整行）
         const parts = streamBuffer.split('\n')
         // 最后一个元素可能是不完整的行，保留在缓冲区
         streamBuffer = parts.pop() || ''
@@ -591,10 +592,10 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
 
           const data = trimmedLine.slice(6)
           if (data === '[DONE]') {
-            // 流结束
-            event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply, reasoning: fullReasoning })
-            resolve({ success: true, reply: fullReply, reasoning: fullReasoning })
-            return
+            // [DONE] 标记已收到，不要在这里 resolve
+            // 让 end 事件统一处理 buffer 冲刷和收尾
+            receivedDone = true
+            continue
           }
 
           try {
@@ -616,21 +617,56 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
         }
       })
 
+      // 统一由 end 事件收尾：冲刷 buffer、发送 done、resolve
       response.data.on('end', () => {
+        // 冲刷缓冲区中残留的所有未处理数据行（不止一行）
+        if (streamBuffer) {
+          const parts = streamBuffer.split('\n')
+          for (const line of parts) {
+            const trimmedLine = line.trim()
+            if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue
+
+            const data = trimmedLine.slice(6)
+            if (data === '[DONE]') continue
+
+            try {
+              const parsed = JSON.parse(data)
+              const content = parsed.choices?.[0]?.delta?.content || ''
+              const reasoning = parsed.choices?.[0]?.delta?.reasoning_content || ''
+              if (reasoning) {
+                fullReasoning += reasoning
+                event.sender.send('ai-chat-stream-chunk', { reasoning })
+              }
+              if (content) {
+                fullReply += content
+                event.sender.send('ai-chat-stream-chunk', { content })
+              }
+            } catch (e) {
+              console.warn('[AI Stream] end buffer parse failed:', data.substring(0, 80))
+            }
+          }
+        }
+
+        console.log('[AI Stream] stream ended, reply length:', fullReply.length, 'reasoning length:', fullReasoning.length)
+
+        // 注意：done 事件中不发送 fullReply/fullReasoning 完整文本！
+        // 大文本通过 IPC 序列化时可能被截断（尤其长作文），导致前端覆盖已有的正确累积内容。
+        // 所有内容已通过前面的增量 chunk 逐条发送，前端已经完整累积。
+        // done 仅表示流结束信号，附带 functionCall 等其他元信息。
         if (fullReply || fullReasoning) {
           const functionMatch = fullReply.match(/FUNCTION:\s*(schedule_file_send|schedule_message_send|send_file_now|send_message_now)/)
           if (functionMatch) {
             const functionName = functionMatch[1]
             console.log('[AI Stream] function call:', functionName)
-            event.sender.send('ai-chat-stream-chunk', { 
-              done: true, 
-              content: fullReply,
-              reasoning: fullReasoning,
+            event.sender.send('ai-chat-stream-chunk', {
+              done: true,
               functionCall: functionName
             })
           } else {
-            event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply, reasoning: fullReasoning })
+            event.sender.send('ai-chat-stream-chunk', { done: true })
           }
+        } else {
+          event.sender.send('ai-chat-stream-chunk', { done: true })
         }
         resolve({ success: true, reply: fullReply, reasoning: fullReasoning })
       })

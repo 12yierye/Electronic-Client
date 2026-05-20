@@ -47,8 +47,16 @@
             </div>
             
             <!-- 消息内容 - 支持Markdown -->
-            <div class="message-bubble" :class="{ 'is-html': msg.htmlContent }">
-              <template v-if="msg.htmlContent">
+            <div class="message-bubble" :class="{ 'is-html': msg.htmlContent, 'is-streaming': msg.isStreaming }">
+              <!-- 流式输出中但还没有任何内容时，显示动态加载点 -->
+              <template v-if="msg.isStreaming && !msg.content && !msg.thinking">
+                <div class="thinking-dots">
+                  <span class="dot">●</span>
+                  <span class="dot">●</span>
+                  <span class="dot">●</span>
+                </div>
+              </template>
+              <template v-else-if="msg.htmlContent">
                 <div class="markdown-content" v-html="msg.htmlContent"></div>
               </template>
               <template v-else>
@@ -239,6 +247,26 @@ onMounted(() => {
           &.is-html {
             padding: 12px 18px;
           }
+
+          // 思考中的动态三点加载动画
+          &.is-streaming {
+            .thinking-dots {
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              padding: 4px 0;
+
+              .dot {
+                font-size: 8px;
+                color: var(--text-secondary);
+                animation: dotPulse 1.4s ease-in-out infinite;
+
+                &:nth-child(1) { animation-delay: 0s; }
+                &:nth-child(2) { animation-delay: 0.2s; }
+                &:nth-child(3) { animation-delay: 0.4s; }
+              }
+            }
+          }
           
           // Markdown 样式
           :deep(.markdown-content) {
@@ -327,5 +355,16 @@ onMounted(() => {
 .message-enter-from {
   opacity: 0;
   transform: translateY(20px);
+}
+
+@keyframes dotPulse {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 </style>
