@@ -268,70 +268,198 @@ onMounted(() => {
             }
           }
           
-          // Markdown 样式
+          // Markdown 完整样式
           :deep(.markdown-content) {
-            p {
-              margin: 0 0 8px;
-              &:last-child {
-                margin-bottom: 0;
-              }
+            // ---- 标题 ----
+            h1, h2, h3, h4, h5, h6 {
+              margin: 16px 0 8px;
+              font-weight: 600;
+              line-height: 1.3;
+              color: var(--text-primary);
+              &:first-child { margin-top: 0; }
             }
-            
+            h1 { font-size: 1.6em; border-bottom: 2px solid var(--border-color); padding-bottom: 6px; }
+            h2 { font-size: 1.4em; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; }
+            h3 { font-size: 1.2em; }
+            h4 { font-size: 1.1em; }
+            h5 { font-size: 1em; }
+            h6 { font-size: 0.95em; color: var(--text-secondary); }
+
+            // ---- 段落 ----
+            p {
+              margin: 0 0 10px;
+              line-height: 1.7;
+              &:last-child { margin-bottom: 0; }
+            }
+
+            // ---- 行内格式 ----
+            strong { font-weight: 700; }
+            em { font-style: italic; }
+            del { text-decoration: line-through; opacity: 0.6; }
+            mark {
+              background: rgba(230, 162, 60, 0.3);
+              padding: 1px 3px;
+              border-radius: 2px;
+            }
+
+            // ---- 行内代码 ----
             code {
-              background: rgba(0, 0, 0, 0.1);
+              background: rgba(128, 128, 128, 0.2);
               padding: 2px 6px;
               border-radius: 4px;
-              font-family: monospace;
-              font-size: 0.9em;
+              font-family: 'Consolas', 'Fira Code', 'Source Code Pro', monospace;
+              font-size: 0.88em;
+              color: #e06c75;
+              word-break: break-word;
             }
-            
+
+            // ---- 代码块 ----
             pre {
-              background: rgba(0, 0, 0, 0.1);
-              padding: 12px;
+              background: rgba(128, 128, 128, 0.12);
+              padding: 14px 16px;
               border-radius: 8px;
               overflow-x: auto;
-              margin: 8px 0;
-              
+              margin: 10px 0;
+              border: 1px solid var(--border-color);
+              position: relative;
+
               code {
                 background: none;
                 padding: 0;
+                border-radius: 0;
+                font-size: 0.85em;
+                color: var(--text-primary);
+                line-height: 1.6;
               }
             }
-            
+
+            // ---- 列表 ----
             ul, ol {
-              padding-left: 20px;
+              padding-left: 24px;
               margin: 8px 0;
+              li {
+                margin-bottom: 4px;
+                line-height: 1.6;
+                &::marker { color: var(--text-secondary); }
+              }
             }
-            
+            ul { list-style-type: disc; }
+            ul ul { list-style-type: circle; }
+            ul ul ul { list-style-type: square; }
+            ol { list-style-type: decimal; }
+
+            // ---- 任务列表 (GFM) ----
+            ul:has(> li > input[type="checkbox"]) {
+              list-style: none;
+              padding-left: 4px;
+              li { 
+                display: flex;
+                align-items: flex-start;
+                gap: 6px;
+                input[type="checkbox"] {
+                  margin-top: 4px;
+                  accent-color: var(--accent-color);
+                  cursor: default;
+                }
+              }
+            }
+
+            // ---- 链接 ----
             a {
               color: var(--accent-color);
               text-decoration: none;
+              border-bottom: 1px solid transparent;
+              transition: border-color 0.2s;
               &:hover {
-                text-decoration: underline;
+                border-bottom-color: var(--accent-color);
               }
             }
-            
+
+            // ---- 引用块 ----
             blockquote {
               border-left: 3px solid var(--accent-color);
-              margin: 8px 0;
-              padding-left: 12px;
+              margin: 10px 0;
+              padding: 6px 14px;
               color: var(--text-secondary);
+              background: rgba(128, 128, 128, 0.06);
+              border-radius: 0 6px 6px 0;
+              p { margin-bottom: 6px; }
+              p:last-child { margin-bottom: 0; }
             }
-            
+
+            // ---- 表格 ----
             table {
               border-collapse: collapse;
               width: 100%;
-              margin: 8px 0;
-              
+              margin: 10px 0;
+              font-size: 0.92em;
+              overflow-x: auto;
+              display: block;
+
+              thead {
+                background: rgba(128, 128, 128, 0.15);
+                th {
+                  font-weight: 600;
+                  text-align: left;
+                }
+              }
               th, td {
-                border: 1px solid var(--text-secondary);
-                padding: 8px;
+                border: 1px solid var(--border-color);
+                padding: 8px 12px;
                 text-align: left;
               }
-              
-              th {
-                background: rgba(0, 0, 0, 0.1);
+              tbody tr:nth-child(even) {
+                background: rgba(128, 128, 128, 0.04);
               }
+              tbody tr:hover {
+                background: rgba(128, 128, 128, 0.08);
+              }
+            }
+
+            // ---- 图片 ----
+            img {
+              max-width: 100%;
+              height: auto;
+              border-radius: 8px;
+              margin: 8px 0;
+              display: block;
+            }
+
+            // ---- 分隔线 ----
+            hr {
+              border: none;
+              border-top: 1px solid var(--border-color);
+              margin: 16px 0;
+            }
+
+            // ---- 脚注 / 上标下标 ----
+            sup, sub {
+              font-size: 0.78em;
+            }
+
+            // ---- 定义列表 ----
+            dl {
+              margin: 8px 0;
+              dt { font-weight: 600; margin-top: 8px; }
+              dd { margin-left: 20px; color: var(--text-secondary); }
+            }
+
+            // ---- 缩写 ----
+            abbr[title] {
+              border-bottom: 1px dotted var(--text-secondary);
+              cursor: help;
+              text-decoration: none;
+            }
+
+            // ---- 键盘标签 ----
+            kbd {
+              background: rgba(128, 128, 128, 0.15);
+              border: 1px solid var(--border-color);
+              border-radius: 3px;
+              padding: 1px 5px;
+              font-family: monospace;
+              font-size: 0.85em;
+              box-shadow: 0 1px 0 var(--border-color);
             }
           }
         }

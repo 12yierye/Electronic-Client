@@ -2,10 +2,11 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { marked } from 'marked'
 
-// 配置marked选项 (v17+ 使用 marked.use 替代已废弃的 setOptions)
+// 配置marked选项 — 全面支持 GFM (GitHub Flavored Markdown)
 marked.use({
-  breaks: true,
-  gfm: true
+  breaks: true,       // 单个换行转为 <br>
+  gfm: true,           // 表格、任务列表、删除线、自动链接等
+  pedantic: false,
 })
 
 export const useAIStore = defineStore('ai', () => {
