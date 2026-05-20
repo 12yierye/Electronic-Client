@@ -26,8 +26,8 @@ const cleanOldCache = () => {
 cleanOldCache()
 
 let mainWindow = null
-const API_BASE = process.env.API_URL || 'http://localhost:3000'
-const DOC_SERVER = process.env.DOC_SERVER || 'http://localhost:3000'
+const API_BASE = process.env.API_URL || 'http://127.0.0.1:3000'
+const DOC_SERVER = process.env.DOC_SERVER || 'http://127.0.0.1:3000'
 const LM_STUDIO_API = process.env.LM_STUDIO_API || 'http://127.0.0.1:1234/v1'
 
 console.log('[Main] starting, API:', API_BASE, 'LM Studio:', LM_STUDIO_API)
