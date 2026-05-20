@@ -44,7 +44,12 @@ if (process.argv.includes('--disable-gpu') || process.argv.includes('--disable-g
 }
 
 process.on('uncaughtException', (error) => {
-  if (error.code === 'EPERM' && (error.message.includes('kill') || error.message.includes('not found'))) {
+  // 忽略进程退出时的 PID/ESRCH/EPERM 错误
+  if (
+    (error.code === 'EPERM' && (error.message.includes('kill') || error.message.includes('not found'))) ||
+    (error.code === 'ESRCH') ||
+    (error.message && error.message.includes('process') && error.message.includes('not found'))
+  ) {
     return
   }
   console.error('[Main] uncaught exception:', error)
@@ -87,7 +92,15 @@ function createWindow() {
 
   const menu = Menu.buildFromTemplate([
     { label: 'File', submenu: [
-      { label: 'Quit', role: 'quit', click: () => app.quit() }
+      { label: 'Quit', click: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.close()
+        }
+        // 非开发模式才真正退出进程
+        if (!process.env.VITE_DEV_SERVER_URL) {
+          app.quit()
+        }
+      }}
     ]},
     { label: 'Help', submenu: [
       { label: 'About Electronic', click: () => createElectronWindow(DOC_SERVER) },
@@ -116,6 +129,7 @@ function createWindow() {
   
   // Check preload after a brief delay
   setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
     mainWindow.webContents.executeJavaScript(`
       console.log('[Renderer] electronAPI:', typeof window.electronAPI)
       if (window.electronAPI) {
@@ -204,7 +218,17 @@ ipcMain.on('logout', () => {
   // 退出登录时清除自动登录凭证，避免退出后又自动登录
   // 渲染进程会自动清除 localStorage
 })
-ipcMain.on('exit-app', () => app.quit())
+ipcMain.on('exit-app', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.removeAllListeners()
+    mainWindow.close()
+    mainWindow = null
+  }
+  // 非开发模式才真正退出进程，开发模式下由 vite-plugin-electron 管理进程生命周期
+  if (!process.env.VITE_DEV_SERVER_URL) {
+    app.quit()
+  }
+})
 ipcMain.on('set-user', (event, userInfo) => { global.userInfo = userInfo })
 
 ipcMain.handle('download-file', async (event, username, filename) => {
@@ -1032,6 +1056,28 @@ app.setUserTasks([
   { program: process.execPath, arguments: '--relaunch', iconPath: process.execPath, iconIndex: 0, title: 'Relaunch', description: 'Relaunch Electronic' }
 ])
 
+// 退出前清理：清除所有定时器，避免退出时打印 PID 进程丢失警告
+app.on('before-quit', () => {
+  console.log('[Main] cleaning up before quit...')
+  for (const [taskId, taskInfo] of scheduledTasks) {
+    clearTimeout(taskInfo.task)
+    scheduledTasks.delete(taskId)
+  }
+  saveScheduledTasks()
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.removeAllListeners()
+    mainWindow = null
+  }
+})
+
+app.on('will-quit', () => {
+  // 确保所有定时器已清除
+  for (const [taskId, taskInfo] of scheduledTasks) {
+    clearTimeout(taskInfo.task)
+  }
+  scheduledTasks.clear()
+})
+
 console.log('[Main] starting app...')
 app.whenReady().then(() => {
   console.log('[Main] app ready')
@@ -1040,5 +1086,9 @@ app.whenReady().then(() => {
 }).catch(err => {
   console.error('[Main] app ready error:', err)
 })
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+// 开发模式下不自动退出，让 vite-plugin-electron 统一管理进程生命周期，避免 PID 丢失报错
+const isDev = !!process.env.VITE_DEV_SERVER_URL
+app.on('window-all-closed', () => {
+  if (!isDev && process.platform !== 'darwin') app.quit()
+})
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })

@@ -7,7 +7,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "electron": "vite --mode electron",
+    "electron": "chcp 65001 && vite --mode electron",
+    "server": "node E:\\Electronic-Server\\server.js",
     "electron:clean": "vite --mode electron -- --no-sandbox",
     "build": "vite build --mode electron && electron-builder",
     "preview": "vite preview",
