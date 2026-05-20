@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-chat-view">
+  <div class="ai-chat-view" ref="chatViewRef" @scroll="onScroll">
     <!-- 欢迎/问候语 -->
     <div v-if="messages.length === 0" class="welcome-section">
       <el-icon class="ai-icon" :size="60"><MagicStick /></el-icon>
@@ -15,7 +15,7 @@
     </div>
     
     <!-- 消息列表 -->
-    <div v-else class="messages-container" ref="messagesContainer">
+    <div v-else class="messages-container">
       <transition-group name="message">
         <div 
           v-for="msg in messages" 
@@ -67,6 +67,17 @@
         </div>
       </transition-group>
     </div>
+
+    <!-- 跳到底部按钮 -->
+    <transition name="scroll-btn-fade">
+      <div
+        v-if="showScrollButton"
+        class="scroll-to-bottom-btn"
+        @click="jumpToBottom"
+      >
+        <el-icon :size="16"><ArrowDown /></el-icon>
+      </div>
+    </transition>
     
     <!-- 错误提示 -->
     <el-alert
@@ -82,7 +93,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { MagicStick, ArrowDown, ArrowRight, Monitor } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
@@ -90,31 +101,102 @@ import { useI18n } from '../../composables/useI18n'
 const aiStore = useAIStore()
 const { t } = useI18n()
 
-const messagesContainer = ref(null)
+const chatViewRef = ref(null)
 const showError = ref(false)
+const showScrollButton = ref(false)
+const autoScroll = ref(true)             // 当前是否处于自动滚动模式
+const SCROLL_THRESHOLD = 200             // 距底部超过此值显示跳转按钮
 
 const messages = computed(() => aiStore.messages)
 const greeting = computed(() => aiStore.getGreeting())
 const userAvatar = ref('')
 const aiAvatar = ref('')
 
+// 当前是否有 AI 消息正在流式输出
+const isAIStreaming = computed(() => {
+  const msgs = aiStore.messages
+  if (msgs.length === 0) return false
+  const last = msgs[msgs.length - 1]
+  return last.role === 'ai' && last.isStreaming
+})
+
+// 判断是否已在底部（5px 容差）
+const isAtBottom = () => {
+  const el = chatViewRef.value
+  if (!el) return true
+  return el.scrollTop + el.clientHeight >= el.scrollHeight - 5
+}
+
+// 计算距底部的距离
+const distanceFromBottom = () => {
+  const el = chatViewRef.value
+  if (!el) return 0
+  return el.scrollHeight - (el.scrollTop + el.clientHeight)
+}
+
 // 滚动到底部
-const scrollToBottom = () => {
+const scrollToBottom = (smooth = false) => {
   nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    const el = chatViewRef.value
+    if (!el) return
+    if (smooth) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    } else {
+      el.scrollTop = el.scrollHeight
     }
   })
 }
 
+// 手动跳到底部 → 重新启用自动滚动
+const jumpToBottom = () => {
+  autoScroll.value = true
+  showScrollButton.value = false
+  scrollToBottom(true)
+}
+
+// 监听容器滚动事件
+const onScroll = () => {
+  if (isAtBottom()) {
+    // 用户滚到底部 → 恢复自动滚动
+    showScrollButton.value = false
+    if (isAIStreaming.value) {
+      autoScroll.value = true
+    }
+  } else {
+    // 用户离开了底部 → 停止自动滚动
+    autoScroll.value = false
+    // 距离超过阈值时显示跳转按钮
+    showScrollButton.value = distanceFromBottom() > SCROLL_THRESHOLD
+  }
+}
+
+// 消息变化时：仅当 autoScroll 为 true 才自动跟底
 watch(messages, () => {
-  scrollToBottom()
+  if (autoScroll.value) {
+    scrollToBottom()
+  }
+  // 如果处于非自动滚动模式，检查是否需要显示按钮
+  if (!autoScroll.value && distanceFromBottom() > SCROLL_THRESHOLD) {
+    showScrollButton.value = true
+  }
 }, { deep: true })
+
+// AI 开始流式输出时：如果用户在底部则启用自动滚动
+watch(isAIStreaming, (streaming) => {
+  if (streaming && isAtBottom()) {
+    autoScroll.value = true
+    showScrollButton.value = false
+  }
+})
 
 onMounted(() => {
   scrollToBottom()
-  // 获取当前运行的模型
   aiStore.fetchCurrentModel()
+})
+
+onUnmounted(() => {
+  autoScroll.value = false
+  showScrollButton.value = false
 })
 </script>
 
@@ -173,7 +255,7 @@ onMounted(() => {
   }
   
   .messages-container {
-    max-width: 800px;
+    max-width: 900px;
     margin: 0 auto;
     
     .message-item {
@@ -193,6 +275,10 @@ onMounted(() => {
       &.ai {
         // 确保ai样式不被user覆盖
         flex-direction: row !important;
+
+        .message-content {
+          max-width: min(1100px, 100%);
+        }
         
         .message-bubble {
           background: var(--bg-secondary);
@@ -474,6 +560,36 @@ onMounted(() => {
     transform: translateX(-50%);
     z-index: 1000;
   }
+
+  // 跳到底部按钮
+  .scroll-to-bottom-btn {
+    position: sticky;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 50;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s, box-shadow 0.2s;
+    margin: 0 auto;
+
+    &:hover {
+      transform: translateX(-50%) scale(1.1);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+
+    &:active {
+      transform: translateX(-50%) scale(0.95);
+    }
+  }
 }
 
 .message-enter-active {
@@ -494,5 +610,21 @@ onMounted(() => {
     opacity: 1;
     transform: scale(1.2);
   }
+}
+
+// 跳转按钮过渡动画
+.scroll-btn-fade-enter-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.scroll-btn-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.scroll-btn-fade-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.scroll-btn-fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
 </style>
