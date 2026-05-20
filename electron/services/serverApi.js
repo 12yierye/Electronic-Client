@@ -9,7 +9,7 @@ export async function validateLogin(username, password) {
     console.log('[Login] ok:', username)
     return response.data
   } catch (err) {
-    console.error('[Login] failed:', err.code, err.message)
+    console.error('[Login] Failed. Code:', err.code, ':', err.message)
     if (err.response) return { success: false, message: err.response.data.message || '登录失败' }
     if (err.request) {
       if (err.code === 'ECONNREFUSED') {

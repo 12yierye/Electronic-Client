@@ -19,9 +19,9 @@ export const saveScheduledTasks = () => {
       })
     }
     fs.writeFileSync(SCHEDULED_TASKS_FILE, JSON.stringify(tasksData, null, 2))
-    console.log('[Scheduled] saved', tasksData.length, 'tasks')
+    console.log('[Scheduled] Saved', tasksData.length, 'Tasks')
   } catch (err) {
-    console.error('[Scheduled] save failed:', err.message)
+    console.error('[Scheduled] Save Failed:', err.message)
   }
 }
 
@@ -30,7 +30,7 @@ export const restoreScheduledTasks = () => {
     if (!fs.existsSync(SCHEDULED_TASKS_FILE)) return
     const raw = fs.readFileSync(SCHEDULED_TASKS_FILE, 'utf-8')
     const tasksData = JSON.parse(raw)
-    console.log('[Scheduled] restoring', tasksData.length, 'tasks')
+    console.log('[Scheduled] Restoring', tasksData.length, 'Tasks')
 
     const now = Date.now()
     for (const taskData of tasksData) {
@@ -38,7 +38,7 @@ export const restoreScheduledTasks = () => {
       const delay = scheduledTime - now
 
       if (delay <= 0) {
-        console.log('[Scheduled] skip expired:', taskData.taskId)
+        console.log('[Scheduled] Skip Expired:', taskData.taskId)
         continue
       }
 

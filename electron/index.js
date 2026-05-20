@@ -27,11 +27,11 @@ const cleanOldCache = () => {
 cleanOldCache()
 
 if (process.argv.includes('--disable-gpu') || process.argv.includes('--disable-gpu-renderer')) {
-  console.log('[Main] GPU disabled via CLI')
+  // console.log('[Main] GPU disabled via CLI')
   app.commandLine.appendSwitch('disable-gpu')
   app.commandLine.appendSwitch('disable-software-rasterizer')
 } else {
-  console.log('[Main] GPU disabled (default)')
+  // console.log('[Main] GPU disabled (default)')
   app.commandLine.appendSwitch('disable-gpu')
   app.commandLine.appendSwitch('disable-software-rasterizer')
 }
@@ -56,14 +56,14 @@ registerUserIpc()
 registerFileIpc()
 registerAiIpc()
 registerTaskIpc()
-console.log('[Main] IPC handlers registered')
+// console.log('[Main] IPC handlers registered')
 
 app.setUserTasks([
   { program: process.execPath, arguments: '--relaunch', iconPath: process.execPath, iconIndex: 0, title: 'Relaunch', description: 'Relaunch Electronic' }
 ])
 
 app.on('before-quit', () => {
-  console.log('[Main] cleaning up before quit...')
+  // console.log('[Main] cleaning up before quit...')
   clearAllScheduledTasks()
   saveScheduledTasks()
   const mw = BrowserWindow.getAllWindows()[0]
@@ -81,11 +81,11 @@ app.on('will-quit', () => {
 
 console.log('[Main] starting app...')
 app.whenReady().then(() => {
-  console.log('[Main] app ready')
+  console.log('[Main] App Ready')
   restoreScheduledTasks()
   createWindow()
 }).catch(err => {
-  console.error('[Main] app ready error:', err)
+  console.error('[Main] App Ready ERROR:', err)
 })
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
