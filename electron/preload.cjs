@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
-console.log('[Preload] 开始执行...')
+console.log('[Preload] loading...')
 
 // 下载进度回调
 let downloadProgressCallback = null
@@ -14,7 +14,7 @@ ipcRenderer.on('download-progress', (event, data) => {
 contextBridge.exposeInMainWorld('electronAPI', {
   // 测试方法
   testAI: () => {
-    console.log('[Preload] testAI 被调用')
+    console.log('[Preload] testAI called')
     return 'test OK'
   },
   // 下载进度监听
@@ -106,4 +106,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUserFiles: (username) => ipcRenderer.invoke('get-user-files', username)
 })
 
-console.log('Preload script loaded')
+console.log('[Preload] ready')

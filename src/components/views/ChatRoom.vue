@@ -386,7 +386,7 @@ const loadChatMessages = async (append = false) => {
     selectedUser.value.username
   )
   if (result.success) {
-    const newMessages = result.messages || []
+    const newMessages = (result.messages || []).map(normalizeMessage)
     if (append) {
       // 追加新消息（去重）
       const existingIds = new Set(chatMessages.value.map(m => m.id))
@@ -410,7 +410,7 @@ const loadLanChatMessages = async (append = false) => {
     )
     const data = await response.json()
     if (data.success) {
-      const newMessages = data.messages || []
+      const newMessages = (data.messages || []).map(normalizeMessage)
       if (append) {
         // 追加新消息（去重）
         const existingIds = new Set(chatMessages.value.map(m => m.id))
@@ -422,7 +422,7 @@ const loadLanChatMessages = async (append = false) => {
       }
     }
   } catch (error) {
-    console.error('加载内网消息失败:', error)
+    console.error('[Chat] load LAN msgs failed:', error)
   }
 }
 
@@ -447,11 +447,11 @@ const sendLanMessage = async () => {
     )
     const data = await response.json()
     if (data.success) {
-      chatMessages.value.push(data.message)
+      chatMessages.value.push(normalizeMessage(data.message))
       inputMessage.value = ''
     }
   } catch (error) {
-    console.error('发送内网消息失败:', error)
+    console.error('[Chat] send LAN msg failed:', error)
     ElMessage.error('发送失败: ' + error.message)
   }
 }
@@ -473,7 +473,7 @@ const sendMessage = async () => {
   })
   
   if (result.success) {
-    chatMessages.value.push(result.data)
+    chatMessages.value.push(normalizeMessage(result.data))
     inputMessage.value = ''
   }
 }
@@ -496,7 +496,7 @@ const handleImageSelect = async (file) => {
     })
     
     if (result.success) {
-      chatMessages.value.push(result.data)
+      chatMessages.value.push(normalizeMessage(result.data))
     }
   }
   reader.readAsDataURL(file.raw)
@@ -540,6 +540,16 @@ const handleRequest = async (requestId, action) => {
 
 const handleSearch = (query) => {
   // 搜索逻辑
+}
+
+// 统一消息字段命名：确保每条消息都有 from 和 message 字段
+const normalizeMessage = (msg) => {
+  if (!msg) return msg
+  // 公网 API 使用 sender，内网 API 使用 from — 统一为 from
+  if (!msg.from && msg.sender) msg.from = msg.sender
+  // 有些 API 返回 content 而非 message
+  if (!msg.message && msg.content) msg.message = msg.content
+  return msg
 }
 
 const formatDate = (timestamp) => {
@@ -611,7 +621,7 @@ const pollForNewMessages = async () => {
 const startMessagePolling = () => {
   if (messagePollingInterval) return
   messagePollingInterval = setInterval(pollForNewMessages, POLLING_INTERVAL)
-  console.log('[ChatRoom] 消息轮询已启动')
+  console.log('[Chat] polling started')
 }
 
 // 停止消息轮询
@@ -619,7 +629,7 @@ const stopMessagePolling = () => {
   if (messagePollingInterval) {
     clearInterval(messagePollingInterval)
     messagePollingInterval = null
-    console.log('[ChatRoom] 消息轮询已停止')
+    console.log('[Chat] polling stopped')
   }
 }
 
@@ -692,7 +702,7 @@ const loadLanFriendsList = async () => {
       lanFriendsList.value = data.friends || []
     }
   } catch (error) {
-    console.error('加载内网用户失败:', error)
+    console.error('[Chat] load LAN users failed:', error)
   }
 }
 
@@ -713,7 +723,7 @@ const loadLanGroupsList = async () => {
       lanGroupsList.value = data.groups || []
     }
   } catch (error) {
-    console.error('加载内网群聊失败:', error)
+    console.error('[Chat] load LAN groups failed:', error)
   }
 }
 
@@ -742,7 +752,7 @@ const loadGroupMessages = async (append = false) => {
     )
     const data = await response.json()
     if (data.success) {
-      const newMessages = data.messages || []
+      const newMessages = (data.messages || []).map(normalizeMessage)
       if (append) {
         // 追加新消息（去重）
         const existingIds = new Set(chatMessages.value.map(m => m.id))
@@ -754,7 +764,7 @@ const loadGroupMessages = async (append = false) => {
       }
     }
   } catch (error) {
-    console.error('加载群聊消息失败:', error)
+    console.error('[Chat] load group msgs failed:', error)
   }
 }
 
@@ -790,7 +800,7 @@ const sendGroupMessage = async () => {
       inputMessage.value = ''
     }
   } catch (error) {
-    console.error('发送群聊消息失败:', error)
+    console.error('[Chat] send group msg failed:', error)
     ElMessage.error('发送失败')
   }
 }
@@ -826,7 +836,7 @@ const createGroup = async () => {
       ElMessage.error(data.message || '创建失败')
     }
   } catch (error) {
-    console.error('创建群聊失败:', error)
+    console.error('[Chat] create group failed:', error)
     ElMessage.error('创建失败')
   }
 }
@@ -895,7 +905,7 @@ const handleDisbandGroup = async () => {
       ElMessage.error(data.message || '解散失败')
     }
   } catch (error) {
-    console.error('解散群聊失败:', error)
+    console.error('[Chat] disband group failed:', error)
     ElMessage.error('解散群聊失败')
   }
 }

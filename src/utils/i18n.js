@@ -61,15 +61,19 @@ const messages = {
       autoLoginEnabled: '自动登录已开启',
       loggingIn: '自动登录中...',
       login: '登录',
+      register: '注册',
       defaultServer: '默认服务器:',
       usernameRequired: '请输入用户名',
-      passwordRequired: '请输入密码'
+      passwordRequired: '请输入密码',
+      emailRequired: '请输入邮箱',
+      emailInvalid: '请输入有效的邮箱地址'
     },
     aiChat: {
       personalAssistant: '您的个人AI助手',
       enterToSend: '按 Enter 发送消息...',
       aiResponse: '这是AI的回复内容，可能与真实答案有所偏差，请谅解。',
-      inputRequired: '请输入内容'
+      inputRequired: '请输入内容',
+      thinking: '思考中...'
     },
     chatRoom: {
       friends: '好友',
@@ -138,15 +142,19 @@ const messages = {
       autoLoginEnabled: 'Auto login enabled',
       loggingIn: 'Logging in...',
       login: 'Login',
+      register: 'Register',
       defaultServer: 'Default server:',
       usernameRequired: 'Please enter username',
-      passwordRequired: 'Please enter password'
+      passwordRequired: 'Please enter password',
+      emailRequired: 'Please enter email',
+      emailInvalid: 'Please enter a valid email address'
     },
     aiChat: {
       personalAssistant: 'Your personal AI assistant',
       enterToSend: 'Press Enter to send message...',
       aiResponse: 'This is AI response content, there may be some deviation from the actual answer, please understand.',
-      inputRequired: 'Please enter content'
+      inputRequired: 'Please enter content',
+      thinking: 'Thinking...'
     }
   },
   'ja': {
@@ -200,15 +208,19 @@ const messages = {
       autoLoginEnabled: '自動ログインが有効です',
       loggingIn: '自動ログイン中...',
       login: 'ログイン',
+      register: '登録',
       defaultServer: 'デフォルトサーバー:',
       usernameRequired: 'ユーザー名を入力してください',
-      passwordRequired: 'パスワードを入力してください'
+      passwordRequired: 'パスワードを入力してください',
+      emailRequired: 'メールアドレスを入力してください',
+      emailInvalid: '有効なメールアドレスを入力してください'
     },
     aiChat: {
       personalAssistant: 'あなたの個人AIアシスタント',
       enterToSend: 'Enterを押してメッセージを送信...',
       aiResponse: 'これはAIの返信内容です。実際の答えとは若干異なる場合がありますので、ご了承ください。',
-      inputRequired: '内容を入力してください'
+      inputRequired: '内容を入力してください',
+      thinking: '考え中...'
     }
   }
 }

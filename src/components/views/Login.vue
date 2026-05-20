@@ -6,7 +6,7 @@
           <span>{{ t('login.title') }}</span>
         </div>
       </template>
-      <el-form :model="loginForm" :rules="rules.value" ref="formRef" label-width="0">
+      <el-form :model="loginForm" :rules="rules" ref="formRef" label-width="0">
         <el-form-item prop="username">
           <el-input
             v-model="loginForm.username"
@@ -67,7 +67,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from '../../composables/useI18n'
@@ -81,7 +81,7 @@ const testingConnection = ref(false)
 const autoLogin = ref(false)
 const autoLoginChecked = ref(false) // 是否已检查过自动登录
 const autoLoginSuccess = ref(false) // 自动登录是否成功
-const apiBase = 'http://192.168.61.129:3000'
+const apiBase = 'http://localhost:3000'
 
 // 注册相关
 const registerDialogVisible = ref(false)
@@ -92,24 +92,24 @@ const registerForm = reactive({
   password: '',
   email: ''
 })
-const registerRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+const registerRules = computed(() => ({
+  username: [{ required: true, message: t('login.usernameRequired'), trigger: 'blur' }],
+  password: [{ required: true, message: t('login.passwordRequired'), trigger: 'blur' }],
   email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '请输入有效的邮箱地址', trigger: 'blur' }
+    { required: true, message: t('login.emailRequired'), trigger: 'blur' },
+    { type: 'email', message: t('login.emailInvalid'), trigger: 'blur' }
   ]
-}
+}))
 
 const loginForm = reactive({
   username: '',
   password: ''
 })
 
-const rules = ref({
+const rules = computed(() => ({
   username: [{ required: true, message: t('login.usernameRequired'), trigger: 'blur' }],
   password: [{ required: true, message: t('login.passwordRequired'), trigger: 'blur' }]
-})
+}))
 
 // 处理注册点击
 const handleRegister = () => {
@@ -184,7 +184,7 @@ const verifyCredential = async (credential) => {
     const result = await window.electronAPI.verifyCredential(credential.username, credential.token)
     return result.success
   } catch (error) {
-    console.error('验证凭证失败:', error)
+    console.error('[Login] credential check failed:', error)
     return false
   }
 }
@@ -221,7 +221,7 @@ const checkAutoLogin = async () => {
     localStorage.removeItem('autoLoginCredential')
     return false
   } catch (error) {
-    console.error('自动登录检查失败:', error)
+    console.error('[Login] auto-login check failed:', error)
     localStorage.removeItem('autoLoginCredential')
     return false
   }

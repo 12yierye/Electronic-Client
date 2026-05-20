@@ -36,23 +36,16 @@ const isSending = ref(false)
 
 // 解析发送意图（定时或立即）
 const parseScheduledIntent = (message) => {
-  // 统一将全角冒号转换为半角
   const normalizedMessage = message.replace(/：/g, ':')
 
-  console.log('[parseScheduledIntent] 原始消息:', message)
-  console.log('[parseScheduledIntent] 规范化后:', normalizedMessage)
-
-  // 时间模式 - 支持 00:00 或 在00:00 格式，以及"1分钟后"等
   const timePatterns = [
     /在\s*(\d{1,2}:\d{2})/,
     /(\d{1,2}:\d{2})/,
     /(\d+)\s*分钟\s*后/
   ]
 
-  // 文件扩展名列表
   const fileExtensions = ['docx', 'xlsx', 'pdf', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'zip', 'rar', '7z', 'pptx', 'doc', 'xls', 'csv', 'npmrc']
 
-  // 匹配文件名模式
   const fileNamePattern = new RegExp(
     `(?:名为|发送(?:给)?|发给|发送给)\\s*([^\\s,，]+(?:\\.(?:${fileExtensions.join('|')})))`,
     'i'
@@ -65,7 +58,6 @@ const parseScheduledIntent = (message) => {
   let content = null
   let isFile = false
 
-  // 提取时间
   for (const pattern of timePatterns) {
     const match = normalizedMessage.match(pattern)
     if (match) {
@@ -75,76 +67,51 @@ const parseScheduledIntent = (message) => {
       } else {
         time = match[1] || match[0]
       }
-      console.log('[parseScheduledIntent] 提取到时间:', time)
       break
     }
   }
 
-  // 提取文件名
   const fileMatch = normalizedMessage.match(fileNamePattern)
   if (fileMatch) {
     filename = fileMatch[1]
     isFile = true
-    console.log('[parseScheduledIntent] 提取到文件名:', filename)
   }
 
-  // 提取用户名 - 优先提取"向XXX发送/说"格式
   const userMatch1 = normalizedMessage.match(/向\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/)
   if (userMatch1) {
     targetUser = userMatch1[1]
-    console.log('[parseScheduledIntent] 提取到用户名:', targetUser)
   } else {
-    // 尝试其他模式
     const userMatch2 = normalizedMessage.match(/发给\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/)
     if (userMatch2) {
       targetUser = userMatch2[1]
-      console.log('[parseScheduledIntent] 提取到用户名:', targetUser)
     }
   }
 
-  // 提取文字内容（如果是文字消息）
   if (!isFile) {
     const textContentMatch = normalizedMessage.match(/说\s*(.+)$/)
     if (textContentMatch) {
       content = textContentMatch[1].trim()
-      console.log('[parseScheduledIntent] 提取到文字内容:', content)
     }
   }
 
-  // 判断是定时发送还是立即发送
   const hasTime = time !== null || minutesLater !== null
 
-  // 返回结果
   if (isFile && hasTime && targetUser && filename) {
-    if (minutesLater) {
-      console.log('[parseScheduledIntent] 识别为立即发送文件:', { type: 'file', immediate: true, minutesLater, targetUser, filename })
-      return { type: 'file', immediate: true, minutesLater, targetUser, filename }
-    }
-    console.log('[parseScheduledIntent] 识别为定时发送文件:', { type: 'file', time, targetUser, filename })
-    return { type: 'file', time, targetUser, filename }
+    return { type: 'file', ...(minutesLater ? { immediate: true, minutesLater } : { time }), targetUser, filename }
   }
 
   if (hasTime && targetUser && content) {
-    if (minutesLater) {
-      console.log('[parseScheduledIntent] 识别为立即发送文字:', { type: 'text', immediate: true, minutesLater, targetUser, content })
-      return { type: 'text', immediate: true, minutesLater, targetUser, content }
-    }
-    console.log('[parseScheduledIntent] 识别为定时发送文字:', { type: 'text', time, targetUser, content })
-    return { type: 'text', time, targetUser, content }
+    return { type: 'text', ...(minutesLater ? { immediate: true, minutesLater } : { time }), targetUser, content }
   }
 
-  // 支持立即发送（无时间关键词）
   if (!hasTime && isFile && targetUser && filename) {
-    console.log('[parseScheduledIntent] 识别为立即发送文件（无时间）:', { type: 'file', immediate: true, targetUser, filename })
     return { type: 'file', immediate: true, targetUser, filename }
   }
 
   if (!hasTime && targetUser && content) {
-    console.log('[parseScheduledIntent] 识别为立即发送文字（无时间）:', { type: 'text', immediate: true, targetUser, content })
     return { type: 'text', immediate: true, targetUser, content }
   }
 
-  console.log('[parseScheduledIntent] 无法识别发送意图')
   return null
 }
 
@@ -177,17 +144,17 @@ const handleSend = async () => {
     window.electronAPI.removeAIChatStreamListener()
   }
 
+  let streamEndedNormally = false // 标记流是否正常结束
+
   // 设置流式监听器
   if (window.electronAPI.onAIChatStreamChunk) {
     window.electronAPI.onAIChatStreamChunk((data) => {
-      // 检测到意图识别结果
       if (data.likelyIntent === 'scheduled') {
-        console.log('[Renderer] AI 检测到定时发送意图，等待函数调用...')
+        console.log('[AI] intent: scheduled')
       }
 
-      // 检测到函数调用
       if (data.functionCall) {
-        console.log('[Renderer] 检测到函数调用:', data.functionCall)
+        console.log('[AI] function call:', data.functionCall)
         
         // 从回复中提取参数
         const fullContent = data.content || ''
@@ -219,7 +186,7 @@ const handleSend = async () => {
           // 如果是立即发送（无时间），scheduleTime 为 null
 
           // 执行对应的发送任务
-          executeFunctionCall(data.functionCall, params, scheduleTime, timeStr, currentUsername)
+          executeFunctionCall(data.functionCall, params, scheduleTime, timeStr, currentUsername, message)
         } else {
           // 参数解析失败，提示用户格式不对
           aiStore.endStreamingMessage()
@@ -230,8 +197,13 @@ const handleSend = async () => {
       }
 
       if (data.done) {
-        // 流结束
+        // 流正常结束 — 在此处清理监听器，确保不丢失最后的数据
+        streamEndedNormally = true
         aiStore.endStreamingMessage()
+        isSending.value = false
+        if (window.electronAPI.removeAIChatStreamListener) {
+          window.electronAPI.removeAIChatStreamListener()
+        }
       } else {
         // 追加思考内容
         if (data.reasoning) {
@@ -245,15 +217,14 @@ const handleSend = async () => {
     })
   }
 
-  // 调用本地 AI 模型流式回复
+  // Call local AI model for streaming response
   try {
-    console.log('[Renderer] 调用 aiChatStream，消息:', message)
+    console.log('[AI] stream start:', message.substring(0, 60))
 
-    // 先创建空的 AI 消息占位
     aiStore.startStreamingMessage()
 
     const result = await window.electronAPI.aiChatStream(message)
-    console.log('[Renderer] aiChatStream 返回:', result)
+    console.log('[AI] stream result:', result.success)
 
     if (!result.success) {
       // 流式失败，添加错误消息
@@ -265,10 +236,12 @@ const handleSend = async () => {
     aiStore.endStreamingMessage()
     aiStore.addAIMessage('抱歉，连接 AI 失败: ' + error.message)
   } finally {
-    isSending.value = false
-    // 清理监听器
-    if (window.electronAPI.removeAIChatStreamListener) {
-      window.electronAPI.removeAIChatStreamListener()
+    // 仅在流未正常结束时清理（正常结束已在 data.done 回调中清理）
+    if (!streamEndedNormally) {
+      isSending.value = false
+      if (window.electronAPI.removeAIChatStreamListener) {
+        window.electronAPI.removeAIChatStreamListener()
+      }
     }
   }
 }
@@ -284,13 +257,12 @@ const handleNewLine = () => {
   // Shift + Enter 允许换行
 }
 
-// 执行函数调用
-const executeFunctionCall = async (functionName, params, scheduleTime, timeStr, currentUsername) => {
-  console.log('[executeFunctionCall] 执行函数:', functionName, params)
+// Execute function call
+const executeFunctionCall = async (functionName, params, scheduleTime, timeStr, currentUsername, message) => {
+  console.log('[AI] execute:', functionName, params.targetUser)
 
   if (functionName === 'schedule_file_send') {
-    // 定时发送文件
-    console.log('[Renderer] 执行定时发送文件:', params, '执行时间:', scheduleTime)
+    console.log('[AI] schedule file:', params.filename, '@', scheduleTime)
 
     const filesResult = await window.electronAPI.getUserFiles(currentUsername)
     if (!filesResult.success || !filesResult.files) {
@@ -315,8 +287,8 @@ const executeFunctionCall = async (functionName, params, scheduleTime, timeStr, 
     }
 
   } else if (functionName === 'schedule_message_send') {
-    // 定时发送文字消息
-    console.log('[Renderer] 执行定时发送文字:', params, '执行时间:', scheduleTime)
+    // Schedule text message
+    console.log('[AI] schedule msg:', params.targetUser, '@', scheduleTime)
 
     const result = await window.electronAPI.scheduleMessageSend(scheduleTime, params.targetUser, params.content, currentUsername)
 
@@ -327,8 +299,7 @@ const executeFunctionCall = async (functionName, params, scheduleTime, timeStr, 
     }
 
   } else if (functionName === 'send_file_now') {
-    // 立即发送文件
-    console.log('[Renderer] 执行立即发送文件:', params)
+    console.log('[AI] send file now:', params.filename, '->', params.targetUser)
 
     const filesResult = await window.electronAPI.getUserFiles(currentUsername)
     if (!filesResult.success || !filesResult.files) {
@@ -351,8 +322,7 @@ const executeFunctionCall = async (functionName, params, scheduleTime, timeStr, 
     }
 
   } else if (functionName === 'send_message_now') {
-    // 立即发送文字消息
-    console.log('[Renderer] 执行立即发送文字:', params)
+    console.log('[AI] send msg now:', params.targetUser)
 
     const result = await window.electronAPI.sendMessageNow(params.targetUser, params.content, currentUsername)
 

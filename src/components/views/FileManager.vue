@@ -160,9 +160,11 @@ const handleFileChange = async (file, uploadFiles) => {
         ElMessage.error(`上传失败: ${error.message}`)
       }
     }
+
+    // 每个文件处理完立即保存，防止并发覆盖
+    saveToStorage()
   }
   
-  saveToStorage()
   fileList.value = []
 }
 

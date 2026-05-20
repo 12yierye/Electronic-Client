@@ -2,8 +2,8 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { marked } from 'marked'
 
-// 配置marked选项
-marked.setOptions({
+// 配置marked选项 (v17+ 使用 marked.use 替代已废弃的 setOptions)
+marked.use({
   breaks: true,
   gfm: true
 })
@@ -22,10 +22,10 @@ export const useAIStore = defineStore('ai', () => {
         const result = await window.electronAPI.getCurrentModel()
         if (result.success) {
           currentModel.value = result.model
-          console.log('[AI Store] 当前模型:', result.model)
+          console.log('[AI Store] model:', result.model)
         }
       } catch (e) {
-        console.error('[AI Store] 获取模型失败:', e)
+        console.error('[AI Store] model fetch failed:', e)
       }
     }
   }

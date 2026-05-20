@@ -9,39 +9,36 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 app.setPath('userData', join(app.getPath('appData'), 'Electronic'))
 app.disableHardwareAcceleration()
 
-// 清理旧的缓存目录
+// Clean old cache on startup
 const cleanOldCache = () => {
   try {
     const userDataPath = app.getPath('userData')
     const cachePath = join(userDataPath, 'Cache')
     if (fs.existsSync(cachePath)) {
       fs.rmSync(cachePath, { recursive: true, force: true })
-      console.log('[Main] 旧缓存已清理')
+      console.log('[Main] old cache cleaned')
     }
   } catch (error) {
-    console.log('[Main] 清理缓存失败（忽略）:', error.message)
+    console.log('[Main] cache clean skipped:', error.message)
   }
 }
 
 cleanOldCache()
 
 let mainWindow = null
-const API_BASE = process.env.API_URL || 'http://192.168.61.129:3000'
-const DOC_SERVER = 'http://120.24.26.164'
-const LM_STUDIO_API = 'http://127.0.0.1:1234/v1'
+const API_BASE = process.env.API_URL || 'http://localhost:3000'
+const DOC_SERVER = process.env.DOC_SERVER || 'http://localhost:3000'
+const LM_STUDIO_API = process.env.LM_STUDIO_API || 'http://127.0.0.1:1234/v1'
 
-console.log('[Main] Electron 主进程启动')
-console.log('[Main] API 服务器地址:', API_BASE)
-console.log('[Main] LM Studio API 地址:', LM_STUDIO_API)
+console.log('[Main] starting, API:', API_BASE, 'LM Studio:', LM_STUDIO_API)
 
-// 检查是否需要禁用 GPU
+// GPU — disabled by default to avoid cache permission errors
 if (process.argv.includes('--disable-gpu') || process.argv.includes('--disable-gpu-renderer')) {
-  console.log('[Main] GPU 加速已通过命令行禁用')
+  console.log('[Main] GPU disabled via CLI')
   app.commandLine.appendSwitch('disable-gpu')
   app.commandLine.appendSwitch('disable-software-rasterizer')
 } else {
-  // 默认禁用 GPU 以避免缓存错误
-  console.log('[Main] 默认禁用 GPU 以避免缓存权限错误')
+  console.log('[Main] GPU disabled (default)')
   app.commandLine.appendSwitch('disable-gpu')
   app.commandLine.appendSwitch('disable-software-rasterizer')
 }
@@ -50,19 +47,16 @@ process.on('uncaughtException', (error) => {
   if (error.code === 'EPERM' && (error.message.includes('kill') || error.message.includes('not found'))) {
     return
   }
-  console.error('[Main] 未捕获的异常:', error)
+  console.error('[Main] uncaught exception:', error)
 })
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('[Main] 未处理的 Promise 拒绝:', reason)
+  console.error('[Main] unhandled rejection:', reason)
 })
 
 function createWindow() {
-  const isDev = process.env.VITE_DEV_SERVER_URL
-  const preloadPath = join(__dirname, isDev ? 'preload.cjs' : 'preload.js')
-  console.log('[Main] __dirname:', __dirname)
-  console.log('[Main] preload 路径:', preloadPath)
-  console.log('[Main] preload 文件存在:', fs.existsSync(preloadPath))
+  const preloadPath = join(__dirname, 'preload.cjs')
+  console.log('[Main] preload:', preloadPath, 'exists:', fs.existsSync(preloadPath))
   
   mainWindow = new BrowserWindow({
     title: 'Electronic',
@@ -84,11 +78,11 @@ function createWindow() {
   })
   
   mainWindow.webContents.on('did-finish-load', () => {
-    console.log('[Main] 页面加载完成')
+    console.log('[Main] page loaded')
   })
   
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDesc) => {
-    console.log('[Main] 页面加载失败:', errorCode, errorDesc)
+    console.log('[Main] page load failed:', errorCode, errorDesc)
   })
 
   const menu = Menu.buildFromTemplate([
@@ -120,18 +114,17 @@ function createWindow() {
     }
   })
   
-  // 延迟检查 preload 是否执行
+  // Check preload after a brief delay
   setTimeout(() => {
     mainWindow.webContents.executeJavaScript(`
-      console.log('[Renderer] electronAPI 存在:', typeof window.electronAPI)
-      console.log('[Renderer] electronAPI.aiChat:', typeof window.electronAPI?.aiChat)
+      console.log('[Renderer] electronAPI:', typeof window.electronAPI)
       if (window.electronAPI) {
-        console.log('[Renderer] 可用方法:', Object.keys(window.electronAPI).join(', '))
+        console.log('[Renderer] methods:', Object.keys(window.electronAPI).join(', '))
       }
       window.electronAPI && window.electronAPI.testAI ? 'PRELOAD_OK' : 'PRELOAD_MISSING'
     `).then(result => {
-      console.log('[Main] Preload 状态:', result)
-    }).catch(e => console.log('[Main] 检查失败:', e.message))
+      console.log('[Main] preload status:', result)
+    }).catch(e => console.log('[Main] preload check failed:', e.message))
   }, 2000)
 }
 
@@ -149,19 +142,12 @@ function createElectronWindow(URL) {
 async function validateLogin(username, password) {
   try {
     if (!username || !password) return { success: false, message: '用户名或密码不能为空' }
-    console.log('[Login] 尝试连接服务器:', API_BASE)
+    console.log('[Login]', username)
     const response = await axios.post(`${API_BASE}/login`, { username, password }, { timeout: 5000 })
-    console.log('[Login] 登录成功')
+    console.log('[Login] ok:', username)
     return response.data
   } catch (err) {
-    console.error('[Login] 错误:', err.message)
-    console.error('[Login] 错误详情:', {
-      code: err.code,
-      message: err.message,
-      status: err.response?.status,
-      statusText: err.response?.statusText,
-      baseURL: API_BASE
-    })
+    console.error('[Login] failed:', err.code, err.message)
     if (err.response) return { success: false, message: err.response.data.message || '登录失败' }
     if (err.request) {
       if (err.code === 'ECONNREFUSED') {
@@ -205,14 +191,18 @@ ipcMain.handle('register', async (event, userData) => {
 
 ipcMain.on('logout', () => {
   if (mainWindow) {
+    // 等待旧窗口完全关闭后再创建新窗口，避免竞态
+    mainWindow.once('closed', () => {
+      mainWindow = null
+      createWindow()
+    })
     mainWindow.close()
-    mainWindow = null
+  } else {
+    createWindow()
   }
   global.userInfo = null
   // 退出登录时清除自动登录凭证，避免退出后又自动登录
   // 渲染进程会自动清除 localStorage
-  // 退出登录不是结束进程，而是重新打开登录窗口
-  createWindow()
 })
 ipcMain.on('exit-app', () => app.quit())
 ipcMain.on('set-user', (event, userInfo) => { global.userInfo = userInfo })
@@ -285,13 +275,7 @@ ipcMain.handle('delete-file', async (event, username, filename) => {
 ipcMain.handle('get-user-list', async () => {
   try { return (await axios.get(`${API_BASE}/users`)).data }
   catch (error) {
-    console.error('[Get User List] 错误:', error.message)
-    console.error('[Get User List] 详细信息:', {
-      baseURL: API_BASE,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      code: error.code
-    })
+    console.error('[Get User List] failed:', error.message)
     return { success: false, message: error.message }
   }
 })
@@ -304,18 +288,12 @@ ipcMain.handle('get-friends-list', async (event, username) => {
 // 测试服务器连接
 ipcMain.handle('test-server-connection', async () => {
   try {
-    console.log('[Test Connection] 尝试连接到:', API_BASE)
+    console.log('[Test Connection] probing', API_BASE)
     const response = await axios.get(`${API_BASE}/health`, { timeout: 3000 })
-    console.log('[Test Connection] 成功:', response.data)
+    console.log('[Test Connection] ok')
     return { success: true, message: '连接成功', data: response.data }
   } catch (error) {
-    console.error('[Test Connection] 失败:', error.message)
-    console.error('[Test Connection] 错误详情:', {
-      code: error.code,
-      message: error.message,
-      status: error.response?.status,
-      baseURL: API_BASE
-    })
+    console.error('[Test Connection] failed:', error.message)
     return {
       success: false,
       message: `连接失败 (${error.code})`,
@@ -327,6 +305,7 @@ ipcMain.handle('test-server-connection', async () => {
     }
   }
 })
+
 
 // 获取错误提示
 function getErrorHint(errorCode) {
@@ -416,39 +395,29 @@ ipcMain.handle('create-credential', async (event, username) => {
   } catch (error) { return { success: false, message: error.message } }
 })
 
-// 本地 AI 聊天 (LM Studio)
-console.log('[Main] 注册 ai-chat IPC 处理程序')
+// Local AI chat (LM Studio)
+console.log('[Main] IPC handlers registered')
 
-// 非流式响应（保留兼容）
+// Non-streaming response (kept for compatibility)
 ipcMain.handle('ai-chat', async (event, userMessage) => {
-  console.log('[AI Chat] 收到调用，消息:', userMessage)
+  console.log('[AI Chat] msg:', userMessage.substring(0, 80))
 
-  // 自动获取当前运行的模型
   let currentModel = null
   try {
-    console.log('[AI Chat] 正在获取 LM Studio 模型...')
-    // 尝试 /v1/models 端点
     const modelResponse = await axios.get(`${LM_STUDIO_API}/models`, { timeout: 5000 })
-    console.log('[AI Chat] LM Studio 响应状态:', modelResponse.status)
-    console.log('[AI Chat] LM Studio 响应数据:', JSON.stringify(modelResponse.data))
-    
-    if (modelResponse.data && modelResponse.data.data && modelResponse.data.data.length > 0) {
-      // 取第一个模型
+    if (modelResponse.data?.data?.length > 0) {
       currentModel = modelResponse.data.data[0].id
-      console.log('[AI Chat] 使用当前模型:', currentModel)
+      console.log('[AI Chat] model:', currentModel)
     } else {
-      console.log('[AI Chat] 未检测到运行中的模型')
+      console.log('[AI Chat] no model loaded')
       return { success: false, message: '请先在 LM Studio 中加载模型' }
     }
   } catch (error) {
-    console.log('[AI Chat] 获取模型失败:', error.message)
-    console.log('[AI Chat] 错误详情:', error.response?.data)
+    console.log('[AI Chat] model fetch failed:', error.message)
     return { success: false, message: '无法连接到 LM Studio，请确保 LM Studio 正在运行' }
   }
 
   try {
-    console.log('[AI Chat] 发送消息:', userMessage)
-    // 基础请求参数
     const requestBody = {
       model: currentModel,
       messages: [
@@ -457,75 +426,56 @@ ipcMain.handle('ai-chat', async (event, userMessage) => {
       ],
       max_tokens: 16384
     }
-
-    // Qwen3 系列模型可能不支持 temperature 参数
     if (!currentModel.toLowerCase().includes('qwen3') && !currentModel.toLowerCase().includes('qwen')) {
       requestBody.temperature = 0.7
     }
-
-    // Qwen3 模型添加额外参数
     if (currentModel.toLowerCase().includes('qwen3') || currentModel.toLowerCase().includes('qwen')) {
-      requestBody.extra_body = {
-        enable_thinking: true,
-        thinking_budget: 4096
-      }
+      requestBody.extra_body = { enable_thinking: true, thinking_budget: 4096 }
     }
 
-    console.log('[AI Chat] 请求体:', JSON.stringify(requestBody, null, 2))
     const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, requestBody, { timeout: 120000 })
-    console.log('[AI Chat] LM Studio 响应状态:', response.status)
-    console.log('[AI Chat] LM Studio 响应数据:', JSON.stringify(response.data, null, 2))
     const reply = response.data.choices[0].message.content.trim()
-    console.log('[AI Chat] 提取的回复:', reply)
+    console.log('[AI Chat] reply length:', reply.length)
     return { success: true, reply }
   } catch (error) {
-    console.error('[AI Chat] 错误:', error.message)
-    console.error('[AI Chat] 错误详情:', error.response?.data || error.request || error)
+    console.error('[AI Chat] error:', error.message)
     return { success: false, message: error.message }
   }
 })
 
-// 获取当前运行的模型
+// Get current running model
 ipcMain.handle('get-current-model', async () => {
   try {
-    // 使用 /v1/models 端点
     const response = await axios.get(`${LM_STUDIO_API}/models`, { timeout: 5000 })
-    console.log('[Get Current Model] LM Studio 响应:', JSON.stringify(response.data))
-    if (response.data && response.data.data && response.data.data.length > 0) {
+    if (response.data?.data?.length > 0) {
       const model = response.data.data[0].id
-      console.log('[Get Current Model] 当前模型:', model)
+      console.log('[GetModel]', model)
       return { success: true, model }
     }
     return { success: false, message: '未加载模型' }
   } catch (error) {
-    console.error('[Get Current Model] 错误:', error.message)
+    console.error('[GetModel] err:', error.message)
     return { success: false, message: error.message }
   }
 })
 
-// 流式响应 AI 聊天
+// Streaming AI chat
 ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
-  console.log('[AI Chat Stream] 收到调用，消息:', userMessage)
+  console.log('[AI Stream] msg:', userMessage.substring(0, 80))
 
-  // 自动获取当前运行的模型
   let currentModel = null
   try {
-    console.log('[AI Chat Stream] 正在获取 LM Studio 模型...')
-    // 尝试 /v1/models 端点
     const modelResponse = await axios.get(`${LM_STUDIO_API}/models`, { timeout: 5000 })
-    console.log('[AI Chat Stream] LM Studio 响应状态:', modelResponse.status)
-    console.log('[AI Chat Stream] LM Studio 响应数据:', JSON.stringify(modelResponse.data))
     
     if (modelResponse.data && modelResponse.data.data && modelResponse.data.data.length > 0) {
       currentModel = modelResponse.data.data[0].id
-      console.log('[AI Chat Stream] 使用当前模型:', currentModel)
+      console.log('[AI Stream] model:', currentModel)
     } else {
-      console.log('[AI Chat Stream] 未检测到运行中的模型')
+      console.log('[AI Stream] no model loaded')
       return { success: false, message: '请先在 LM Studio 中加载模型' }
     }
   } catch (error) {
-    console.log('[AI Chat Stream] 获取模型失败:', error.message)
-    console.log('[AI Chat Stream] 错误详情:', error.response?.data)
+    console.log('[AI Stream] model fetch failed:', error.message)
     return { success: false, message: '无法连接到 LM Studio，请确保 LM Studio 正在运行' }
   }
 
@@ -614,50 +564,52 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
     return new Promise((resolve) => {
       let fullReply = ''
       let fullReasoning = ''
+      let streamBuffer = '' // 缓冲区：处理跨 chunk 的 SSE 数据片段
 
       response.data.on('data', (chunk) => {
-        const lines = chunk.toString().split('\n').filter(line => line.trim() !== '')
+        streamBuffer += chunk.toString()
+        // 只在遇到完整行时才处理（以 \n\n 或最后一个完整 \n 分割）
+        const parts = streamBuffer.split('\n')
+        // 最后一个元素可能是不完整的行，保留在缓冲区
+        streamBuffer = parts.pop() || ''
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') {
-              // 流结束
-              event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply, reasoning: fullReasoning })
-              resolve({ success: true, reply: fullReply, reasoning: fullReasoning })
-              return
+        for (const line of parts) {
+          const trimmedLine = line.trim()
+          if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue
+
+          const data = trimmedLine.slice(6)
+          if (data === '[DONE]') {
+            // 流结束
+            event.sender.send('ai-chat-stream-chunk', { done: true, content: fullReply, reasoning: fullReasoning })
+            resolve({ success: true, reply: fullReply, reasoning: fullReasoning })
+            return
+          }
+
+          try {
+            const parsed = JSON.parse(data)
+            const content = parsed.choices?.[0]?.delta?.content || ''
+            const reasoning = parsed.choices?.[0]?.delta?.reasoning_content || ''
+
+            if (reasoning) {
+              fullReasoning += reasoning
+              event.sender.send('ai-chat-stream-chunk', { reasoning })
             }
-
-            try {
-              const parsed = JSON.parse(data)
-              const content = parsed.choices?.[0]?.delta?.content || ''
-              const reasoning = parsed.choices?.[0]?.delta?.reasoning_content || ''
-
-              if (reasoning) {
-                fullReasoning += reasoning
-                // 发送思考内容给前端
-                event.sender.send('ai-chat-stream-chunk', { reasoning })
-              }
-              if (content) {
-                fullReply += content
-                // 发送增量内容给前端
-                event.sender.send('ai-chat-stream-chunk', { content })
-              }
-            } catch (e) {
-              // 忽略解析错误
+            if (content) {
+              fullReply += content
+              event.sender.send('ai-chat-stream-chunk', { content })
             }
+          } catch (e) {
+            console.warn('[AI Stream] JSON parse failed:', data.substring(0, 80))
           }
         }
       })
 
       response.data.on('end', () => {
         if (fullReply || fullReasoning) {
-          // 检测模型返回的函数名
           const functionMatch = fullReply.match(/FUNCTION:\s*(schedule_file_send|schedule_message_send|send_file_now|send_message_now)/)
           if (functionMatch) {
             const functionName = functionMatch[1]
-            console.log('[AI Chat Stream] 检测到函数调用:', functionName)
-            // 通知前端执行函数
+            console.log('[AI Stream] function call:', functionName)
             event.sender.send('ai-chat-stream-chunk', { 
               done: true, 
               content: fullReply,
@@ -672,26 +624,25 @@ ipcMain.handle('ai-chat-stream', async (event, userMessage) => {
       })
 
       response.data.on('error', (err) => {
-        console.error('[AI Chat Stream] 流错误:', err.message)
+        console.error('[AI Stream] stream error:', err.message)
         event.sender.send('ai-chat-stream-error', { message: err.message })
         resolve({ success: false, message: err.message })
       })
     })
   } catch (error) {
-    console.error('[AI Chat Stream] 错误:', error.message)
+    console.error('[AI Stream] error:', error.message)
     event.sender.send('ai-chat-stream-error', { message: error.message })
     return { success: false, message: error.message }
   }
 })
 
-// 本地 AI 函数生成 (LM Studio)
+// Local AI function generation (LM Studio)
 ipcMain.handle('generate-function', async (event, prompt) => {
   try {
-    // 先获取当前运行的模型
     let currentModel = null
     try {
       const modelResponse = await axios.get(`${LM_STUDIO_API}/models`, { timeout: 5000 })
-      if (modelResponse.data && modelResponse.data.data && modelResponse.data.data.length > 0) {
+      if (modelResponse.data?.data?.length > 0) {
         currentModel = modelResponse.data.data[0].id
       } else {
         return { success: false, message: '请先在 LM Studio 中加载模型' }
@@ -700,8 +651,7 @@ ipcMain.handle('generate-function', async (event, prompt) => {
       return { success: false, message: '无法连接到 LM Studio' }
     }
 
-    console.log('[Generate Function] 使用模型:', currentModel)
-    console.log('[Generate Function] 发送提示词:', prompt)
+    console.log('[GenFunc] model:', currentModel, 'prompt:', prompt.substring(0, 80))
     const requestBody = {
       model: currentModel,
       messages: [
@@ -710,22 +660,120 @@ ipcMain.handle('generate-function', async (event, prompt) => {
       ],
       temperature: 0.3
     }
-    console.log('[Generate Function] 请求体:', JSON.stringify(requestBody, null, 2))
     const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, requestBody, { timeout: 120000 })
-    console.log('[Generate Function] LM Studio 响应状态:', response.status)
-    console.log('[Generate Function] LM Studio 响应数据:', JSON.stringify(response.data, null, 2))
     const code = response.data.choices[0].message.content.trim()
-    console.log('[Generate Function] 提取的代码:', code)
+    console.log('[GenFunc] code length:', code.length)
     return { success: true, code }
   } catch (error) {
-    console.error('[Generate Function] 错误:', error.message)
-    console.error('[Generate Function] 错误详情:', error.response?.data || error.request || error)
+    console.error('[GenFunc] error:', error.message)
     return { success: false, message: error.message }
   }
 })
 
 // 定时任务存储
 const scheduledTasks = new Map()
+const SCHEDULED_TASKS_FILE = join(app.getPath('userData'), 'scheduled-tasks.json')
+
+// 持久化定时任务到文件
+const saveScheduledTasks = () => {
+  try {
+    const tasksData = []
+    for (const [taskId, taskInfo] of scheduledTasks) {
+      tasksData.push({
+        taskId,
+        scheduleTime: taskInfo.scheduleTime,
+        targetUser: taskInfo.targetUser,
+        filename: taskInfo.filename,
+        content: taskInfo.content,
+        currentUser: taskInfo.currentUser,
+        type: taskInfo.type
+      })
+    }
+    fs.writeFileSync(SCHEDULED_TASKS_FILE, JSON.stringify(tasksData, null, 2))
+    console.log('[Scheduled] saved', tasksData.length, 'tasks')
+  } catch (err) {
+    console.error('[Scheduled] save failed:', err.message)
+  }
+}
+
+// Restore scheduled tasks from file
+const restoreScheduledTasks = () => {
+  try {
+    if (!fs.existsSync(SCHEDULED_TASKS_FILE)) return
+    const raw = fs.readFileSync(SCHEDULED_TASKS_FILE, 'utf-8')
+    const tasksData = JSON.parse(raw)
+    console.log('[Scheduled] restoring', tasksData.length, 'tasks')
+
+    const now = Date.now()
+    for (const taskData of tasksData) {
+      const scheduledTime = new Date(taskData.scheduleTime).getTime()
+      const delay = scheduledTime - now
+
+      if (delay <= 0) {
+        console.log('[Scheduled] skip expired:', taskData.taskId)
+        continue
+      }
+
+      const task = setTimeout(async () => {
+        try {
+          await executeScheduledTask(taskData)
+          scheduledTasks.delete(taskData.taskId)
+          saveScheduledTasks()
+        } catch (err) {
+          console.error('[Scheduled] task failed:', taskData.taskId, err.message)
+        }
+      }, delay)
+
+      scheduledTasks.set(taskData.taskId, {
+        task,
+        scheduleTime: taskData.scheduleTime,
+        targetUser: taskData.targetUser,
+        filename: taskData.filename,
+        content: taskData.content,
+        currentUser: taskData.currentUser,
+        type: taskData.type
+      })
+      console.log('[Scheduled] restored:', taskData.taskId, '@', taskData.scheduleTime)
+    }
+  } catch (err) {
+    console.error('[Scheduled] restore failed:', err.message)
+  }
+}
+
+// 执行定时任务的具体逻辑
+const executeScheduledTask = async (taskData) => {
+  if (taskData.type === 'file') {
+    // 下载文件然后发送给目标用户
+    const downloadResponse = await axios.get(
+      `${API_BASE}/user/download?username=${taskData.currentUser}&filename=${taskData.filename}`,
+      { responseType: 'arraybuffer' }
+    )
+    await axios.post(
+      `${API_BASE}/user/upload?username=${taskData.targetUser}&filename=${taskData.filename}`,
+      downloadResponse.data,
+      { headers: { 'Content-Type': 'application/octet-stream' } }
+    )
+    const chatMessageData = {
+      sender: taskData.currentUser,
+      receiver: taskData.targetUser,
+      content: `[定时发送文件] ${taskData.filename}`,
+      type: 'file',
+      fileInfo: { filename: taskData.filename, isScheduled: true }
+    }
+    await axios.post(`${API_BASE}/chat/send`, chatMessageData)
+    console.log('[Scheduled] file sent:', taskData.filename, '->', taskData.targetUser)
+  } else if (taskData.type === 'message') {
+    const chatMessageData = {
+      sender: taskData.currentUser,
+      receiver: taskData.targetUser,
+      content: taskData.content,
+      type: 'text',
+      isScheduled: true
+    }
+    await axios.post(`${API_BASE}/chat/send`, chatMessageData)
+    console.log('[Scheduled] msg sent:', taskData.content?.substring(0, 30), '->', taskData.targetUser)
+  }
+}
 
 // 获取用户文件列表
 ipcMain.handle('get-user-files', async (event, username) => {
@@ -733,7 +781,7 @@ ipcMain.handle('get-user-files', async (event, username) => {
     const response = await axios.get(`${API_BASE}/user/files/${username}`)
     return response.data
   } catch (error) {
-    console.error('[Get User Files] 错误:', error.message)
+    console.error('[GetUserFiles] err:', error.message)
     return { success: false, message: error.message }
   }
 })
@@ -741,7 +789,7 @@ ipcMain.handle('get-user-files', async (event, username) => {
 // 定时发送文件
 ipcMain.handle('schedule-file-send', async (event, scheduleTime, targetUser, filename, currentUser) => {
   try {
-    console.log('[Schedule File Send] 定时发送文件:', { scheduleTime, targetUser, filename, currentUser })
+    console.log('[SchedFile]', targetUser, filename, '@', scheduleTime)
 
     // 获取发送者的文件
     const filesResponse = await axios.get(`${API_BASE}/user/files/${currentUser}`)
@@ -761,57 +809,36 @@ ipcMain.handle('schedule-file-send', async (event, scheduleTime, targetUser, fil
     }
 
     // 创建定时任务
-    const taskId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const taskId = `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+    const taskData = {
+      type: 'file',
+      scheduleTime,
+      targetUser,
+      filename,
+      currentUser
+    }
     const task = setTimeout(async () => {
       try {
-        // 1. 下载文件然后发送给目标用户
-        const downloadResponse = await axios.get(
-          `${API_BASE}/user/download?username=${currentUser}&filename=${filename}`,
-          { responseType: 'arraybuffer' }
-        )
-
-        // 2. 上传到目标用户
-        await axios.post(
-          `${API_BASE}/user/upload?username=${targetUser}&filename=${filename}`,
-          downloadResponse.data,
-          { headers: { 'Content-Type': 'application/octet-stream' } }
-        )
-
-        console.log('[Schedule File Send] 文件发送成功:', filename, '->', targetUser)
-
-        // 3. 发送聊天消息记录（双方都能看到）
-        const chatMessageData = {
-          sender: currentUser,
-          receiver: targetUser,
-          content: `[定时发送文件] ${filename}`,
-          type: 'file',
-          fileInfo: {
-            filename: filename,
-            isScheduled: true
-          }
-        }
-        await axios.post(`${API_BASE}/chat/send`, chatMessageData)
-
-        console.log('[Schedule File Send] 聊天记录已创建')
+        await executeScheduledTask(taskData)
+        console.log('[SchedFile] done:', filename, '->', targetUser)
         scheduledTasks.delete(taskId)
+        saveScheduledTasks()
       } catch (err) {
-        console.error('[Schedule File Send] 发送失败:', err.message)
+        console.error('[SchedFile] failed:', err.message)
         scheduledTasks.delete(taskId)
+        saveScheduledTasks()
       }
     }, delay)
 
     scheduledTasks.set(taskId, {
       task,
-      scheduleTime,
-      targetUser,
-      filename,
-      currentUser
+      ...taskData
     })
 
-    console.log('[Schedule File Send] 任务已创建:', taskId, '将在', scheduleTime, '执行')
+    console.log('[SchedFile] task created:', taskId, '@', scheduleTime)
     return { success: true, taskId, scheduleTime }
   } catch (error) {
-    console.error('[Schedule File Send] 错误:', error.message)
+    console.error('[SchedFile] error:', error.message)
     return { success: false, message: error.message }
   }
 })
@@ -819,7 +846,7 @@ ipcMain.handle('schedule-file-send', async (event, scheduleTime, targetUser, fil
 // 定时发送文字消息
 ipcMain.handle('schedule-message-send', async (event, scheduleTime, targetUser, content, currentUser) => {
   try {
-    console.log('[Schedule Message Send] 定时发送消息:', { scheduleTime, targetUser, content, currentUser })
+    console.log('[SchedMsg]', targetUser, '@', scheduleTime)
 
     // 计算延迟时间
     const delay = new Date(scheduleTime).getTime() - Date.now()
@@ -828,40 +855,38 @@ ipcMain.handle('schedule-message-send', async (event, scheduleTime, targetUser, 
     }
 
     // 创建定时任务
-    const taskId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const taskId = `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+    const taskData = {
+      type: 'message',
+      scheduleTime,
+      targetUser,
+      content,
+      currentUser
+    }
     const task = setTimeout(async () => {
       try {
-        // 发送聊天消息（双方都能看到）
-        const chatMessageData = {
-          sender: currentUser,
-          receiver: targetUser,
-          content: content,
-          type: 'text',
-          isScheduled: true
-        }
-        await axios.post(`${API_BASE}/chat/send`, chatMessageData)
-
-        console.log('[Schedule Message Send] 消息发送成功:', content, '->', targetUser)
+        await executeScheduledTask(taskData)
+        console.log('[SchedMsg] done:', targetUser)
         scheduledTasks.delete(taskId)
+        saveScheduledTasks()
       } catch (err) {
-        console.error('[Schedule Message Send] 发送失败:', err.message)
+        console.error('[SchedMsg] failed:', err.message)
         scheduledTasks.delete(taskId)
+        saveScheduledTasks()
       }
     }, delay)
 
     scheduledTasks.set(taskId, {
       task,
-      scheduleTime,
-      targetUser,
-      content,
-      currentUser,
-      type: 'message'
+      ...taskData
     })
 
-    console.log('[Schedule Message Send] 任务已创建:', taskId, '将在', scheduleTime, '执行')
+    saveScheduledTasks()
+
+    console.log('[SchedMsg] task created:', taskId, '@', scheduleTime)
     return { success: true, taskId, scheduleTime }
   } catch (error) {
-    console.error('[Schedule Message Send] 错误:', error.message)
+    console.error('[SchedMsg] error:', error.message)
     return { success: false, message: error.message }
   }
 })
@@ -869,7 +894,7 @@ ipcMain.handle('schedule-message-send', async (event, scheduleTime, targetUser, 
 // 立即发送文件（无定时）
 ipcMain.handle('send-file-now', async (event, targetUser, filename, currentUser) => {
   try {
-    console.log('[Send File Now] 立即发送文件:', { targetUser, filename, currentUser })
+    console.log('[SendNow] file:', filename, '->', targetUser)
 
     // 获取发送者的文件
     const filesResponse = await axios.get(`${API_BASE}/user/files/${currentUser}`)
@@ -910,10 +935,10 @@ ipcMain.handle('send-file-now', async (event, targetUser, filename, currentUser)
     }
     await axios.post(`${API_BASE}/chat/send`, chatMessageData)
 
-    console.log('[Send File Now] 聊天记录已创建')
+    console.log('[SendNow] file done:', filename, '->', targetUser)
     return { success: true, message: `文件 "${filename}" 已发送给 "${targetUser}"` }
   } catch (error) {
-    console.error('[Send File Now] 错误:', error.message)
+    console.error('[SendNow] file error:', error.message)
     return { success: false, message: error.message }
   }
 })
@@ -921,7 +946,7 @@ ipcMain.handle('send-file-now', async (event, targetUser, filename, currentUser)
 // 立即发送文字消息（无定时）
 ipcMain.handle('send-message-now', async (event, targetUser, content, currentUser) => {
   try {
-    console.log('[Send Message Now] 立即发送消息:', { targetUser, content, currentUser })
+    console.log('[SendNow] msg:', targetUser)
 
     // 发送聊天消息（双方都能看到）
     const chatMessageData = {
@@ -933,10 +958,10 @@ ipcMain.handle('send-message-now', async (event, targetUser, content, currentUse
     }
     await axios.post(`${API_BASE}/chat/send`, chatMessageData)
 
-    console.log('[Send Message Now] 消息发送成功:', content, '->', targetUser)
+    console.log('[SendNow] msg done:', targetUser)
     return { success: true, message: `消息已发送给 "${targetUser}"` }
   } catch (error) {
-    console.error('[Send Message Now] 错误:', error.message)
+    console.error('[SendNow] msg error:', error.message)
     return { success: false, message: error.message }
   }
 })
@@ -1007,12 +1032,13 @@ app.setUserTasks([
   { program: process.execPath, arguments: '--relaunch', iconPath: process.execPath, iconIndex: 0, title: 'Relaunch', description: 'Relaunch Electronic' }
 ])
 
-console.log('[Main] 准备启动应用...')
+console.log('[Main] starting app...')
 app.whenReady().then(() => {
-  console.log('[Main] App ready，创建窗口...')
+  console.log('[Main] app ready')
+  restoreScheduledTasks()
   createWindow()
 }).catch(err => {
-  console.error('[Main] App ready 错误:', err)
+  console.error('[Main] app ready error:', err)
 })
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
