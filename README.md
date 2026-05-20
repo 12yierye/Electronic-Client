@@ -1,199 +1,216 @@
-# Electronic - 项目结构说明
+# Electronic - 个人AI助手桌面应用
 
 ## 项目概述
-Electronic 是一个基于 Electron 的个人AI助手应用,提供AI对话、好友聊天、文件管理等功能。
+
+Electronic 是一个基于 **Vue 3 + Electron** 构建的桌面端个人 AI 助手应用，集成了 AI 智能对话、即时通讯（公网 + 内网）、文件管理、定时任务等功能。
 
 ## 项目结构
 
 ```
-e:/Electron/
-├── html/                    # HTML页面文件
-│   ├── login.html          # 登录页面
-│   ├── register.html       # 注册页面
-│   └── mainPage.html       # 主页面(已移除学生端页面)
+Electronic-Client/
+├── electron/                    # Electron 主进程
+│   ├── index.js                 # 主进程入口
+│   ├── config.js                # 配置常量 (API 地址、模型配置)
+│   ├── window.js                # 窗口创建与管理
+│   ├── preload.cjs              # 预加载脚本 (contextBridge)
+│   ├── ipc/                     # IPC 通信模块
+│   │   ├── ai.js                # AI 聊天 (LM Studio 集成)
+│   │   ├── auth.js              # 用户认证
+│   │   ├── file.js              # 文件操作
+│   │   ├── task.js              # 定时任务
+│   │   └── user.js              # 用户/好友/聊天
+│   └── services/                # 服务模块
+│       ├── scheduledTasks.js    # 定时任务持久化
+│       └── serverApi.js         # 服务端 API 封装
 │
-├── scripts/                # JavaScript脚本文件
-│   ├── ai.js              # AI对话功能模块
-│   ├── chat.js            # 聊天系统功能模块
-│   ├── files.js           # 文件管理功能模块
-│   ├── login.js           # 登录功能模块
-│   ├── mainPage.js        # 主页面控制模块
-│   └── settings.js        # 设置功能模块
+├── src/                         # Vue 3 前端源码
+│   ├── main.js                  # 应用入口
+│   ├── App.vue                  # 根组件 (动态视图切换)
+│   ├── assets/
+│   │   └── styles/
+│   │       └── main.scss        # 全局样式 + CSS 变量 (暗/亮主题)
+│   ├── components/
+│   │   ├── common/
+│   │   │   └── AIInputFooter.vue  # AI 聊天底部输入栏
+│   │   ├── layout/
+│   │   │   ├── AppNavigation.vue  # 顶部导航栏
+│   │   │   └── AppSidebar.vue     # 侧边栏 (用户信息/连接状态)
+│   │   └── views/
+│   │       ├── AIChat.vue         # AI 对话视图
+│   │       ├── ChatRoom.vue       # 聊天室视图
+│   │       ├── FileManager.vue    # 文件管理视图
+│   │       ├── Login.vue          # 登录/注册视图
+│   │       └── Settings.vue       # 设置视图
+│   ├── composables/             # 组合式函数
+│   │   ├── useChatRoom.js       # 聊天室核心业务逻辑
+│   │   ├── useI18n.js           # 国际化
+│   │   └── useScheduledTask.js  # 定时任务意图解析
+│   ├── stores/                  # Pinia 状态管理
+│   │   ├── ai.js                # AI 聊天状态
+│   │   ├── settings.js          # 设置状态 (主题/语言)
+│   │   └── user.js              # 用户状态
+│   └── utils/
+│       ├── i18n.js              # 多语言翻译数据 (中/英/日)
+│       ├── mockApi.js           # 浏览器 Mock API (开发用)
+│       └── pinyin.js            # 拼音搜索匹配
 │
-├── styles/                # CSS样式文件
-│   ├── ai.css            # AI对话样式
-│   ├── chat.css          # 聊天界面样式
-│   ├── files.css         # 文件管理样式
-│   ├── login.css         # 登录页面样式
-│   ├── main.css          # 主页面通用样式
-│   └── settings.css      # 设置页面样式
-│
-├── res/                   # 资源文件
-│   ├── Head.png          # 默认头像
-│   ├── Send2.png         # 发送按钮图标
-│   ├── Upload1.png       # 上传按钮图标
-│   └── ...               # 其他资源文件
-│
-├── index.js              # Electron主进程入口文件
-├── preload.js            # 预加载脚本
-├── package.json          # 项目配置文件
-├── package-lock.json     # 依赖版本锁定文件
-└── 关于.md               # 项目部署说明文档
+├── index.html                   # HTML 入口
+├── vite.config.js               # Vite 构建配置
+├── package.json                 # 项目配置
+└── res/                         # 静态资源 (图标/图片)
 ```
-
-## 主要功能模块
-
-### 1. AI对话模块 (ai.js)
-- 提供与AI的对话功能
-- 支持用户消息和AI回复的显示
-- 自动问候语功能
-- 多语言支持
-
-### 2. 聊天系统模块 (chat.js)
-- 好友管理(添加、移除、星标)
-- 好友申请(发送、接收、处理)
-- 实时聊天功能
-- 聊天记录管理
-- 搜索用户功能
-
-### 3. 文件管理模块 (files.js)
-- 文件上传功能
-- 文件下载功能
-- 文件删除功能
-- 文件列表显示
-- 与服务器同步文件
-
-### 4. 设置模块 (settings.js)
-- 主题切换(深色/浅色)
-- 语言切换(中文/英文)
-- 用户偏好设置
-
-### 5. 主页面控制 (mainPage.js)
-- 页面导航管理
-- 用户信息显示
-- 侧边栏管理
-- 登出功能
-- 服务器连接监控
 
 ## 技术栈
 
-### 前端技术
-- HTML5
-- CSS3 (支持深色/浅色主题)
-- JavaScript (ES6+)
+### 前端
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Vue 3 | ^3.4 | 前端框架 (Composition API + `<script setup>`) |
+| Element Plus | ^2.5 | UI 组件库 |
+| Pinia | ^2.1 | 状态管理 |
+| Vite | ^5.0 | 构建工具 |
+| Sass | ^1.69 | CSS 预处理器 |
+| marked | ^17.0 | Markdown 渲染 (AI 回复) |
+| Axios | ^1.6 | HTTP 客户端 |
 
-### 后端技术
-- Node.js
-- Electron (桌面应用框架)
-- Express (Web服务器)
-- Socket.IO (实时通信)
-- Axios (HTTP客户端)
+### 桌面端 & 后端
+| 技术 | 用途 |
+|------|------|
+| Electron 28 | 桌面应用框架 |
+| vite-plugin-electron | Vite + Electron 集成 |
+| LM Studio API | 本地 AI 大模型 (OpenAI 兼容接口) |
+| Express + Socket.IO | 后端服务器 |
 
-## API端点
+## 核心功能
 
-### 用户相关
-- `POST /login` - 用户登录
-- `POST /register` - 用户注册
-- `GET /users` - 获取用户列表
-- `GET /users/search?q=` - 搜索用户
+### AI 对话
+- 集成 LM Studio 本地大模型，支持流式输出
+- Markdown 实时渲染回复内容
+- 思考内容展开/折叠
+- 自动问候语生成
 
-### 好友相关
-- `GET /users/friends?username=` - 获取好友列表
-- `POST /users/friends/add` - 添加好友
-- `POST /users/friends/remove` - 移除好友
-- `POST /users/star` - 星标用户
-- `GET /users/starred?username=` - 获取星标用户列表
+### 聊天室
+- **双模式**: 公网模式 (通过后端服务器) + 内网模式 (局域网直连)
+- 好友管理: 添加、删除、星标
+- 好友申请: 发送、接收、审批
+- **群聊功能**: 内网模式下支持创建/解散群聊
+- **拼音搜索**: 好友列表支持拼音模糊匹配
+- 图片消息支持
 
-### 好友申请相关
-- `POST /friends/requests/send` - 发送好友申请
-- `GET /friends/requests?username=&type=` - 获取好友申请列表
-- `POST /friends/requests/handle` - 处理好友申请
+### 文件管理
+- 文件上传 (支持拖拽)
+- 文件下载与删除
+- localStorage 缓存文件列表
 
-### 聊天相关
-- `POST /chat/send` - 发送聊天消息
-- `GET /chat/messages?sender=&receiver=` - 获取聊天记录
+### 定时任务
+- AI 自然语言意图解析 (如 "15:30 向张三发送 report.docx")
+- 定时发送文件/消息
+- 任务持久化与恢复
 
-### 文件相关
-- `GET /user/files?username=` - 获取文件列表
-- `POST /user/upload?username=&filename=` - 上传文件
-- `GET /user/download/:username/:filename` - 下载文件
-- `DELETE /user/file/:username/:filename` - 删除文件
+### 系统特性
+- **暗/亮主题**: CSS 变量驱动，一键切换
+- **多语言**: 简体中文 / English / 日本語
+- **自动登录**: 30 天凭证有效
+- **心跳检测**: 每 5 秒检测连接延迟与丢包率
 
-## 代码规范
+## 架构设计
 
-### 命名规范
-- 文件名: 使用小写字母和连字符 (kebab-case)
-- 变量名: 使用驼峰命名法 (camelCase)
-- 常量名: 使用大写字母和下划线 (UPPER_SNAKE_CASE)
-- 函数名: 使用驼峰命名法,动词开头
-- 类名: 使用帕斯卡命名法 (PascalCase)
+### 数据流
 
-### 代码格式
-- 使用4空格缩进
-- 每行最大长度120字符
-- 运算符前后添加空格
-- 逗号后添加空格
-- 避免一行多语句
-- 适当添加注释说明功能
+```
+Vue 3 前端界面
+    ↓ window.electronAPI (contextBridge)
+Electron 主进程 (IPC Handlers)
+    ↓ Axios HTTP
+┌───────────────────┬─────────────────────────┐
+│  后端服务器         │  LM Studio 本地 API      │
+│  (127.0.0.1:3000) │  (127.0.0.1:1234/v1)    │
+│  用户/好友/聊天/文件  │  AI 大模型推理            │
+└───────────────────┴─────────────────────────┘
+```
 
-### 注释规范
-- 文件头部添加文件功能说明
-- 复杂逻辑添加详细注释
-- 函数添加JSDoc注释说明参数和返回值
-- 重要代码行添加行内注释
+### 开发模式
 
-## 优化说明
+浏览器开发模式下，`mockApi.js` 自动注入 mock `electronAPI`，无需启动 Electron 和后端服务器即可进行前端开发。
 
-### 已完成的优化
-1. ✅ 删除学生端相关文件
-2. ✅ 清理主入口文件中的学生端逻辑
-3. ✅ 将压缩的代码拆分为多行,提高可读性
-4. ✅ 简化CSS样式,添加详细注释
-5. ✅ 简化JavaScript逻辑,移除冗余代码
-6. ✅ 统一代码风格和命名规范
-7. ✅ 添加必要的注释说明功能
+### 视图切换
 
-### 代码可读性改进
-- 将多行属性拆分为单行
-- 添加清晰的功能注释
-- 优化代码缩进和格式
-- 移除不必要的空行
-- 统一使用一致的命名规范
+采用动态组件 `<component :is="">` 手动控制视图切换，未使用 Vue Router。
 
-## 启动说明
+## 快速开始
 
-### 客户端启动
+### 环境要求
+
+- Node.js 22.20+ (LTS)
+- npm 10+
+
+### 安装与运行
+
 ```bash
-# 确保已安装 Node.js 22.20 (LTS)
-node -v
-npm -v
-
 # 安装依赖
 npm install
 
-# 启动应用
-npm start
+# 浏览器开发模式 (无需 Electron)
+npm run dev
+
+# Electron 桌面应用模式
+npm run electron
+
+# 构建桌面应用
+npm run build
 ```
 
-### 服务端启动
+### 配合后端服务器
+
 ```bash
-# 确保服务运行在 http://192.168.61.129:3000
+# 启动后端服务器
+npm run server
 
-# 使用 PM2 启动(生产环境)
-pm2 start server.js
-pm2 save
-pm2 startup
+# 确保 LM Studio 在本地运行 (端口 1234)
 ```
 
-## 注意事项
+### 配置
 
-1. 确保服务器在 `http://192.168.61.129:3000` 运行
-2. 客户端和服务端需要在同一网络环境
-3. 防火墙需要开放相应端口
-4. 生产环境建议使用 PM2 进行进程管理
+编辑 `electron/config.js` 修改服务器地址：
+
+```js
+API_BASE: 'http://127.0.0.1:3000'       // 后端服务器
+LM_STUDIO_API: 'http://127.0.0.1:1234/v1' // LM Studio API
+```
+
+## API 概览
+
+### 用户
+- `POST /login` - 用户登录
+- `POST /register` - 用户注册
+- `GET /users/search?q=` - 搜索用户
+
+### 好友
+- `GET /users/friends?username=` - 获取好友列表
+- `POST /users/friends/add` - 添加好友
+- `POST /users/friends/remove` - 移除好友
+
+### 聊天
+- `POST /chat/send` - 发送消息
+- `GET /chat/messages?sender=&receiver=` - 获取聊天记录
+
+### 文件
+- `GET /user/files?username=` - 获取文件列表
+- `POST /user/upload` - 上传文件
+- `GET /user/download/:username/:filename` - 下载文件
+
+## 构建产物
+
+构建后输出到 `dist/` 目录，同时生成 `dist-electron/` 目录包含 Electron 主进程代码。
+
+支持的 Windows 安装包格式：
+- NSIS 安装程序 (`.exe`)
+- Portable 便携版 (`.exe`)
 
 ## 许可证
+
 ISC
 
 ## 作者
-elec
+
+FireOut
