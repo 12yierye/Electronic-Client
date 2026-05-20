@@ -19,7 +19,7 @@ function createElectronWindow(URL) {
 
 export function createWindow() {
   const preloadPath = join(__dirname, 'preload.cjs')
-  console.log('[Main] Preload:', preloadPath, 'exists:', fs.existsSync(preloadPath))
+  // console.log('[Main] Preload:', preloadPath, 'exists:', fs.existsSync(preloadPath))
 
   const mainWindow = new BrowserWindow({
     title: 'Electronic',
@@ -84,9 +84,9 @@ export function createWindow() {
       if (window.electronAPI) {
         console.log('[Renderer] methods:', Object.keys(window.electronAPI).join(', '))
       }
-      window.electronAPI && window.electronAPI.testAI ? 'PRELOAD_OK' : 'PRELOAD_MISSING'
+      window.electronAPI && window.electronAPI.testAI ? 'OK' : 'MISSING'
     `).then(result => {
-      console.log('[Main] Preload Status:', result)
+      console.log('[Main] Preload is', result)
     }).catch(e => console.log('[Main] Preload Check Failed:', e.message))
   }, 2000)
 }

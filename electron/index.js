@@ -26,15 +26,9 @@ const cleanOldCache = () => {
 }
 cleanOldCache()
 
-if (process.argv.includes('--disable-gpu') || process.argv.includes('--disable-gpu-renderer')) {
-  // console.log('[Main] GPU disabled via CLI')
-  app.commandLine.appendSwitch('disable-gpu')
-  app.commandLine.appendSwitch('disable-software-rasterizer')
-} else {
-  // console.log('[Main] GPU disabled (default)')
-  app.commandLine.appendSwitch('disable-gpu')
-  app.commandLine.appendSwitch('disable-software-rasterizer')
-}
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('in-process-gpu')
+app.commandLine.appendSwitch('disable-gpu-sandbox')
 
 process.on('uncaughtException', (error) => {
   if (
@@ -79,7 +73,7 @@ app.on('will-quit', () => {
   }
 })
 
-console.log('[Main] starting app...')
+// console.log("[Main] Starting App...")
 app.whenReady().then(() => {
   console.log('[Main] App Ready')
   restoreScheduledTasks()
