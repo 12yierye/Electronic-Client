@@ -11,9 +11,9 @@ export default defineConfig(({ mode }) => {
     {
       entry: 'electron/index.js',
       onstart(options) {
-        if (process.env.NODE_ENV !== 'production') {
-          options.startup()
-        }
+        const cp = options.startup()
+        // Electron 退出时，Vite 也优雅退出（退出码 0），避免 PID 丢失报错
+        cp?.on('close', () => process.exit(0))
       },
       vite: {
         build: {

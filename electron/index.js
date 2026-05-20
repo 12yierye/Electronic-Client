@@ -92,15 +92,7 @@ function createWindow() {
 
   const menu = Menu.buildFromTemplate([
     { label: 'File', submenu: [
-      { label: 'Quit', click: () => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.close()
-        }
-        // 非开发模式才真正退出进程
-        if (!process.env.VITE_DEV_SERVER_URL) {
-          app.quit()
-        }
-      }}
+      { label: 'Quit', role: 'quit', click: () => app.quit() }
     ]},
     { label: 'Help', submenu: [
       { label: 'About Electronic', click: () => createElectronWindow(DOC_SERVER) },
@@ -221,13 +213,9 @@ ipcMain.on('logout', () => {
 ipcMain.on('exit-app', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.removeAllListeners()
-    mainWindow.close()
     mainWindow = null
   }
-  // 非开发模式才真正退出进程，开发模式下由 vite-plugin-electron 管理进程生命周期
-  if (!process.env.VITE_DEV_SERVER_URL) {
-    app.quit()
-  }
+  app.quit()
 })
 ipcMain.on('set-user', (event, userInfo) => { global.userInfo = userInfo })
 
@@ -1086,9 +1074,5 @@ app.whenReady().then(() => {
 }).catch(err => {
   console.error('[Main] app ready error:', err)
 })
-// 开发模式下不自动退出，让 vite-plugin-electron 统一管理进程生命周期，避免 PID 丢失报错
-const isDev = !!process.env.VITE_DEV_SERVER_URL
-app.on('window-all-closed', () => {
-  if (!isDev && process.platform !== 'darwin') app.quit()
-})
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })

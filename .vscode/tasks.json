@@ -9,9 +9,12 @@
         "kind": "build",
         "isDefault": true
       },
+      "isBackground": true,
       "presentation": {
         "reveal": "always",
-        "panel": "dedicated"
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
       },
       "problemMatcher": []
     }
