@@ -202,9 +202,10 @@ onUnmounted(() => {
 
 <style lang="scss" scoped>
 .ai-chat-view {
-  min-height: calc(100vh - 120px);
+  height: calc(100vh - 60px);
   padding: 20px 30px 100px;
   overflow-y: auto;
+  position: relative;
   
   .welcome-section {
     display: flex;

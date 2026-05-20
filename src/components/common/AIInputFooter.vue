@@ -27,6 +27,7 @@ import { Promotion, Loading } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
 import { useUserStore } from '../../stores/user'
+import { parseScheduledIntent, executeFunctionCall } from '../../composables/useScheduledTask'
 
 const aiStore = useAIStore()
 const userStore = useUserStore()
@@ -34,94 +35,10 @@ const { t } = useI18n()
 const inputMessage = ref('')
 const isSending = ref(false)
 
-// 解析发送意图（定时或立即）
-const parseScheduledIntent = (message) => {
-  const normalizedMessage = message.replace(/：/g, ':')
-
-  const timePatterns = [
-    /在\s*(\d{1,2}:\d{2})/,
-    /(\d{1,2}:\d{2})/,
-    /(\d+)\s*分钟\s*后/
-  ]
-
-  const fileExtensions = ['docx', 'xlsx', 'pdf', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'zip', 'rar', '7z', 'pptx', 'doc', 'xls', 'csv', 'npmrc']
-
-  const fileNamePattern = new RegExp(
-    `(?:名为|发送(?:给)?|发给|发送给)\\s*([^\\s,，]+(?:\\.(?:${fileExtensions.join('|')})))`,
-    'i'
-  )
-
-  let time = null
-  let minutesLater = null
-  let targetUser = null
-  let filename = null
-  let content = null
-  let isFile = false
-
-  for (const pattern of timePatterns) {
-    const match = normalizedMessage.match(pattern)
-    if (match) {
-      if (match[1] && pattern.toString().includes('分钟')) {
-        minutesLater = parseInt(match[1])
-        time = minutesLater
-      } else {
-        time = match[1] || match[0]
-      }
-      break
-    }
-  }
-
-  const fileMatch = normalizedMessage.match(fileNamePattern)
-  if (fileMatch) {
-    filename = fileMatch[1]
-    isFile = true
-  }
-
-  const userMatch1 = normalizedMessage.match(/向\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/)
-  if (userMatch1) {
-    targetUser = userMatch1[1]
-  } else {
-    const userMatch2 = normalizedMessage.match(/发给\s*(\S+?)\s+(?:发送|发给|发送给|说|发)/)
-    if (userMatch2) {
-      targetUser = userMatch2[1]
-    }
-  }
-
-  if (!isFile) {
-    const textContentMatch = normalizedMessage.match(/说\s*(.+)$/)
-    if (textContentMatch) {
-      content = textContentMatch[1].trim()
-    }
-  }
-
-  const hasTime = time !== null || minutesLater !== null
-
-  if (isFile && hasTime && targetUser && filename) {
-    return { type: 'file', ...(minutesLater ? { immediate: true, minutesLater } : { time }), targetUser, filename }
-  }
-
-  if (hasTime && targetUser && content) {
-    return { type: 'text', ...(minutesLater ? { immediate: true, minutesLater } : { time }), targetUser, content }
-  }
-
-  if (!hasTime && isFile && targetUser && filename) {
-    return { type: 'file', immediate: true, targetUser, filename }
-  }
-
-  if (!hasTime && targetUser && content) {
-    return { type: 'text', immediate: true, targetUser, content }
-  }
-
-  return null
-}
-
-// 按Enter发送消息，空消息时不换行
 const handleEnterKey = (e) => {
-  e.preventDefault() // 阻止默认换行行为
+  e.preventDefault()
   const message = inputMessage.value.trim()
   if (!message || isSending.value) return
-
-  // 有消息时调用发送
   handleSend()
 }
 
@@ -131,42 +48,27 @@ const handleSend = async () => {
 
   const currentUsername = userStore.userInfo?.username
 
-  // 直接发送消息给 AI，让 AI 判断意图
-  // AI 会返回 FUNCTION:schedule_file_send 或 FUNCTION:schedule_message_send
-  // 前端检测到函数调用后执行对应操作
-
   isSending.value = true
   aiStore.addUserMessage(message)
   inputMessage.value = ''
 
-  // 先清理旧的监听器，再设置新的
   if (window.electronAPI.removeAIChatStreamListener) {
     window.electronAPI.removeAIChatStreamListener()
   }
 
-  let streamEndedNormally = false // 标记流是否正常结束
+  let streamEndedNormally = false
 
-  // 设置流式监听器
   if (window.electronAPI.onAIChatStreamChunk) {
     window.electronAPI.onAIChatStreamChunk((data) => {
-      if (data.likelyIntent === 'scheduled') {
-        console.log('[AI] intent: scheduled')
-      }
-
       if (data.functionCall) {
         console.log('[AI] function call:', data.functionCall)
-        
-        // 从回复中提取参数
-        const fullContent = data.content || ''
-        
-        // 解析参数
+
         const params = parseScheduledIntent(message)
-        
+
         if (params) {
           let scheduleTime = null
           let timeStr = ''
 
-          // 如果是定时发送（有具体时间）
           if (params.time) {
             const [hours, minutes] = params.time.split(':').map(Number)
             const now = new Date()
@@ -177,18 +79,14 @@ const handleSend = async () => {
             scheduleTime = scheduleDate.toISOString()
             timeStr = `${scheduleDate.getHours().toString().padStart(2, '0')}:${scheduleDate.getMinutes().toString().padStart(2, '0')}`
           } else if (params.minutesLater) {
-            // 如果是"X分钟后"
             const now = new Date()
             now.setMinutes(now.getMinutes() + params.minutesLater)
             scheduleTime = now.toISOString()
             timeStr = `${params.minutesLater}分钟后`
           }
-          // 如果是立即发送（无时间），scheduleTime 为 null
 
-          // 执行对应的发送任务
-          executeFunctionCall(data.functionCall, params, scheduleTime, timeStr, currentUsername, message)
+          executeFunctionCall(data.functionCall, params, scheduleTime, timeStr, currentUsername, message, aiStore)
         } else {
-          // 参数解析失败，提示用户格式不对
           aiStore.endStreamingMessage()
           aiStore.addUserMessage(message)
           aiStore.addAIMessage(`我理解了，您想要发送消息。但是您的表达格式不太对，请按照以下格式告诉我：\n\n📁 **发送文件**：\n"向 张三 发送 报告.docx"\n"发给李四 文档.xlsx"\n\n⏰ **定时发送文件**：\n"在 15:30 向 张三 发送 报告.docx"\n"1分钟后向李四发送文档.xlsx"\n\n💬 **发送文字**：\n"向 张三 说 你好"\n\n请重新告诉我吧！`)
@@ -197,7 +95,6 @@ const handleSend = async () => {
       }
 
       if (data.done) {
-        // 流正常结束 — 内容已通过增量 chunk 完整累积，done 只是信号
         streamEndedNormally = true
         aiStore.endStreamingMessage()
         isSending.value = false
@@ -205,38 +102,27 @@ const handleSend = async () => {
           window.electronAPI.removeAIChatStreamListener()
         }
       } else {
-        // 追加思考内容
-        if (data.reasoning) {
-          aiStore.appendReasoningContent(data.reasoning)
-        }
-        // 追加流式内容
-        if (data.content) {
-          aiStore.appendStreamingContent(data.content)
-        }
+        if (data.reasoning) aiStore.appendReasoningContent(data.reasoning)
+        if (data.content) aiStore.appendStreamingContent(data.content)
       }
     })
   }
 
-  // Call local AI model for streaming response
   try {
     console.log('[AI] stream start:', message.substring(0, 60))
-
     aiStore.startStreamingMessage()
 
     const result = await window.electronAPI.aiChatStream(message)
     console.log('[AI] stream result:', result.success)
 
     if (!result.success) {
-      // 流式失败，添加错误消息
       aiStore.endStreamingMessage()
       aiStore.addAIMessage('抱歉，AI 响应失败: ' + result.message)
     }
-    // 如果成功，流式监听器会自动处理
   } catch (error) {
     aiStore.endStreamingMessage()
     aiStore.addAIMessage('抱歉，连接 AI 失败: ' + error.message)
   } finally {
-    // 仅在流未正常结束时清理（正常结束已在 data.done 回调中清理）
     if (!streamEndedNormally) {
       isSending.value = false
       if (window.electronAPI.removeAIChatStreamListener) {
@@ -246,97 +132,13 @@ const handleSend = async () => {
   }
 }
 
-// 组件卸载时清理监听器
 onUnmounted(() => {
   if (window.electronAPI.removeAIChatStreamListener) {
     window.electronAPI.removeAIChatStreamListener()
   }
 })
 
-const handleNewLine = () => {
-  // Shift + Enter 允许换行
-}
-
-// Execute function call
-const executeFunctionCall = async (functionName, params, scheduleTime, timeStr, currentUsername, message) => {
-  console.log('[AI] execute:', functionName, params.targetUser)
-
-  if (functionName === 'schedule_file_send') {
-    console.log('[AI] schedule file:', params.filename, '@', scheduleTime)
-
-    const filesResult = await window.electronAPI.getUserFiles(currentUsername)
-    if (!filesResult.success || !filesResult.files) {
-      aiStore.addUserMessage(message)
-      aiStore.addAIMessage(`抱歉，无法获取您的文件列表。请先上传文件 "${params.filename}"。`)
-      return
-    }
-
-    const fileExists = filesResult.files.some(f => f.filename === params.filename)
-    if (!fileExists) {
-      aiStore.addUserMessage(message)
-      aiStore.addAIMessage(`抱歉，我没有在您的文件列表中找到名为 "${params.filename}" 的文件。\n\n可能的原因：\n1. 文件名输入错误（请检查文件名是否正确，包括扩展名）\n2. 文件是7天前上传的（系统会自动删除7天前的文件）\n\n请重新上传文件后告诉我，或者检查文件名是否正确。`)
-      return
-    }
-
-    const result = await window.electronAPI.scheduleFileSend(scheduleTime, params.targetUser, params.filename, currentUsername)
-
-    if (result.success) {
-      aiStore.addAIMessage(`好的！我已安排在 ${timeStr} 向 "${params.targetUser}" 发送文件 "${params.filename}"。`)
-    } else {
-      aiStore.addAIMessage(`抱歉，设置定时发送失败: ${result.message}`)
-    }
-
-  } else if (functionName === 'schedule_message_send') {
-    // Schedule text message
-    console.log('[AI] schedule msg:', params.targetUser, '@', scheduleTime)
-
-    const result = await window.electronAPI.scheduleMessageSend(scheduleTime, params.targetUser, params.content, currentUsername)
-
-    if (result.success) {
-      aiStore.addAIMessage(`好的！我已安排在 ${timeStr} 向 "${params.targetUser}" 发送消息："${params.content}"。`)
-    } else {
-      aiStore.addAIMessage(`抱歉，设置定时发送失败: ${result.message}`)
-    }
-
-  } else if (functionName === 'send_file_now') {
-    console.log('[AI] send file now:', params.filename, '->', params.targetUser)
-
-    const filesResult = await window.electronAPI.getUserFiles(currentUsername)
-    if (!filesResult.success || !filesResult.files) {
-      aiStore.addAIMessage(`抱歉，无法获取您的文件列表。请先上传文件 "${params.filename}"。`)
-      return
-    }
-
-    const fileExists = filesResult.files.some(f => f.filename === params.filename)
-    if (!fileExists) {
-      aiStore.addAIMessage(`抱歉，我没有在您的文件列表中找到名为 "${params.filename}" 的文件。\n\n可能的原因：\n1. 文件名输入错误（请检查文件名是否正确，包括扩展名）\n2. 文件是7天前上传的（系统会自动删除7天前的文件）\n\n请重新上传文件后告诉我，或者检查文件名是否正确。`)
-      return
-    }
-
-    const result = await window.electronAPI.sendFileNow(params.targetUser, params.filename, currentUsername)
-
-    if (result.success) {
-      aiStore.addAIMessage(`好的！文件 "${params.filename}" 已立即发送给 "${params.targetUser}"。`)
-    } else {
-      aiStore.addAIMessage(`抱歉，发送文件失败: ${result.message}`)
-    }
-
-  } else if (functionName === 'send_message_now') {
-    console.log('[AI] send msg now:', params.targetUser)
-
-    const result = await window.electronAPI.sendMessageNow(params.targetUser, params.content, currentUsername)
-
-    if (result.success) {
-      aiStore.addAIMessage(`好的！消息已立即发送给 "${params.targetUser}"。`)
-    } else {
-      aiStore.addAIMessage(`抱歉，发送消息失败: ${result.message}`)
-    }
-
-  } else {
-    // 未知函数名
-    aiStore.addAIMessage(`抱歉，我无法执行该操作：${functionName}`)
-  }
-}
+const handleNewLine = () => {}
 </script>
 
 <style lang="scss" scoped>
