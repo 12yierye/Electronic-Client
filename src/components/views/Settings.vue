@@ -45,34 +45,51 @@
         </div>
       </el-form-item>
 
-      <!-- 内网服务器设置 -->
+      <!-- AI 模型设置 -->
       <el-divider />
-      <h3>{{ t('settings.lanChatTitle') }}</h3>
-      
-      <el-form-item :label="t('settings.useLanChat') + '：'">
-        <el-switch v-model="useLanChat" @change="handleLanChatChange" />
-      </el-form-item>
-      
-      <el-form-item v-if="useLanChat" :label="t('settings.lanServerIP') + '：'">
+      <h3>{{ t('settings.aiModelTitle') }}</h3>
+
+      <el-form-item :label="t('settings.aiServerIP') + '：'">
         <el-input
-          v-model="lanServerIP"
-          :placeholder="t('settings.lanServerIPPlaceholder')"
-          @blur="saveLanServerIP"
-        />
-        <div class="setting-tip">{{ t('settings.lanServerIPTip') }}</div>
-      </el-form-item>
-      
-      <el-form-item v-if="useLanChat" :label="t('settings.lanServerPort') + '：'">
-        <el-input
-          v-model="lanServerPort"
-          :placeholder="t('settings.lanServerPortPlaceholder')"
-          @blur="saveLanServerPort"
+          v-model="aiServerIP"
+          :placeholder="t('settings.aiServerIPPlaceholder')"
+          @blur="saveAiApiSettings"
         />
       </el-form-item>
+
+      <el-form-item :label="t('settings.aiServerPort') + '：'">
+        <el-input
+          v-model="aiServerPort"
+          :placeholder="t('settings.aiServerPortPlaceholder')"
+          @blur="saveAiApiSettings"
+        />
+        <div class="setting-tip">{{ t('settings.aiServerTip') }}</div>
+      </el-form-item>
+
+      <!-- 服务端设置 -->
+      <el-divider />
+      <h3>{{ t('settings.serverTitle') }}</h3>
       
-      <el-form-item v-if="useLanChat">
-        <el-button type="primary" @click="testLanConnection" :loading="testingLan">
-          {{ testingLan ? t('settings.testing') : t('settings.testConnection') }}
+      <el-form-item :label="t('settings.serverIP') + '：'">
+        <el-input
+          v-model="serverIP"
+          :placeholder="t('settings.serverIPPlaceholder')"
+          @blur="saveServerSettings"
+        />
+        <div class="setting-tip">{{ t('settings.serverIPTip') }}</div>
+      </el-form-item>
+      
+      <el-form-item :label="t('settings.serverPort') + '：'">
+        <el-input
+          v-model="serverPort"
+          :placeholder="t('settings.serverPortPlaceholder')"
+          @blur="saveServerSettings"
+        />
+      </el-form-item>
+      
+      <el-form-item>
+        <el-button type="primary" @click="testServerConnection" :loading="testingServer">
+          {{ testingServer ? t('settings.testing') : t('settings.testConnection') }}
         </el-button>
       </el-form-item>
 
@@ -110,27 +127,51 @@ const { t, setLocale } = useI18n()
 
 const theme = ref('dark')
 const language = ref('zh-CN')
-const useLanChat = ref(false)
-const lanServerIP = ref('')
-const lanServerPort = ref('3000')
-const testingLan = ref(false)
+const serverIP = ref('127.0.0.1')
+const serverPort = ref('3000')
+const testingServer = ref(false)
 const enablePinyinSearch = ref(false)
 
-const LAN_SETTINGS_KEY = 'lanChatSettings'
+const AI_SETTINGS_KEY = 'aiApiSettings'
+
+const aiServerIP = ref('127.0.0.1')
+const aiServerPort = ref('1234')
+
+const SERVER_SETTINGS_KEY = 'lanChatSettings'
+
+// 保存 AI API 设置到 localStorage 并同步到主进程
+const saveAiApiSettings = () => {
+  const ip = aiServerIP.value || '127.0.0.1'
+  const port = aiServerPort.value || '1234'
+  const apiUrl = `http://${ip}:${port}/v1`
+  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify({ ip, port }))
+  if (window.electronAPI?.setAiApiUrl) {
+    window.electronAPI.setAiApiUrl(apiUrl)
+  }
+}
 
 // 初始化
 onMounted(() => {
   theme.value = settingsStore.theme
   language.value = settingsStore.language || 'zh-CN'
   
-  // 加载内网设置
-  const lanSettings = localStorage.getItem(LAN_SETTINGS_KEY)
-  if (lanSettings) {
-    const settings = JSON.parse(lanSettings)
-    useLanChat.value = settings.useLanChat || false
-    lanServerIP.value = settings.lanServerIP || ''
-    lanServerPort.value = settings.lanServerPort || '3001'
-    enablePinyinSearch.value = settings.enablePinyinSearch || false
+  // 加载 AI API 设置
+  const aiSettings = localStorage.getItem(AI_SETTINGS_KEY)
+  if (aiSettings) {
+    const s = JSON.parse(aiSettings)
+    aiServerIP.value = s.ip || '127.0.0.1'
+    aiServerPort.value = s.port || '1234'
+  }
+  // 启动时同步到主进程
+  saveAiApiSettings()
+  
+  // 加载服务端设置（兼容旧版 key）
+  const raw = localStorage.getItem(SERVER_SETTINGS_KEY)
+  if (raw) {
+    const s = JSON.parse(raw)
+    serverIP.value = s.serverIP || s.lanServerIP || '127.0.0.1'
+    serverPort.value = s.serverPort || s.lanServerPort || '3000'
+    enablePinyinSearch.value = s.enablePinyinSearch || false
   }
 })
 
@@ -144,49 +185,32 @@ const handleLanguageChange = (value) => {
   setLocale(value)
 }
 
-// 保存内网设置
-const saveLanSettings = () => {
+// 保存服务端设置
+const saveServerSettings = () => {
   const settings = {
-    useLanChat: useLanChat.value,
-    lanServerIP: lanServerIP.value,
-    lanServerPort: lanServerPort.value,
+    serverIP: serverIP.value,
+    serverPort: serverPort.value,
     enablePinyinSearch: enablePinyinSearch.value
   }
-  localStorage.setItem(LAN_SETTINGS_KEY, JSON.stringify(settings))
+  localStorage.setItem(SERVER_SETTINGS_KEY, JSON.stringify(settings))
 }
 
 // 保存拼音搜索设置
 const savePinyinSearchSetting = () => {
-  saveLanSettings()
+  saveServerSettings()
 }
 
-// 内网聊天开关变化
-const handleLanChatChange = (value) => {
-  saveLanSettings()
-}
-
-// 保存内网服务器IP
-const saveLanServerIP = () => {
-  saveLanSettings()
-}
-
-// 保存内网服务器端口
-const saveLanServerPort = () => {
-  saveLanSettings()
-}
-
-// 测试内网连接
-const testLanConnection = async () => {
-  if (!lanServerIP.value) {
-    ElMessage.warning(t('settings.enterLanIP'))
+// 测试服务端连接
+const testServerConnection = async () => {
+  if (!serverIP.value) {
+    ElMessage.warning(t('settings.enterServerIP'))
     return
   }
   
-  testingLan.value = true
+  testingServer.value = true
   try {
-    const response = await fetch(`http://${lanServerIP.value}:${lanServerPort.value}/health`, {
-      method: 'GET',
-      timeout: 5000
+    const response = await fetch(`http://${serverIP.value}:${serverPort.value}/health`, {
+      method: 'GET'
     })
     if (response.ok) {
       ElMessage.success(t('settings.connectionSuccess'))
@@ -196,7 +220,7 @@ const testLanConnection = async () => {
   } catch (error) {
     ElMessage.error(t('settings.connectionError') + error.message)
   } finally {
-    testingLan.value = false
+    testingServer.value = false
   }
 }
 </script>

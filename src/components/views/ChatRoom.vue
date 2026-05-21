@@ -8,7 +8,7 @@
           <div class="mode-switch-row">
             <el-radio-group v-model="chatMode" size="small" @change="handleChatModeChange">
               <el-radio-button label="public">{{ t('chatRoom.public') }}</el-radio-button>
-              <el-radio-button v-if="useLanChat" label="lan">{{ t('chatRoom.lan') }}</el-radio-button>
+              <el-radio-button v-if="lanSettings.serverIP" label="lan">{{ t('chatRoom.lan') }}</el-radio-button>
             </el-radio-group>
           </div>
 

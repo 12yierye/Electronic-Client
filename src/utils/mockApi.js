@@ -102,6 +102,12 @@ export const mockElectronAPI = {
     await new Promise(resolve => setTimeout(resolve, 200))
     const token = btoa(`${username}:${Date.now()}:${Math.random().toString(36).substr(2)}`)
     return { success: true, token }
+  },
+
+  // 设置 AI API 地址（Mock）
+  setAiApiUrl: async (url) => {
+    console.log('[Mock] AI API URL set:', url)
+    return { success: true }
   }
 }
 

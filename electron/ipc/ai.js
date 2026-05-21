@@ -1,8 +1,15 @@
 import { ipcMain } from 'electron'
 import axios from 'axios'
-import { LM_STUDIO_API } from '../config.js'
+import { getLMStudioAPI, setLMStudioAPI } from '../config.js'
 
 export function registerAiIpc() {
+  // 动态设置 AI API 地址
+  ipcMain.handle('set-ai-api-url', (event, url) => {
+    setLMStudioAPI(url)
+    return { success: true }
+  })
+
+  const apiUrl = () => getLMStudioAPI()
   function getSystemPrompt(likelyScheduledIntent, likelyImmediateIntent) {
     if (!likelyScheduledIntent && !likelyImmediateIntent) {
       return '你是一个友好的AI助手，请用中文回答用户的问题。'
@@ -34,7 +41,7 @@ export function registerAiIpc() {
   }
 
   async function fetchCurrentModel() {
-    const response = await axios.get(`${LM_STUDIO_API}/models`, { timeout: 5000 })
+    const response = await axios.get(`${apiUrl()}/models`, { timeout: 5000 })
     if (response.data?.data?.length > 0) {
       return response.data.data[0].id
     }
@@ -72,7 +79,7 @@ export function registerAiIpc() {
         requestBody.extra_body = { enable_thinking: true, thinking_budget: 4096 }
       }
 
-      const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, requestBody, { timeout: 120000 })
+      const response = await axios.post(`${apiUrl()}/chat/completions`, requestBody, { timeout: 120000 })
       const reply = response.data.choices[0].message.content.trim()
       console.log('[AI Chat] reply length:', reply.length)
       return { success: true, reply }
@@ -149,7 +156,7 @@ export function registerAiIpc() {
 
     try {
       const response = await axios.post(
-        `${LM_STUDIO_API}/chat/completions`,
+        `${apiUrl()}/chat/completions`,
         requestBody,
         { responseType: 'stream', timeout: 120000 }
       )
@@ -276,7 +283,7 @@ export function registerAiIpc() {
         ],
         temperature: 0.3
       }
-      const response = await axios.post(`${LM_STUDIO_API}/chat/completions`, requestBody, { timeout: 120000 })
+      const response = await axios.post(`${apiUrl()}/chat/completions`, requestBody, { timeout: 120000 })
       const code = response.data.choices[0].message.content.trim()
       console.log('[GenFunc] code length:', code.length)
       return { success: true, code }

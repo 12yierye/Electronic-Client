@@ -103,7 +103,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('send-message-now', targetUser, content, currentUser),
 
   // 获取用户文件列表
-  getUserFiles: (username) => ipcRenderer.invoke('get-user-files', username)
+  getUserFiles: (username) => ipcRenderer.invoke('get-user-files', username),
+
+  // 动态设置 AI API 地址
+  setAiApiUrl: (url) => ipcRenderer.invoke('set-ai-api-url', url)
 })
 
 console.log('[Preload] ready')

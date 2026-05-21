@@ -5,8 +5,8 @@ import { matchByPinyin } from '../utils/pinyin'
 export function useChatRoom() {
   const activeTab = ref('friends')
   const chatMode = ref('public')
-  const useLanChat = ref(false)
-  const lanSettings = ref({ useLanChat: false, lanServerIP: '', lanServerPort: '3001' })
+  const lanSettings = ref({ serverIP: '', serverPort: '3000' })
+  const useLanChat = computed(() => !!lanSettings.value.serverIP)
   const searchQuery = ref('')
   const selectedUser = ref(null)
   const selectedGroup = ref(null)
@@ -126,10 +126,10 @@ export function useChatRoom() {
   }
 
   const loadLanChatMessages = async (append = false) => {
-    if (!selectedUser.value || !lanSettings.value.useLanChat) return
+    if (!selectedUser.value || !lanSettings.value.serverIP) return
     try {
       const response = await fetch(
-        `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/messages?from=${encodeURIComponent(currentUsername.value)}&to=${encodeURIComponent(selectedUser.value.username)}`,
+        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/messages?from=${encodeURIComponent(currentUsername.value)}&to=${encodeURIComponent(selectedUser.value.username)}`,
         { method: 'GET' }
       )
       const data = await response.json()
@@ -150,10 +150,10 @@ export function useChatRoom() {
 
   const sendLanMessage = async () => {
     const message = inputMessage.value.trim()
-    if (!message || !selectedUser.value || !lanSettings.value.useLanChat) return
+    if (!message || !selectedUser.value || !lanSettings.value.serverIP) return
     try {
       const response = await fetch(
-        `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/messages`,
+        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/messages`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -235,10 +235,10 @@ export function useChatRoom() {
   const handleSearch = (query) => {}
 
   const loadLanFriendsList = async () => {
-    if (!lanSettings.value.useLanChat || !lanSettings.value.lanServerIP) return
+    if (!lanSettings.value.serverIP) return
     try {
       const response = await fetch(
-        `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/friends?username=${encodeURIComponent(currentUsername.value)}`,
+        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/friends?username=${encodeURIComponent(currentUsername.value)}`,
         { method: 'GET', headers: { 'Content-Type': 'application/json' } }
       )
       const data = await response.json()
@@ -249,10 +249,10 @@ export function useChatRoom() {
   }
 
   const loadLanGroupsList = async () => {
-    if (!lanSettings.value.useLanChat || !lanSettings.value.lanServerIP) return
+    if (!lanSettings.value.serverIP) return
     try {
       const response = await fetch(
-        `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/groups?username=${encodeURIComponent(currentUsername.value)}`,
+        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/groups?username=${encodeURIComponent(currentUsername.value)}`,
         { method: 'GET', headers: { 'Content-Type': 'application/json' } }
       )
       const data = await response.json()
@@ -269,7 +269,7 @@ export function useChatRoom() {
   }
 
   const loadGroupMessages = async (append = false) => {
-    if (!selectedGroup.value || !lanSettings.value.useLanChat) return
+    if (!selectedGroup.value || !lanSettings.value.serverIP) return
     const groupId = selectedGroup.value.id
     if (deletedGroupIds.value.includes(groupId)) {
       deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
@@ -277,7 +277,7 @@ export function useChatRoom() {
     }
     try {
       const response = await fetch(
-        `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/group-messages?groupId=${encodeURIComponent(selectedGroup.value.id)}`,
+        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages?groupId=${encodeURIComponent(selectedGroup.value.id)}`,
         { method: 'GET' }
       )
       const data = await response.json()
@@ -298,7 +298,7 @@ export function useChatRoom() {
 
   const sendGroupMessage = async () => {
     const message = inputMessage.value.trim()
-    if (!message || !selectedGroup.value || !lanSettings.value.useLanChat) return
+    if (!message || !selectedGroup.value || !lanSettings.value.serverIP) return
     const groupId = selectedGroup.value.id
     if (deletedGroupIds.value.includes(groupId)) {
       deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
@@ -306,7 +306,7 @@ export function useChatRoom() {
     }
     try {
       const response = await fetch(
-        `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/group-messages`,
+        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -331,7 +331,7 @@ export function useChatRoom() {
     }
     try {
       const response = await fetch(
-        `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/groups`,
+        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/groups`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -377,7 +377,7 @@ export function useChatRoom() {
     if (!selectedGroup.value) return
     try {
       const response = await fetch(
-        `http://${lanSettings.value.lanServerIP}:${lanSettings.value.lanServerPort}/api/groups/${selectedGroup.value.id}`,
+        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/groups/${selectedGroup.value.id}`,
         {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
@@ -421,7 +421,7 @@ export function useChatRoom() {
 
   const pollForNewMessages = async () => {
     try {
-      if (useLanChat.value && lanSettings.value.useLanChat && lanSettings.value.lanServerIP) {
+      if (lanSettings.value.serverIP) {
         await loadLanGroupsList()
       }
       if (selectedGroup.value) {
@@ -450,9 +450,10 @@ export function useChatRoom() {
   onMounted(() => {
     const savedLanSettings = localStorage.getItem('lanChatSettings')
     if (savedLanSettings) {
-      lanSettings.value = JSON.parse(savedLanSettings)
-      useLanChat.value = lanSettings.value.useLanChat
-      enablePinyinSearch.value = lanSettings.value.enablePinyinSearch || false
+      const settings = JSON.parse(savedLanSettings)
+      lanSettings.value.serverIP = settings.serverIP || settings.lanServerIP || ''
+      lanSettings.value.serverPort = settings.serverPort || settings.lanServerPort || '3000'
+      enablePinyinSearch.value = settings.enablePinyinSearch || false
     }
     const savedDeletedGroups = localStorage.getItem('deletedGroupIds')
     if (savedDeletedGroups) {
@@ -461,7 +462,7 @@ export function useChatRoom() {
     loadFriendsList()
     loadAllUsers()
     loadFriendRequests()
-    if (useLanChat.value) loadLanFriendsList()
+    if (lanSettings.value.serverIP) loadLanFriendsList()
     startMessagePolling()
   })
 
