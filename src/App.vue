@@ -1,58 +1,61 @@
 <template>
-  <div :class="['app-container', theme]">
-    <!-- 未登录显示登录页面 -->
-    <Login
-      v-if="!isLoggedIn"
-      ref="loginRef"
-      @login-success="handleLoginSuccess"
-      @auto-login-success="handleLoginSuccess"
-    />
-
-    <!-- 已登录显示主应用 -->
-    <template v-else>
-      <!-- 顶部导航 -->
-      <AppNavigation
-        :current-view="currentView"
-        :user-info="userInfo"
-        @navigate="handleNavigate"
-        @toggle-sidebar="sidebarVisible = true"
+  <el-config-provider :locale="elementLocale">
+    <div :class="['app-container', theme]">
+      <!-- 未登录显示登录页面 -->
+      <Login
+        v-if="!isLoggedIn"
+        ref="loginRef"
+        @login-success="handleLoginSuccess"
+        @auto-login-success="handleLoginSuccess"
       />
 
-      <!-- 主内容区 -->
-      <div class="main-content">
-        <transition name="fade" mode="out-in">
-          <component
-            :is="currentComponent"
-            :key="currentView"
-            @logout="handleLogout"
-            @exit="handleExit"
-          />
-        </transition>
-      </div>
+      <!-- 已登录显示主应用 -->
+      <template v-else>
+        <!-- 顶部导航 -->
+        <AppNavigation
+          :current-view="currentView"
+          :user-info="userInfo"
+          @navigate="handleNavigate"
+          @toggle-sidebar="sidebarVisible = true"
+        />
 
-      <!-- AI 聊天输入框 -->
-      <AIInputFooter v-if="currentView === 'ai'" />
+        <!-- 主内容区 -->
+        <div class="main-content">
+          <transition name="fade" mode="out-in">
+            <component
+              :is="currentComponent"
+              :key="currentView"
+              @logout="handleLogout"
+              @exit="handleExit"
+            />
+          </transition>
+        </div>
 
-      <!-- 侧边栏 -->
-      <AppSidebar
-        :visible="sidebarVisible"
-        :user-info="userInfo"
-        @close="sidebarVisible = false"
-        @logout="handleLogout"
-        @exit="handleExit"
-      />
-      <div
-        v-if="sidebarVisible"
-        class="sidebar-mask"
-        @click="sidebarVisible = false"
-      ></div>
-    </template>
-  </div>
+        <!-- AI 聊天输入框 -->
+        <AIInputFooter v-if="currentView === 'ai'" />
+
+        <!-- 侧边栏 -->
+        <AppSidebar
+          :visible="sidebarVisible"
+          :user-info="userInfo"
+          @close="sidebarVisible = false"
+          @logout="handleLogout"
+          @exit="handleExit"
+        />
+        <div
+          v-if="sidebarVisible"
+          class="sidebar-mask"
+          @click="sidebarVisible = false"
+        ></div>
+      </template>
+    </div>
+  </el-config-provider>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, provide } from 'vue'
 import { useSettingsStore } from './stores/settings'
+import { useI18n } from './composables/useI18n'
 import AppNavigation from './components/layout/AppNavigation.vue'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import AIInputFooter from './components/common/AIInputFooter.vue'
@@ -63,6 +66,7 @@ import FileManager from './components/views/FileManager.vue'
 import Settings from './components/views/Settings.vue'
 
 const settingsStore = useSettingsStore()
+const { elementLocale } = useI18n()
 
 const currentView = ref('ai')
 const sidebarVisible = ref(false)
@@ -76,8 +80,8 @@ const handleLoginSuccess = (user) => {
   isLoggedIn.value = true
 }
 
-// 主题
-const theme = computed(() => settingsStore.theme)
+// 主题（解析后的实际主题，支持 auto/跟随系统）
+const theme = computed(() => settingsStore.effectiveTheme)
 provide('theme', theme)
 
 // 组件映射
@@ -126,23 +130,7 @@ onMounted(() => {
   min-height: 100vh;
   background: var(--bg-primary);
   color: var(--text-primary);
-  transition: all 0.3s ease;
-  
-  &.light {
-    --bg-primary: #ecf0f1;
-    --bg-secondary: #ffffff;
-    --text-primary: #2c3e50;
-    --text-secondary: #7f8c8d;
-    --accent-color: #3498db;
-  }
-  
-  &.dark {
-    --bg-primary: #1a1a2e;
-    --bg-secondary: #16213e;
-    --text-primary: #ecf0f1;
-    --text-secondary: #95a5a6;
-    --accent-color: #3498db;
-  }
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 .main-content {
@@ -157,16 +145,6 @@ onMounted(() => {
   width: 100vw;
   height: 100vh;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 1999; /* Element Plus drawer 的 z-index 通常是 2000 */
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+  z-index: 1999;
 }
 </style>

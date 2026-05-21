@@ -7,22 +7,22 @@
           <!-- 聊天模式切换 -->
           <div class="mode-switch-row">
             <el-radio-group v-model="chatMode" size="small" @change="handleChatModeChange">
-              <el-radio-button label="public">公网</el-radio-button>
-              <el-radio-button v-if="useLanChat" label="lan">内网</el-radio-button>
+              <el-radio-button label="public">{{ t('chatRoom.public') }}</el-radio-button>
+              <el-radio-button v-if="useLanChat" label="lan">{{ t('chatRoom.lan') }}</el-radio-button>
             </el-radio-group>
           </div>
 
           <el-radio-group v-model="activeTab" size="small">
             <!-- 公网模式显示：好友、添加好友、申请 -->
             <template v-if="chatMode === 'public'">
-              <el-radio-button label="friends">好友</el-radio-button>
-              <el-radio-button label="add">添加好友</el-radio-button>
-              <el-radio-button label="requests">申请</el-radio-button>
+              <el-radio-button label="friends">{{ t('chatRoom.friends') }}</el-radio-button>
+              <el-radio-button label="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
+              <el-radio-button label="requests">{{ t('chatRoom.requests') }}</el-radio-button>
             </template>
             <!-- 内网模式显示：用户、群聊 -->
             <template v-else>
-              <el-radio-button label="users">用户</el-radio-button>
-              <el-radio-button label="groups">群聊</el-radio-button>
+              <el-radio-button label="users">{{ t('chatRoom.users') }}</el-radio-button>
+              <el-radio-button label="groups">{{ t('chatRoom.groups') }}</el-radio-button>
             </template>
           </el-radio-group>
         </div>
@@ -31,7 +31,7 @@
         <div class="search-box">
           <el-input
             v-model="searchQuery"
-            placeholder="搜索用户..."
+            :placeholder="t('chatRoom.searchUser')"
             :prefix-icon="Search"
             clearable
             @input="handleSearch"
@@ -52,8 +52,8 @@
               <div class="user-info">
                 <div class="user-name">{{ friend.username }}</div>
                 <div class="user-role">
-                  <span v-if="friend.online" class="online-status">在线</span>
-                  <span v-else>离线</span>
+                  <span v-if="friend.online" class="online-status">{{ t('chatRoom.online') }}</span>
+                  <span v-else>{{ t('chatRoom.offline') }}</span>
                 </div>
               </div>
               <el-icon 
@@ -61,7 +61,7 @@
                 class="star-icon starred"
               ><Star /></el-icon>
             </div>
-            <el-empty v-if="friendsList.length === 0" description="暂无好友" />
+            <el-empty v-if="friendsList.length === 0" :description="t('chatRoom.noFriends')" />
           </template>
           
           <!-- 内网：用户列表 -->
@@ -76,19 +76,19 @@
               <div class="user-info">
                 <div class="user-name">{{ user.username }}</div>
                 <div class="user-role">
-                  <span v-if="user.online" class="online-status">在线</span>
-                  <span v-else>离线</span>
+                  <span v-if="user.online" class="online-status">{{ t('chatRoom.online') }}</span>
+                  <span v-else>{{ t('chatRoom.offline') }}</span>
                 </div>
               </div>
             </div>
-            <el-empty v-if="lanFriendsList.length === 0" description="内网中暂无用户" />
+            <el-empty v-if="lanFriendsList.length === 0" :description="t('chatRoom.noLanUsers')" />
           </template>
           
           <!-- 内网：群聊列表 -->
           <template v-else-if="chatMode === 'lan' && activeTab === 'groups'">
             <div class="group-actions">
               <el-button type="primary" size="small" @click="showCreateGroupDialog = true">
-                创建群聊
+                {{ t('chatRoom.createGroup') }}
               </el-button>
             </div>
             <div
@@ -102,18 +102,18 @@
               </el-avatar>
               <div class="user-info">
                 <div class="user-name">{{ group.name }}</div>
-                <div class="user-role">{{ group.members.length }} 人</div>
+                <div class="user-role">{{ t('chatRoom.members', { n: group.members.length }) }}</div>
               </div>
             </div>
-            <el-empty v-if="filteredLanGroupsList.length === 0" description="暂无群聊" />
+            <el-empty v-if="filteredLanGroupsList.length === 0" :description="t('chatRoom.noGroups')" />
           </template>
           
           <!-- 公网：添加好友 -->
           <template v-else-if="chatMode === 'public' && activeTab === 'add'">
             <div v-if="!searchQuery" class="recommended-tip">
-              猜你想加
+              {{ t('chatRoom.recommended') }}
               <el-button size="small" text @click="showRecommended = !showRecommended">
-                {{ showRecommended ? '收起' : '显示' }}
+                {{ showRecommended ? t('chatRoom.hide') : t('chatRoom.show') }}
               </el-button>
             </div>
             <div 
@@ -127,10 +127,10 @@
                 <div class="user-name">{{ user.username }}</div>
               </div>
               <el-button size="small" type="primary" @click="handleAddFriend(user)">
-                添加
+                {{ t('chatRoom.add') }}
               </el-button>
             </div>
-            <el-empty v-if="filteredUsers.length === 0 && (showRecommended || searchQuery)" description="未找到用户" />
+            <el-empty v-if="filteredUsers.length === 0 && (showRecommended || searchQuery)" :description="t('chatRoom.noUsersFound')" />
           </template>
           
           <!-- 公网：好友申请 -->
@@ -147,14 +147,14 @@
               </div>
               <div class="request-actions">
                 <el-button size="small" type="success" @click="handleRequest(request.id, 'accept')">
-                  接受
+                  {{ t('chatRoom.accept') }}
                 </el-button>
                 <el-button size="small" type="danger" @click="handleRequest(request.id, 'reject')">
-                  拒绝
+                  {{ t('chatRoom.reject') }}
                 </el-button>
               </div>
             </div>
-            <el-empty v-if="friendRequests.length === 0" description="暂无好友申请" />
+            <el-empty v-if="friendRequests.length === 0" :description="t('chatRoom.noRequests')" />
           </template>
         </div>
       </el-aside>
@@ -165,7 +165,7 @@
           <div class="chat-header">
             <span v-if="selectedGroup">{{ selectedGroup.name }}</span>
             <span v-else-if="selectedUser">{{ selectedUser.username }}</span>
-            <span v-else class="placeholder">选择一个用户或群聊开始聊天</span>
+            <span v-else class="placeholder">{{ t('chatRoom.selectUserToChat') }}</span>
             <!-- 群聊操作按钮 -->
             <div v-if="selectedGroup" class="group-actions">
               <el-button
@@ -174,13 +174,13 @@
                 size="small"
                 @click="handleDisbandGroup"
               >
-                解散群聊
+                {{ t('chatRoom.disbandGroup') }}
               </el-button>
               <el-button
                 size="small"
                 @click="handleDeleteGroup"
               >
-                删除聊天
+                {{ t('chatRoom.deleteChat') }}
               </el-button>
             </div>
           </div>
@@ -198,15 +198,15 @@
                 </div>
                 <!-- 图片消息 -->
                 <div v-if="isImageMessage(msg.message)" class="message-content image-message">
-                  <img :src="msg.message" alt="图片" @load="onImageLoad" />
+                  <img :src="msg.message" :alt="t('chatRoom.image')" @load="onImageLoad" />
                 </div>
                 <!-- 文本消息 -->
                 <div v-else class="message-content">{{ msg.message }}</div>
                 <div class="message-time">{{ formatMessageTime(msg.timestamp) }}</div>
               </div>
-              <el-empty v-if="chatMessages.length === 0" description="暂无聊天记录" />
+              <el-empty v-if="chatMessages.length === 0" :description="t('chatRoom.noChatHistory')" />
             </template>
-            <el-empty v-else description="选择一个用户或群聊开始聊天" />
+            <el-empty v-else :description="t('chatRoom.selectUserToChat')" />
           </div>
           
           <div class="chat-input">
@@ -223,7 +223,7 @@
             </el-upload>
             <el-input
               v-model="inputMessage"
-              placeholder="输入消息..."
+              :placeholder="t('chatRoom.enterMessage')"
               :disabled="!selectedUser && !selectedGroup"
               @keydown.enter.exact="handleSendMessage"
             />
@@ -241,18 +241,18 @@
     <!-- 创建群聊对话框 -->
     <el-dialog
       v-model="showCreateGroupDialog"
-      title="创建群聊"
+      :title="t('chatRoom.createGroup')"
       width="400px"
     >
       <el-form label-width="80px">
-        <el-form-item label="群名称">
-          <el-input v-model="newGroupName" placeholder="请输入群名称" />
+        <el-form-item :label="t('chatRoom.groupName')">
+          <el-input v-model="newGroupName" :placeholder="t('chatRoom.groupNamePlaceholder')" />
         </el-form-item>
-        <el-form-item label="群成员">
+        <el-form-item :label="t('chatRoom.groupMembers')">
           <el-select
             v-model="newGroupMembers"
             multiple
-            placeholder="选择群成员"
+            :placeholder="t('chatRoom.selectMembers')"
             style="width: 100%"
           >
             <el-option
@@ -265,8 +265,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCreateGroupDialog = false">取消</el-button>
-        <el-button type="primary" @click="createGroup">创建</el-button>
+        <el-button @click="showCreateGroupDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="createGroup">{{ t('common.create') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -275,6 +275,9 @@
 <script setup>
 import { Search, Star, Promotion, Picture, ChatDotRound } from '@element-plus/icons-vue'
 import { useChatRoom } from '../../composables/useChatRoom'
+import { useI18n } from '../../composables/useI18n'
+
+const { t } = useI18n()
 
 const {
   activeTab, chatMode, useLanChat, lanSettings, searchQuery,
@@ -307,14 +310,14 @@ const {
   
   .el-aside {
     background: var(--bg-secondary);
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
   }
   
   .chat-tabs {
     padding: 15px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--border-color);
 
     .mode-switch-row {
       margin-bottom: 10px;
@@ -380,7 +383,7 @@ const {
     .chat-header {
       padding: 15px 20px;
       background: var(--bg-secondary);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      border-bottom: 1px solid var(--border-color);
       font-size: 16px;
       font-weight: 500;
       color: var(--text-primary);

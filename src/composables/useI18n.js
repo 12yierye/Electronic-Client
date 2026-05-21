@@ -1,24 +1,37 @@
 import { ref, computed } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import messages, { languages, defaultLang } from '../utils/i18n'
+import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
+import en from 'element-plus/dist/locale/en.mjs'
+import ja from 'element-plus/dist/locale/ja.mjs'
 
-// 当前语言
+// Element Plus 语言包映射
+const elementLocales = { 'zh-CN': zhCn, 'en': en, 'ja': ja }
+
+// 当前语言（模块级单例，所有 useI18n() 调用共享）
 const currentLang = ref(defaultLang)
 
 // 翻译函数
 export function useI18n() {
   const settingsStore = useSettingsStore()
 
-  // 初始化语言
+  // 初始化语言：从 localStorage 恢复，默认中文
   const initLanguage = () => {
     const stored = localStorage.getItem('appSettings')
     if (stored) {
-      const settings = JSON.parse(stored)
-      if (settings.language) {
-        currentLang.value = settings.language
-      }
+      try {
+        const settings = JSON.parse(stored)
+        if (settings.language && messages[settings.language]) {
+          currentLang.value = settings.language
+        }
+      } catch {}
     }
+    // 确保 store 也同步
+    settingsStore.language = currentLang.value
   }
+
+  // Element Plus 语言包
+  const elementLocale = computed(() => elementLocales[currentLang.value] || zhCn)
 
   // 翻译
   const t = (key, params = {}) => {
@@ -34,7 +47,7 @@ export function useI18n() {
     }
 
     let result = value || key
-    
+
     // 替换参数
     if (params && typeof params === 'object') {
       Object.keys(params).forEach(paramKey => {
@@ -42,7 +55,7 @@ export function useI18n() {
         result = result.replace(placeholder, params[paramKey])
       })
     }
-    
+
     return result
   }
 
@@ -63,6 +76,7 @@ export function useI18n() {
   return {
     t,
     locale,
+    elementLocale,
     setLocale,
     getLanguages,
     initLanguage

@@ -78,7 +78,7 @@ export function parseScheduledIntent(message) {
   return null
 }
 
-export async function executeFunctionCall(functionName, params, scheduleTime, timeStr, currentUsername, message, aiStore) {
+export async function executeFunctionCall(functionName, params, scheduleTime, timeStr, currentUsername, message, aiStore, t) {
   console.log('[AI] execute:', functionName, params.targetUser)
 
   if (functionName === 'schedule_file_send') {
@@ -87,23 +87,24 @@ export async function executeFunctionCall(functionName, params, scheduleTime, ti
     const filesResult = await window.electronAPI.getUserFiles(currentUsername)
     if (!filesResult.success || !filesResult.files) {
       aiStore.addUserMessage(message)
-      aiStore.addAIMessage(`抱歉，无法获取您的文件列表。请先上传文件 "${params.filename}"。`)
+      aiStore.addAIMessage(t('scheduledTask.fileNotUploaded', { filename: params.filename }))
       return
     }
 
     const fileExists = filesResult.files.some(f => f.filename === params.filename)
     if (!fileExists) {
       aiStore.addUserMessage(message)
-      aiStore.addAIMessage(`抱歉，我没有在您的文件列表中找到名为 "${params.filename}" 的文件。\n\n可能的原因：\n1. 文件名输入错误（请检查文件名是否正确，包括扩展名）\n2. 文件是7天前上传的（系统会自动删除7天前的文件）\n\n请重新上传文件后告诉我，或者检查文件名是否正确。`)
+      const fileListStr = filesResult.files.map(f => f.filename).join('、')
+      aiStore.addAIMessage(t('scheduledTask.fileNotFound', { filename: params.filename, fileList: fileListStr }))
       return
     }
 
     const result = await window.electronAPI.scheduleFileSend(scheduleTime, params.targetUser, params.filename, currentUsername)
 
     if (result.success) {
-      aiStore.addAIMessage(`好的！我已安排在 ${timeStr} 向 "${params.targetUser}" 发送文件 "${params.filename}"。`)
+      aiStore.addAIMessage(t('scheduledTask.scheduleFileSuccess', { timeStr, targetUser: params.targetUser, filename: params.filename }))
     } else {
-      aiStore.addAIMessage(`抱歉，设置定时发送失败: ${result.message}`)
+      aiStore.addAIMessage(t('scheduledTask.scheduleFileFailed', { message: result.message }))
     }
 
   } else if (functionName === 'schedule_message_send') {
@@ -112,9 +113,9 @@ export async function executeFunctionCall(functionName, params, scheduleTime, ti
     const result = await window.electronAPI.scheduleMessageSend(scheduleTime, params.targetUser, params.content, currentUsername)
 
     if (result.success) {
-      aiStore.addAIMessage(`好的！我已安排在 ${timeStr} 向 "${params.targetUser}" 发送消息："${params.content}"。`)
+      aiStore.addAIMessage(t('scheduledTask.scheduleMsgSuccess', { timeStr, targetUser: params.targetUser, content: params.content }))
     } else {
-      aiStore.addAIMessage(`抱歉，设置定时发送失败: ${result.message}`)
+      aiStore.addAIMessage(t('scheduledTask.scheduleMsgFailed', { message: result.message }))
     }
 
   } else if (functionName === 'send_file_now') {
@@ -122,22 +123,23 @@ export async function executeFunctionCall(functionName, params, scheduleTime, ti
 
     const filesResult = await window.electronAPI.getUserFiles(currentUsername)
     if (!filesResult.success || !filesResult.files) {
-      aiStore.addAIMessage(`抱歉，无法获取您的文件列表。请先上传文件 "${params.filename}"。`)
+      aiStore.addAIMessage(t('scheduledTask.fileNotUploaded', { filename: params.filename }))
       return
     }
 
     const fileExists = filesResult.files.some(f => f.filename === params.filename)
     if (!fileExists) {
-      aiStore.addAIMessage(`抱歉，我没有在您的文件列表中找到名为 "${params.filename}" 的文件。\n\n可能的原因：\n1. 文件名输入错误（请检查文件名是否正确，包括扩展名）\n2. 文件是7天前上传的（系统会自动删除7天前的文件）\n\n请重新上传文件后告诉我，或者检查文件名是否正确。`)
+      const fileListStr = filesResult.files.map(f => f.filename).join('、')
+      aiStore.addAIMessage(t('scheduledTask.fileNotFound', { filename: params.filename, fileList: fileListStr }))
       return
     }
 
     const result = await window.electronAPI.sendFileNow(params.targetUser, params.filename, currentUsername)
 
     if (result.success) {
-      aiStore.addAIMessage(`好的！文件 "${params.filename}" 已立即发送给 "${params.targetUser}"。`)
+      aiStore.addAIMessage(t('scheduledTask.sendFileNow', { targetUser: params.targetUser, filename: params.filename }))
     } else {
-      aiStore.addAIMessage(`抱歉，发送文件失败: ${result.message}`)
+      aiStore.addAIMessage(t('scheduledTask.sendFileFailed', { message: result.message }))
     }
 
   } else if (functionName === 'send_message_now') {
@@ -146,12 +148,12 @@ export async function executeFunctionCall(functionName, params, scheduleTime, ti
     const result = await window.electronAPI.sendMessageNow(params.targetUser, params.content, currentUsername)
 
     if (result.success) {
-      aiStore.addAIMessage(`好的！消息已立即发送给 "${params.targetUser}"。`)
+      aiStore.addAIMessage(t('scheduledTask.sendMsgNow', { targetUser: params.targetUser }))
     } else {
-      aiStore.addAIMessage(`抱歉，发送消息失败: ${result.message}`)
+      aiStore.addAIMessage(t('scheduledTask.sendMsgFailed', { message: result.message }))
     }
 
   } else {
-    aiStore.addAIMessage(`抱歉，我无法执行该操作：${functionName}`)
+    aiStore.addAIMessage(t('scheduledTask.cannotExecute', { functionName }))
   }
 }

@@ -40,27 +40,27 @@
         </el-form-item>
       </el-form>
       <div class="footer-links">
-        <span class="register-link" @click="handleRegister">{{ t('login.register') || '注册' }}</span>
+        <span class="register-link" @click="handleRegister">{{ t('login.register') }}</span>
         <span>{{ t('login.defaultServer') }} {{ apiBase }}</span>
       </div>
     </el-card>
 
     <!-- 注册对话框 -->
-    <el-dialog v-model="registerDialogVisible" title="注册账号" width="400px">
+    <el-dialog v-model="registerDialogVisible" :title="t('login.registerTitle')" width="400px">
       <el-form :model="registerForm" :rules="registerRules" ref="registerFormRef" label-width="80px">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="registerForm.username" placeholder="请输入用户名" />
+        <el-form-item :label="t('login.username')" prop="username">
+          <el-input v-model="registerForm.username" :placeholder="t('login.usernamePlaceholder')" />
         </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input v-model="registerForm.password" type="password" placeholder="请输入密码" />
+        <el-form-item :label="t('login.password')" prop="password">
+          <el-input v-model="registerForm.password" type="password" :placeholder="t('login.passwordPlaceholder')" />
         </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="registerForm.email" placeholder="请输入邮箱" />
+        <el-form-item :label="t('login.email')" prop="email">
+          <el-input v-model="registerForm.email" :placeholder="t('login.emailPlaceholder')" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="registerDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="registerLoading" @click="handleRegisterSubmit">注册</el-button>
+        <el-button @click="registerDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="registerLoading" @click="handleRegisterSubmit">{{ t('login.register') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -135,13 +135,13 @@ const handleRegisterSubmit = async () => {
       })
 
       if (result.success) {
-        ElMessage.success('注册成功，请登录')
+        ElMessage.success(t('login.registerSuccess'))
         registerDialogVisible.value = false
       } else {
-        ElMessage.error(result.message || '注册失败')
+        ElMessage.error(result.message || t('login.registerFailed'))
       }
     } catch (error) {
-      ElMessage.error('注册失败: ' + error.message)
+      ElMessage.error(t('login.registerFailed') + ': ' + error.message)
     } finally {
       registerLoading.value = false
     }
@@ -211,7 +211,7 @@ const checkAutoLogin = async () => {
       const userResult = await window.electronAPI.getUserByUsername(credential.username)
       if (userResult.success) {
         localStorage.setItem('userInfo', JSON.stringify(userResult.user))
-        ElMessage.success('自动登录成功')
+        ElMessage.success(t('login.autoLoginSuccess'))
         emit('auto-login-success', userResult.user)
         return true
       }
@@ -265,13 +265,13 @@ const handleLogin = async () => {
           localStorage.removeItem('autoLoginCredential')
         }
 
-        ElMessage.success('登录成功')
+        ElMessage.success(t('login.loginSuccess'))
         emit('login-success', result.user)
       } else {
-        ElMessage.error(result.message || '登录失败')
+        ElMessage.error(result.message || t('login.loginFailed'))
       }
     } catch (error) {
-      ElMessage.error('登录失败: ' + error.message)
+      ElMessage.error(t('login.loginFailed') + ': ' + error.message)
     } finally {
       loading.value = false
     }
@@ -288,7 +288,7 @@ defineExpose({ checkAutoLogin })
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
 }
 
 .login-card {
@@ -302,14 +302,14 @@ defineExpose({ checkAutoLogin })
   
   .footer-links {
     text-align: center;
-    color: #999;
+    color: var(--text-secondary);
     font-size: 12px;
     display: flex;
     justify-content: space-between;
   }
 
   .register-link {
-    color: #409eff;
+    color: var(--accent-color);
     cursor: pointer;
     &:hover {
       text-decoration: underline;

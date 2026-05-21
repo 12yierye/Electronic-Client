@@ -14,6 +14,10 @@
             <el-icon><Sunny /></el-icon>
             {{ t('settings.light') }}
           </el-radio-button>
+          <el-radio-button value="auto">
+            <el-icon><Monitor /></el-icon>
+            {{ t('settings.auto') }}
+          </el-radio-button>
         </el-radio-group>
       </el-form-item>
 
@@ -43,42 +47,42 @@
 
       <!-- 内网服务器设置 -->
       <el-divider />
-      <h3>内网聊天设置</h3>
+      <h3>{{ t('settings.lanChatTitle') }}</h3>
       
-      <el-form-item label="使用内网聊天：">
+      <el-form-item :label="t('settings.useLanChat') + '：'">
         <el-switch v-model="useLanChat" @change="handleLanChatChange" />
       </el-form-item>
       
-      <el-form-item v-if="useLanChat" label="内网服务器IP：">
+      <el-form-item v-if="useLanChat" :label="t('settings.lanServerIP') + '：'">
         <el-input
           v-model="lanServerIP"
-          placeholder="例如: 192.168.1.100"
+          :placeholder="t('settings.lanServerIPPlaceholder')"
           @blur="saveLanServerIP"
         />
-        <div class="setting-tip">请输入运行内网服务端的计算机IP地址</div>
+        <div class="setting-tip">{{ t('settings.lanServerIPTip') }}</div>
       </el-form-item>
       
-      <el-form-item v-if="useLanChat" label="内网服务器端口：">
+      <el-form-item v-if="useLanChat" :label="t('settings.lanServerPort') + '：'">
         <el-input
           v-model="lanServerPort"
-          placeholder="例如: 3001"
+          :placeholder="t('settings.lanServerPortPlaceholder')"
           @blur="saveLanServerPort"
         />
       </el-form-item>
       
       <el-form-item v-if="useLanChat">
         <el-button type="primary" @click="testLanConnection" :loading="testingLan">
-          测试连接
+          {{ testingLan ? t('settings.testing') : t('settings.testConnection') }}
         </el-button>
       </el-form-item>
 
       <!-- 好友搜索设置 -->
       <el-divider />
-      <h3>好友搜索设置</h3>
+      <h3>{{ t('settings.friendSearchTitle') }}</h3>
       
-      <el-form-item label="启用拼音搜索：">
+      <el-form-item :label="t('settings.enablePinyinSearch') + '：'">
         <el-switch v-model="enablePinyinSearch" @change="savePinyinSearchSetting" />
-        <div class="setting-tip">开启后可以使用拼音搜索好友（例如输入"zhangsan"可搜索到"张三"）</div>
+        <div class="setting-tip">{{ t('settings.enablePinyinSearchTip') }}</div>
       </el-form-item>
 
       <!-- 关于 -->
@@ -95,7 +99,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { Moon, Sunny } from '@element-plus/icons-vue'
+import { Moon, Sunny, Monitor } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useSettingsStore } from '../../stores/settings'
 import { useI18n } from '../../composables/useI18n'
@@ -174,7 +178,7 @@ const saveLanServerPort = () => {
 // 测试内网连接
 const testLanConnection = async () => {
   if (!lanServerIP.value) {
-    ElMessage.warning('请输入内网服务器IP')
+    ElMessage.warning(t('settings.enterLanIP'))
     return
   }
   
@@ -185,12 +189,12 @@ const testLanConnection = async () => {
       timeout: 5000
     })
     if (response.ok) {
-      ElMessage.success('连接成功！内网聊天服务正常运行')
+      ElMessage.success(t('settings.connectionSuccess'))
     } else {
-      ElMessage.error('连接失败：服务器返回错误')
+      ElMessage.error(t('settings.connectionFailed'))
     }
   } catch (error) {
-    ElMessage.error('连接失败：' + error.message)
+    ElMessage.error(t('settings.connectionError') + error.message)
   } finally {
     testingLan.value = false
   }

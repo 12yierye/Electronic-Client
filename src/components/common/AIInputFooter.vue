@@ -82,14 +82,14 @@ const handleSend = async () => {
             const now = new Date()
             now.setMinutes(now.getMinutes() + params.minutesLater)
             scheduleTime = now.toISOString()
-            timeStr = `${params.minutesLater}分钟后`
+            timeStr = t('aiChat.minutesLater', { n: params.minutesLater })
           }
 
-          executeFunctionCall(data.functionCall, params, scheduleTime, timeStr, currentUsername, message, aiStore)
+          executeFunctionCall(data.functionCall, params, scheduleTime, timeStr, currentUsername, message, aiStore, t)
         } else {
           aiStore.endStreamingMessage()
           aiStore.addUserMessage(message)
-          aiStore.addAIMessage(`我理解了，您想要发送消息。但是您的表达格式不太对，请按照以下格式告诉我：\n\n📁 **发送文件**：\n"向 张三 发送 报告.docx"\n"发给李四 文档.xlsx"\n\n⏰ **定时发送文件**：\n"在 15:30 向 张三 发送 报告.docx"\n"1分钟后向李四发送文档.xlsx"\n\n💬 **发送文字**：\n"向 张三 说 你好"\n\n请重新告诉我吧！`)
+          aiStore.addAIMessage(t('aiChat.formatHelp'))
         }
         return
       }
@@ -117,11 +117,11 @@ const handleSend = async () => {
 
     if (!result.success) {
       aiStore.endStreamingMessage()
-      aiStore.addAIMessage('抱歉，AI 响应失败: ' + result.message)
+      aiStore.addAIMessage(t('aiChat.aiFailed') + result.message)
     }
   } catch (error) {
     aiStore.endStreamingMessage()
-    aiStore.addAIMessage('抱歉，连接 AI 失败: ' + error.message)
+    aiStore.addAIMessage(t('aiChat.aiConnectionFailed') + error.message)
   } finally {
     if (!streamEndedNormally) {
       isSending.value = false

@@ -264,6 +264,11 @@ onUnmounted(() => {
       gap: 12px;
       margin-bottom: 20px;
       
+      // 防止头像被内容挤压变形
+      :deep(.el-avatar) {
+        flex-shrink: 0;
+      }
+      
       &.user {
         flex-direction: row-reverse;
         
@@ -279,6 +284,7 @@ onUnmounted(() => {
 
         .message-content {
           max-width: min(1100px, 100%);
+          min-width: 0;
         }
         
         .message-bubble {

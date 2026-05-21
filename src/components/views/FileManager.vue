@@ -1,7 +1,7 @@
 <template>
   <div class="file-manager-view">
     <div class="file-header">
-      <h2>文件管理</h2>
+      <h2>{{ t('files.title') }}</h2>
     </div>
     
     <!-- 拖放区域 -->
@@ -16,16 +16,16 @@
     >
       <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
       <div class="el-upload__text">
-        将文件拖放到此处或点击上传
+        {{ t('files.dropOrClick') }}
       </div>
     </el-upload>
     
     <!-- 文件列表 -->
     <div class="file-list">
-      <h3>已保存文件</h3>
+      <h3>{{ t('files.savedFiles') }}</h3>
       
       <el-table :data="files" stripe style="width: 100%">
-        <el-table-column prop="name" label="文件名" min-width="200">
+        <el-table-column prop="name" :label="t('files.fileName')" min-width="200">
           <template #default="{ row }">
             <div class="file-name-cell">
               <el-icon><Document /></el-icon>
@@ -34,19 +34,19 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="size" label="大小" width="120">
+        <el-table-column prop="size" :label="t('files.size')" width="120">
           <template #default="{ row }">
             {{ formatFileSize(row.size) }}
           </template>
         </el-table-column>
         
-        <el-table-column prop="lastModified" label="日期" width="180">
+        <el-table-column prop="lastModified" :label="t('files.date')" width="180">
           <template #default="{ row }">
             {{ formatDate(row.lastModified) }}
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column :label="t('files.actions')" width="180" fixed="right">
           <template #default="{ row }">
             <el-button 
               size="small" 
@@ -59,7 +59,7 @@
               </template>
               <template v-else>
                 <el-icon><Download /></el-icon>
-                下载
+                {{ t('files.download') }}
               </template>
             </el-button>
             <el-button 
@@ -68,13 +68,13 @@
               @click="handleDelete(row)"
             >
               <el-icon><Delete /></el-icon>
-              删除
+              {{ t('files.delete') }}
             </el-button>
           </template>
         </el-table-column>
       </el-table>
       
-      <el-empty v-if="files.length === 0" description="暂无已保存文件" />
+      <el-empty v-if="files.length === 0" :description="t('files.noSavedFiles')" />
     </div>
   </div>
 </template>
@@ -83,6 +83,9 @@
 import { ref, onMounted } from 'vue'
 import { UploadFilled, Document, Download, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from '../../composables/useI18n'
+
+const { t } = useI18n()
 
 const uploadRef = ref(null)
 const files = ref([])
@@ -132,9 +135,9 @@ const handleFileChange = async (file, uploadFiles) => {
     if (exists) {
       try {
         await ElMessageBox.confirm(
-          `文件已存在: ${fileInfo.name}`,
-          '确认',
-          { confirmButtonText: '替换', cancelButtonText: '跳过' }
+          t('files.fileExists', { name: fileInfo.name }),
+          t('common.confirm'),
+          { confirmButtonText: t('common.replace'), cancelButtonText: t('common.skip') }
         )
         // 替换
         files.value = files.value.filter(fi => fi.name !== fileInfo.name)
@@ -155,9 +158,9 @@ const handleFileChange = async (file, uploadFiles) => {
           fileInfo.name,
           await f.raw.arrayBuffer()
         )
-        ElMessage.success(`上传成功: ${fileInfo.name}`)
+        ElMessage.success(t('files.uploadSuccess', { name: fileInfo.name }))
       } catch (error) {
-        ElMessage.error(`上传失败: ${error.message}`)
+        ElMessage.error(t('files.uploadFailed', { error: error.message }))
       }
     }
 
@@ -189,12 +192,12 @@ const handleDownload = async (file) => {
   try {
     const result = await window.electronAPI.downloadFile(currentUsername.value, file.name)
     if (result.success) {
-      ElMessage.success('下载成功')
+      ElMessage.success(t('files.downloadSuccess'))
     } else {
       ElMessage.error(result.message)
     }
   } catch (error) {
-    ElMessage.error('下载中断: ' + error.message)
+    ElMessage.error(t('files.downloadFailed', { error: error.message }))
     // 清理不完整的文件由服务端处理
   } finally {
     downloadingFiles.value = downloadingFiles.value.filter(f => f !== file.name)
@@ -206,9 +209,9 @@ const handleDownload = async (file) => {
 const handleDelete = async (file) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除 ${file.name}?`,
-      '警告',
-      { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
+      t('common.confirmDelete', { name: file.name }),
+      t('common.warning'),
+      { confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel'), type: 'warning' }
     )
     
     if (window.electronAPI) {
@@ -216,7 +219,7 @@ const handleDelete = async (file) => {
       if (result.success) {
         files.value = files.value.filter(f => f.name !== file.name)
         saveToStorage()
-        ElMessage.success('删除成功')
+        ElMessage.success(t('files.deleteSuccess'))
       } else {
         ElMessage.error(result.message)
       }
