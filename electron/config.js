@@ -1,6 +1,17 @@
 import { app } from 'electron'
 
-export const API_BASE = process.env.API_URL || 'http://127.0.0.1:3000'
+// 服务端 API 地址（运行时可变）
+let apiBase = process.env.API_URL || 'http://127.0.0.1:3000'
+
+export const getAPIBase = () => apiBase
+
+export const setAPIBase = (url) => {
+    if (url && typeof url === 'string') {
+        apiBase = url.replace(/\/+$/, '')
+        console.log('[Config] API Base updated:', apiBase)
+    }
+}
+
 export const DOC_SERVER = process.env.DOC_SERVER || 'http://127.0.0.1:3000'
 export const SCHEDULED_TASKS_FILE = app.getPath('userData') + '/scheduled-tasks.json'
 
@@ -10,10 +21,10 @@ let lmStudioApi = process.env.LM_STUDIO_API || 'http://127.0.0.1:1234/v1'
 export const getLMStudioAPI = () => lmStudioApi
 
 export const setLMStudioAPI = (url) => {
-  if (url && typeof url === 'string') {
-    lmStudioApi = url.replace(/\/+$/, '')  // 去掉末尾斜杠
-    console.log('[Config] LM Studio API updated:', lmStudioApi)
-  }
+    if (url && typeof url === 'string') {
+        lmStudioApi = url.replace(/\/+$/, '')
+        console.log('[Config] LM Studio API updated:', lmStudioApi)
+    }
 }
 
 export let mainWindow = null

@@ -106,7 +106,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUserFiles: (username) => ipcRenderer.invoke('get-user-files', username),
 
   // 动态设置 AI API 地址
-  setAiApiUrl: (url) => ipcRenderer.invoke('set-ai-api-url', url)
+  setAiApiUrl: (url) => ipcRenderer.invoke('set-ai-api-url', url),
+
+  // 动态设置服务端 API 地址
+  setApiBaseUrl: (url) => ipcRenderer.invoke('set-api-base', url)
 })
 
 console.log('[Preload] ready')

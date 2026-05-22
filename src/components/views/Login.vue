@@ -41,7 +41,10 @@
       </el-form>
       <div class="footer-links">
         <span class="register-link" @click="handleRegister">{{ t('login.register') }}</span>
-        <span>{{ t('login.defaultServer') }} {{ apiBase }}</span>
+        <span class="server-address" @click="openServerDialog">
+          <el-icon class="server-edit-icon"><EditPen /></el-icon>
+          {{ t('login.defaultServer') }} {{ apiBase }}
+        </span>
       </div>
     </el-card>
 
@@ -63,25 +66,99 @@
         <el-button type="primary" :loading="registerLoading" @click="handleRegisterSubmit">{{ t('login.register') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- 编辑服务器地址对话框 -->
+    <el-dialog v-model="serverDialogVisible" :title="t('login.editServer')" width="400px" class="server-dialog">
+      <el-form label-width="80px">
+        <el-form-item :label="t('login.serverIP')">
+          <el-input v-model="serverIP" :placeholder="t('settings.serverIPPlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="t('login.serverPort')">
+          <el-input v-model="serverPort" :placeholder="t('settings.serverPortPlaceholder')" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="serverDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="savingServer" @click="saveServerSettings">{{ t('common.save') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { User, Lock } from '@element-plus/icons-vue'
+import { User, Lock, EditPen } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from '../../composables/useI18n'
 
 const emit = defineEmits(['login-success', 'auto-login-success'])
 const { t } = useI18n()
 
+const SERVER_SETTINGS_KEY = 'lanChatSettings'
+
 const formRef = ref(null)
 const loading = ref(false)
 const testingConnection = ref(false)
 const autoLogin = ref(false)
-const autoLoginChecked = ref(false) // 是否已检查过自动登录
-const autoLoginSuccess = ref(false) // 自动登录是否成功
-const apiBase = 'http://localhost:3000'
+const autoLoginChecked = ref(false)
+const autoLoginSuccess = ref(false)
+const apiBase = ref('http://localhost:3000')
+
+// 服务器地址编辑
+const serverDialogVisible = ref(false)
+const serverIP = ref('127.0.0.1')
+const serverPort = ref('3000')
+const savingServer = ref(false)
+
+// 读取保存的服务器设置
+const loadServerSettings = () => {
+    const raw = localStorage.getItem(SERVER_SETTINGS_KEY)
+    if (raw) {
+        try {
+            const s = JSON.parse(raw)
+            const ip = s.serverIP || '127.0.0.1'
+            const port = s.serverPort || '3000'
+            serverIP.value = ip
+            serverPort.value = port
+            apiBase.value = `http://${ip}:${port}`
+        } catch (e) {
+            // ignore
+        }
+    }
+}
+
+const openServerDialog = () => {
+    loadServerSettings()
+    serverDialogVisible.value = true
+}
+
+const saveServerSettings = async () => {
+    if (!serverIP.value) {
+        ElMessage.warning(t('settings.enterServerIP'))
+        return
+    }
+    savingServer.value = true
+    try {
+        const ip = serverIP.value.trim()
+        const port = serverPort.value.trim() || '3000'
+        const url = `http://${ip}:${port}`
+
+        const settings = { serverIP: ip, serverPort: port }
+        localStorage.setItem(SERVER_SETTINGS_KEY, JSON.stringify(settings))
+        apiBase.value = url
+
+        if (window.electronAPI?.setApiBaseUrl) {
+            await window.electronAPI.setApiBaseUrl(url)
+        }
+
+        ElMessage.success(t('login.serverSaved'))
+        serverDialogVisible.value = false
+    } catch (error) {
+        ElMessage.error(error.message)
+    } finally {
+        savingServer.value = false
+    }
+}
 
 // 注册相关
 const registerDialogVisible = ref(false)
@@ -150,17 +227,17 @@ const handleRegisterSubmit = async () => {
 
 // 组件挂载时自动检查自动登录
 onMounted(async () => {
-  const credentialStr = localStorage.getItem('autoLoginCredential')
-  if (credentialStr) {
-    autoLoginChecked.value = true
-    autoLogin.value = true // 勾选自动登录
+    loadServerSettings()
+    const credentialStr = localStorage.getItem('autoLoginCredential')
+    if (credentialStr) {
+        autoLoginChecked.value = true
+        autoLogin.value = true
 
-    // 尝试自动登录
-    const success = await checkAutoLogin()
-    if (success) {
-      autoLoginSuccess.value = true
+        const success = await checkAutoLogin()
+        if (success) {
+            autoLoginSuccess.value = true
+        }
     }
-  }
 })
 
 // 生成凭证
@@ -314,6 +391,27 @@ defineExpose({ checkAutoLogin })
     &:hover {
       text-decoration: underline;
     }
+  }
+
+  .server-address {
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.2s;
+    &:hover {
+      color: var(--accent-color);
+      .server-edit-icon {
+        opacity: 1;
+      }
+    }
+  }
+
+  .server-edit-icon {
+    font-size: 12px;
+    opacity: 0.5;
+    transition: opacity 0.2s;
   }
 
   :deep(.el-checkbox) {

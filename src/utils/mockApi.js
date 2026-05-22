@@ -108,6 +108,12 @@ export const mockElectronAPI = {
   setAiApiUrl: async (url) => {
     console.log('[Mock] AI API URL set:', url)
     return { success: true }
+  },
+
+  // 设置服务端 API 地址（Mock）
+  setApiBaseUrl: async (url) => {
+    console.log('[Mock] API Base URL set:', url)
+    return { success: true }
   }
 }
 
