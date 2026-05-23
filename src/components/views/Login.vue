@@ -225,9 +225,29 @@ const handleRegisterSubmit = async () => {
   })
 }
 
+// 同步保存的服务器地址到主进程
+const syncServerSettingsToMain = async () => {
+    const raw = localStorage.getItem(SERVER_SETTINGS_KEY)
+    if (!raw) return
+    try {
+        const s = JSON.parse(raw)
+        const ip = s.serverIP || '127.0.0.1'
+        const port = s.serverPort || '3000'
+        const url = `http://${ip}:${port}`
+        if (window.electronAPI?.setApiBaseUrl) {
+            await window.electronAPI.setApiBaseUrl(url)
+            console.log('[Login] synced server settings to main:', url)
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
 // 组件挂载时自动检查自动登录
 onMounted(async () => {
     loadServerSettings()
+    // 同步保存的服务器配置到主进程，确保请求使用正确的地址
+    await syncServerSettingsToMain()
     const credentialStr = localStorage.getItem('autoLoginCredential')
     if (credentialStr) {
         autoLoginChecked.value = true

@@ -2,12 +2,15 @@ import { app } from 'electron'
 
 // 服务端 API 地址（运行时可变）
 let apiBase = process.env.API_URL || 'http://127.0.0.1:3000'
+// 同步到 global 保证跨模块共享
+global.__apiBase = apiBase
 
-export const getAPIBase = () => apiBase
+export const getAPIBase = () => global.__apiBase || apiBase
 
 export const setAPIBase = (url) => {
     if (url && typeof url === 'string') {
         apiBase = url.replace(/\/+$/, '')
+        global.__apiBase = apiBase
         console.log('[Config] API Base updated:', apiBase)
     }
 }
