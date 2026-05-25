@@ -9,7 +9,7 @@
     "dev": "vite",
     "electron": "chcp 65001 && vite --mode electron",
     "build": "vite build --mode electron",
-    "pack": "vite build --mode electron && electron-builder && if exist release\\*.blockmap del /q release\\*.blockmap && if exist release\\latest.yml del /q release\\latest.yml",
+    "pack": "if exist release\\win-unpacked rmdir /s /q release\\win-unpacked && vite build --mode electron && electron-builder && if exist release\\*.blockmap del /q release\\*.blockmap && if exist release\\latest.yml del /q release\\latest.yml",
     "preview": "vite preview",
     "postinstall": "electron-builder install-app-deps"
   },
