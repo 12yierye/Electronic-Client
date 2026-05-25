@@ -25,6 +25,7 @@ export function useChatRoom() {
   const enablePinyinSearch = ref(false)
   const searchResults = ref([])
   const publicGroupsList = ref([])
+  const groupUnread = ref({})
 
   const pendingRequestsCount = computed(() => friendRequests.value.length)
 
@@ -304,9 +305,23 @@ export function useChatRoom() {
     if (result.success) publicGroupsList.value = result.groups || []
   }
 
+  const getGroupDND = (groupId) => {
+    const username = currentUsername.value
+    if (!username || !groupId) return false
+    return localStorage.getItem(`groupDND_${username}_${groupId}`) === '1'
+  }
+
+  const clearGroupUnread = (groupId) => {
+    const username = currentUsername.value
+    if (!username || !groupId) return
+    groupUnread.value = { ...groupUnread.value, [groupId]: 0 }
+    localStorage.setItem(`groupUnread_${username}_${groupId}`, '0')
+  }
+
   const selectGroup = async (group) => {
     selectedGroup.value = group
     selectedUser.value = null
+    if (group?.id) clearGroupUnread(group.id)
     await loadGroupMessages()
   }
 
@@ -388,7 +403,7 @@ export function useChatRoom() {
       ElMessage.warning('至少添加 2 名成员')
       return
     }
-    const groupData = { name: newGroupName.value.trim(), creator: currentUsername.value, members: newGroupMembers.value }
+    const groupData = { name: newGroupName.value.trim(), creator: currentUsername.value, members: [...newGroupMembers.value] }
     let data
     if (chatMode.value === 'lan' && lanSettings.value.serverIP) {
       try {
@@ -403,7 +418,13 @@ export function useChatRoom() {
         return
       }
     } else if (window.electronAPI) {
-      data = await window.electronAPI.createGroup(groupData)
+      try {
+        data = await window.electronAPI.createGroup(groupData)
+      } catch (error) {
+        console.error('[Chat] create group failed:', error)
+        ElMessage.error('创建失败: ' + (error.message || '未知错误'))
+        return
+      }
     } else {
       return
     }
@@ -546,6 +567,7 @@ export function useChatRoom() {
     loadFriendsList()
     loadAllUsers()
     loadFriendRequests()
+    loadPublicGroupsList()
     if (lanSettings.value.serverIP) loadLanFriendsList()
     startMessagePolling()
   })
@@ -573,6 +595,6 @@ export function useChatRoom() {
     handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
     selectGroup, loadGroupMessages, sendGroupMessage,
     createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
-    loadPublicGroupsList
+    loadPublicGroupsList, groupUnread, getGroupDND, clearGroupUnread
   }
 }

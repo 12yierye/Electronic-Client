@@ -170,7 +170,20 @@ const registerForm = reactive({
   email: ''
 })
 const registerRules = computed(() => ({
-  username: [{ required: true, message: t('login.usernameRequired'), trigger: 'blur' }],
+  username: [
+    { required: true, message: t('login.usernameRequired'), trigger: 'blur' },
+    {
+      validator: (rule, value, callback) => {
+        if (!value) return callback()
+        if (!/^[a-zA-Z0-9_|~:]+$/.test(value)) {
+          callback(new Error('用户名只允许字母、数字和下划线，特殊符号仅限 | ~ :'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ],
   password: [{ required: true, message: t('login.passwordRequired'), trigger: 'blur' }],
   email: [
     { required: true, message: t('login.emailRequired'), trigger: 'blur' },

@@ -44,6 +44,7 @@
         <div class="user-list">
           <!-- 公网：好友列表 -->
           <template v-if="chatMode === 'public' && activeTab === 'friends'">
+            <div class="category-header">{{ t('chatRoom.friends') }}</div>
             <div 
               v-for="friend in friendsList" 
               :key="friend.username"
@@ -68,6 +69,7 @@
           
           <!-- 公网：群聊列表 -->
           <template v-else-if="chatMode === 'public' && activeTab === 'groups'">
+            <div class="category-header">我的群聊</div>
             <div class="group-actions">
               <el-button type="primary" size="small" @click="showCreateGroupDialog = true">
                 {{ t('chatRoom.createGroup') }}
@@ -79,19 +81,23 @@
               :class="['user-item', { active: selectedGroup?.id === group.id }]"
               @click="selectGroup(group)"
             >
-              <el-avatar :size="40" style="background: var(--accent-color)">
-                <el-icon><ChatDotRound /></el-icon>
-              </el-avatar>
+              <el-badge :is-dot="(groupUnread[group.id] || 0) > 0 && !getGroupDND(group.id)" :hidden="getGroupDND(group.id)">
+                <el-avatar :size="40" style="background: var(--accent-color)">
+                  <el-icon><ChatDotRound /></el-icon>
+                </el-avatar>
+              </el-badge>
               <div class="user-info">
                 <div class="user-name">{{ group.name }}</div>
                 <div class="user-role">{{ t('chatRoom.members', { n: group.members.length }) }}</div>
               </div>
+              <el-tag v-if="getGroupDND(group.id)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
             </div>
             <el-empty v-if="filteredPublicGroupsList.length === 0" :description="t('chatRoom.noGroups')" />
           </template>
           
           <!-- 内网：用户列表 -->
           <template v-else-if="chatMode === 'lan' && activeTab === 'users'">
+            <div class="category-header">{{ t('chatRoom.users') }}</div>
             <div 
               v-for="user in lanFriendsList" 
               :key="user.username"
@@ -112,6 +118,7 @@
           
           <!-- 内网：群聊列表 -->
           <template v-else-if="chatMode === 'lan' && activeTab === 'groups'">
+            <div class="category-header">我的群聊</div>
             <div class="group-actions">
               <el-button type="primary" size="small" @click="showCreateGroupDialog = true">
                 {{ t('chatRoom.createGroup') }}
@@ -123,13 +130,16 @@
               :class="['user-item', { active: selectedGroup?.id === group.id }]"
               @click="selectGroup(group)"
             >
-              <el-avatar :size="40" style="background: var(--accent-color)">
-                <el-icon><ChatDotRound /></el-icon>
-              </el-avatar>
+              <el-badge :is-dot="(groupUnread[group.id] || 0) > 0 && !getGroupDND(group.id)" :hidden="getGroupDND(group.id)">
+                <el-avatar :size="40" style="background: var(--accent-color)">
+                  <el-icon><ChatDotRound /></el-icon>
+                </el-avatar>
+              </el-badge>
               <div class="user-info">
                 <div class="user-name">{{ group.name }}</div>
                 <div class="user-role">{{ t('chatRoom.members', { n: group.members.length }) }}</div>
               </div>
+              <el-tag v-if="getGroupDND(group.id)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
             </div>
             <el-empty v-if="filteredLanGroupsList.length === 0" :description="t('chatRoom.noGroups')" />
           </template>
@@ -192,22 +202,14 @@
             <span v-if="selectedGroup">{{ selectedGroup.name }}</span>
             <span v-else-if="selectedUser">{{ selectedUser.username }}</span>
             <span v-else class="placeholder">{{ t('chatRoom.selectUserToChat') }}</span>
-            <!-- 群聊操作按钮 -->
-            <div v-if="selectedGroup" class="group-actions">
+            <!-- 群聊更多按钮 -->
+            <div v-if="selectedGroup" class="group-more-btn">
               <el-button
-                v-if="selectedGroup.creator === currentUsername"
-                type="danger"
+                :icon="MoreFilled"
+                circle
                 size="small"
-                @click="handleDisbandGroup"
-              >
-                {{ t('chatRoom.disbandGroup') }}
-              </el-button>
-              <el-button
-                size="small"
-                @click="handleDeleteGroup"
-              >
-                {{ t('chatRoom.deleteChat') }}
-              </el-button>
+                @click="showGroupMemberPanel = true"
+              />
             </div>
           </div>
           
@@ -282,7 +284,7 @@
             style="width: 100%"
           >
             <el-option
-              v-for="user in lanFriendsList"
+              v-for="user in (chatMode === 'lan' ? lanFriendsList : friendsList)"
               :key="user.username"
               :label="user.username"
               :value="user.username"
@@ -295,16 +297,40 @@
         <el-button type="primary" @click="createGroup">{{ t('common.create') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- 群成员侧边栏 -->
+    <el-drawer
+      v-model="showGroupMemberPanel"
+      direction="rtl"
+      size="280px"
+      :title="`${selectedGroup?.name || ''} (${selectedGroup?.members?.length || 0})`"
+    >
+      <GroupMemberPanel
+        v-if="selectedGroup"
+        :members="selectedGroup.members"
+        :is-creator="selectedGroup.creator === currentUsername"
+        :show-username="showUsernameInPanel"
+        :group-id="selectedGroup.id"
+        :current-username="currentUsername"
+        @close="showGroupMemberPanel = false"
+        @disband="handleDisbandGroup"
+        @exit="handleDeleteGroup"
+      />
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { Search, Star, Promotion, Picture, ChatDotRound } from '@element-plus/icons-vue'
+import { computed, ref } from 'vue'
+import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled } from '@element-plus/icons-vue'
 import { useChatRoom } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
+import GroupMemberPanel from './GroupMemberPanel.vue'
 
 const { t } = useI18n()
+
+const showGroupMemberPanel = ref(false)
+const showUsernameInPanel = ref(true)
 
 const {
   activeTab, chatMode, useLanChat, lanSettings, searchQuery,
@@ -325,7 +351,8 @@ const {
   handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
   selectGroup, loadGroupMessages, sendGroupMessage,
   createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
-  loadPublicGroupsList
+  loadPublicGroupsList,
+  groupUnread, getGroupDND
 } = useChatRoom()
 
 const searchPlaceholder = computed(() => {
@@ -386,6 +413,16 @@ const searchPlaceholder = computed(() => {
     flex: 1;
     overflow-y: auto;
     padding: 10px;
+
+    .category-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 8px 4px 4px;
+      margin-bottom: 4px;
+    }
     
     .user-item, .request-item {
       display: flex;
@@ -402,6 +439,19 @@ const searchPlaceholder = computed(() => {
       
       &.active {
         background: rgba(52, 152, 219, 0.2);
+      }
+
+      .el-badge {
+        flex-shrink: 0;
+        line-height: 0;
+      }
+
+      .dnd-tag {
+        flex-shrink: 0;
+        font-size: 11px;
+        padding: 0 4px;
+        height: 20px;
+        line-height: 20px;
       }
       
       .user-info {
@@ -469,7 +519,9 @@ const searchPlaceholder = computed(() => {
       .group-actions {
         display: flex;
         gap: 8px;
-      }
+        margin-bottom: 8px;
+        padding: 0 4px;
+    }
     }
     
     .chat-messages {
