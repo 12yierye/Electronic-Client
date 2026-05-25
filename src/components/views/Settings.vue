@@ -102,6 +102,23 @@
         <div class="setting-tip">{{ t('settings.enablePinyinSearchTip') }}</div>
       </el-form-item>
 
+      <!-- 下载目录设置 -->
+      <el-divider />
+      <h3>{{ t('settings.downloadTitle') }}</h3>
+
+      <el-form-item :label="t('settings.downloadDir') + '：'">
+        <div class="download-dir-row">
+          <el-input
+            v-model="downloadDir"
+            :placeholder="t('settings.downloadDirPlaceholder')"
+            @blur="handleDownloadDirBlur"
+            @keyup.enter="handleDownloadDirEnter"
+          />
+          <el-button @click="handleSelectDir" :icon="FolderOpened" />
+        </div>
+        <div class="setting-tip">{{ t('settings.downloadDirTip') }}</div>
+      </el-form-item>
+
       <!-- 关于 -->
       <el-divider />
 
@@ -116,7 +133,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { Moon, Sunny, Monitor } from '@element-plus/icons-vue'
+import { Moon, Sunny, Monitor, FolderOpened } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useSettingsStore } from '../../stores/settings'
 import { useI18n } from '../../composables/useI18n'
@@ -138,6 +155,49 @@ const aiServerIP = ref('127.0.0.1')
 const aiServerPort = ref('1234')
 
 const SERVER_SETTINGS_KEY = 'lanChatSettings'
+const DOWNLOAD_DIR_KEY = 'downloadDir'
+
+const downloadDir = ref('')
+
+// 保存下载目录设置
+const saveDownloadDir = () => {
+  const dir = downloadDir.value.trim()
+  localStorage.setItem(DOWNLOAD_DIR_KEY, dir)
+  if (window.electronAPI?.setDownloadDir) {
+    window.electronAPI.setDownloadDir(dir || null)
+  }
+}
+
+const ensureDirExists = (dir) => {
+  if (!dir) return
+  try {
+    if (window.electronAPI?.ensureDir) {
+      window.electronAPI.ensureDir(dir)
+    }
+  } catch (_) {}
+}
+
+const handleDownloadDirBlur = () => {
+  const dir = downloadDir.value.trim()
+  if (!dir) return
+  if (window.electronAPI?.ensureDir) {
+    window.electronAPI.ensureDir(dir)
+  }
+  saveDownloadDir()
+}
+
+const handleDownloadDirEnter = () => {
+  handleDownloadDirBlur()
+}
+
+const handleSelectDir = async () => {
+  if (!window.electronAPI?.selectDirectory) return
+  const result = await window.electronAPI.selectDirectory()
+  if (result.success && result.dir) {
+    downloadDir.value = result.dir
+    saveDownloadDir()
+  }
+}
 
 // 保存 AI API 设置到 localStorage 并同步到主进程
 const saveAiApiSettings = () => {
@@ -172,6 +232,21 @@ onMounted(() => {
     serverIP.value = s.serverIP || s.lanServerIP || '127.0.0.1'
     serverPort.value = s.serverPort || s.lanServerPort || '3000'
     enablePinyinSearch.value = s.enablePinyinSearch || false
+  }
+
+  // 加载下载目录设置
+  const savedDir = localStorage.getItem(DOWNLOAD_DIR_KEY)
+  if (savedDir) {
+    downloadDir.value = savedDir
+    if (window.electronAPI?.setDownloadDir) {
+      window.electronAPI.setDownloadDir(savedDir)
+    }
+  } else if (window.electronAPI?.getDownloadDir) {
+    window.electronAPI.getDownloadDir().then(result => {
+      if (result.success) {
+        downloadDir.value = result.dir
+      }
+    })
   }
 })
 
@@ -284,9 +359,18 @@ const testServerConnection = async () => {
     }
     
     .setting-tip {
-      margin-top: 8px;
       font-size: 12px;
       color: var(--text-secondary);
+      margin-top: 8px;
+    }
+
+    .download-dir-row {
+      display: flex;
+      gap: 8px;
+
+      .el-input {
+        flex: 1;
+      }
     }
 
     .about-section {

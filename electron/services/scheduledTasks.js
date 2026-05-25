@@ -78,11 +78,11 @@ export const clearAllScheduledTasks = () => {
 export const executeScheduledTask = async (taskData) => {
     if (taskData.type === 'file') {
         const downloadResponse = await axios.get(
-            `${getAPIBase()}/user/download?username=${taskData.currentUser}&filename=${taskData.filename}`,
+            `${getAPIBase()}/user/download?username=${encodeURIComponent(taskData.currentUser)}&filename=${encodeURIComponent(taskData.filename)}`,
             { responseType: 'arraybuffer' }
         )
         await axios.post(
-            `${getAPIBase()}/user/upload?username=${taskData.targetUser}&filename=${taskData.filename}`,
+            `${getAPIBase()}/user/upload?username=${encodeURIComponent(taskData.targetUser)}&filename=${encodeURIComponent(taskData.filename)}`,
             downloadResponse.data,
             { headers: { 'Content-Type': 'application/octet-stream' } }
         )

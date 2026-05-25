@@ -111,7 +111,11 @@ const messages = {
       aiServerIPPlaceholder: '例如: 127.0.0.1',
       aiServerPort: '模型API端口',
       aiServerPortPlaceholder: '例如: 1234',
-      aiServerTip: '设置本地 AI 模型（如 LM Studio）的 API 地址，修改后立即生效'
+      aiServerTip: '设置本地 AI 模型（如 LM Studio）的 API 地址，修改后立即生效',
+      downloadTitle: '下载目录设置',
+      downloadDir: '下载目录',
+      downloadDirPlaceholder: '选择或输入下载保存路径',
+      downloadDirTip: '留空则使用默认下载目录，输入不存在的路径将自动新建'
     },
     aiChat: {
       personalAssistant: '您的个人AI助手',
@@ -146,6 +150,7 @@ const messages = {
       users: '用户',
       groups: '群聊',
       searchUser: '搜索用户...',
+      searchGroupPlaceholder: '搜索群聊...',
       online: '在线',
       offline: '离线',
       noFriends: '暂无好友',
@@ -189,7 +194,11 @@ const messages = {
       uploadFailed: '上传失败: {error}',
       downloadSuccess: '下载成功',
       downloadFailed: '下载中断: {error}',
-      deleteSuccess: '删除成功'
+      deleteSuccess: '删除成功',
+      self: '我',
+      publisher: '发布者',
+      publishTime: '发布时间',
+      cannotDownloadSelf: '不能下载自己上传的文件'
     }
   },
   'en': {
@@ -293,7 +302,11 @@ const messages = {
       aiServerIPPlaceholder: 'e.g. 127.0.0.1',
       aiServerPort: 'Model API Port',
       aiServerPortPlaceholder: 'e.g. 1234',
-      aiServerTip: 'Set the API address of your local AI model (e.g. LM Studio), takes effect immediately'
+      aiServerTip: 'Set the API address of your local AI model (e.g. LM Studio), takes effect immediately',
+      downloadTitle: 'Download Directory Settings',
+      downloadDir: 'Download Directory',
+      downloadDirPlaceholder: 'Choose or enter download path',
+      downloadDirTip: 'Leave empty to use default download directory, non-existent paths will be auto-created'
     },
     aiChat: {
       personalAssistant: 'Your personal AI assistant',
@@ -328,6 +341,7 @@ const messages = {
       users: 'Users',
       groups: 'Groups',
       searchUser: 'Search users...',
+      searchGroupPlaceholder: 'Search groups...',
       online: 'Online',
       offline: 'Offline',
       noFriends: 'No friends yet',
@@ -371,7 +385,11 @@ const messages = {
       uploadFailed: 'Upload failed: {error}',
       downloadSuccess: 'Download successful',
       downloadFailed: 'Download interrupted: {error}',
-      deleteSuccess: 'Deleted successfully'
+      deleteSuccess: 'Deleted successfully',
+      self: 'Me',
+      publisher: 'Publisher',
+      publishTime: 'Publish Time',
+      cannotDownloadSelf: 'Cannot download your own file'
     }
   },
   'ja': {
@@ -475,7 +493,11 @@ const messages = {
       aiServerIPPlaceholder: '例: 127.0.0.1',
       aiServerPort: 'モデルAPIポート',
       aiServerPortPlaceholder: '例: 1234',
-      aiServerTip: 'ローカルAIモデル（LM Studioなど）のAPIアドレスを設定します。変更後すぐに反映されます'
+      aiServerTip: 'ローカルAIモデル（LM Studioなど）のAPIアドレスを設定します。変更後すぐに反映されます',
+      downloadTitle: 'ダウンロードディレクトリ設定',
+      downloadDir: 'ダウンロードディレクトリ',
+      downloadDirPlaceholder: 'ダウンロード先を選択または入力',
+      downloadDirTip: '空の場合はデフォルトのダウンロードディレクトリを使用し、存在しないパスは自動で作成されます'
     },
     aiChat: {
       personalAssistant: 'あなたの個人AIアシスタント',
@@ -510,6 +532,7 @@ const messages = {
       users: 'ユーザー',
       groups: 'グループ',
       searchUser: 'ユーザーを検索...',
+      searchGroupPlaceholder: 'グループを検索...',
       online: 'オンライン',
       offline: 'オフライン',
       noFriends: '友達がいません',
@@ -553,7 +576,11 @@ const messages = {
       uploadFailed: 'アップロード失敗: {error}',
       downloadSuccess: 'ダウンロード成功',
       downloadFailed: 'ダウンロード中断: {error}',
-      deleteSuccess: '削除成功'
+      deleteSuccess: '削除成功',
+      self: '自分',
+      publisher: '投稿者',
+      publishTime: '投稿時間',
+      cannotDownloadSelf: '自分のファイルはダウンロードできません'
     }
   }
 }

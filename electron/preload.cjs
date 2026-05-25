@@ -63,6 +63,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 测试服务器连接
   testServerConnection: () => ipcRenderer.invoke('test-server-connection'),
 
+  // 公网群聊
+  getGroups: (username) => ipcRenderer.invoke('get-groups', username),
+  createGroup: (data) => ipcRenderer.invoke('create-group', data),
+  disbandGroup: (groupId, username) => ipcRenderer.invoke('disband-group', groupId, username),
+  getGroupMessages: (groupId) => ipcRenderer.invoke('get-group-messages', groupId),
+  sendGroupMessage: (groupId, from, message, type) => ipcRenderer.invoke('send-group-message', groupId, from, message, type),
+  joinGroup: (groupId, username) => ipcRenderer.invoke('join-group', groupId, username),
+
   // 本地 AI 聊天
   aiChat: (message) => ipcRenderer.invoke('ai-chat', message),
 
@@ -104,6 +112,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 获取用户文件列表
   getUserFiles: (username) => ipcRenderer.invoke('get-user-files', username),
+
+  // 获取所有用户的文件（聚合）
+  getAllFiles: () => ipcRenderer.invoke('get-all-files'),
+
+  // 下载目录管理
+  setDownloadDir: (dir) => ipcRenderer.invoke('set-download-dir', dir),
+  getDownloadDir: () => ipcRenderer.invoke('get-download-dir'),
+  selectDirectory: () => ipcRenderer.invoke('select-directory'),
+  ensureDir: (dir) => ipcRenderer.invoke('ensure-dir', dir),
 
   // 动态设置 AI API 地址
   setAiApiUrl: (url) => ipcRenderer.invoke('set-ai-api-url', url),

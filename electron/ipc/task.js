@@ -98,12 +98,12 @@ export function registerTaskIpc() {
             }
 
             const downloadResponse = await axios.get(
-                `${getAPIBase()}/user/download?username=${currentUser}&filename=${filename}`,
+                `${getAPIBase()}/user/download?username=${encodeURIComponent(currentUser)}&filename=${encodeURIComponent(filename)}`,
                 { responseType: 'arraybuffer' }
             )
 
             await axios.post(
-                `${getAPIBase()}/user/upload?username=${targetUser}&filename=${filename}`,
+                `${getAPIBase()}/user/upload?username=${encodeURIComponent(targetUser)}&filename=${encodeURIComponent(filename)}`,
                 downloadResponse.data,
                 { headers: { 'Content-Type': 'application/octet-stream' } }
             )

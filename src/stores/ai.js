@@ -140,8 +140,8 @@ export const useAIStore = defineStore('ai', () => {
   const getGreeting = () => {
     const hour = new Date().getHours()
     const lang = localStorage.getItem('appSettings')
-      ? JSON.parse(localStorage.getItem('appSettings')).language || 'en'
-      : 'en'
+      ? JSON.parse(localStorage.getItem('appSettings')).language || 'zh-CN'
+      : 'zh-CN'
     
     const greetings = {
       en: {

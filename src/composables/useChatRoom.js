@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { matchByPinyin } from '../utils/pinyin'
 
@@ -23,6 +23,10 @@ export function useChatRoom() {
   const deletedGroupIds = ref([])
   const showRecommended = ref(true)
   const enablePinyinSearch = ref(false)
+  const searchResults = ref([])
+  const publicGroupsList = ref([])
+
+  const pendingRequestsCount = computed(() => friendRequests.value.length)
 
   const currentUsername = computed(() => {
     const user = localStorage.getItem('userInfo')
@@ -37,6 +41,9 @@ export function useChatRoom() {
       const shuffled = [...nonFriends].sort(() => Math.random() - 0.5)
       return shuffled.slice(0, 10)
     }
+    if (searchResults.value.length > 0) {
+      return searchResults.value.filter(u => u.username !== currentUsername.value)
+    }
     const query = searchQuery.value.toLowerCase()
     return users.filter(u => {
       const username = u.username.toLowerCase()
@@ -48,7 +55,21 @@ export function useChatRoom() {
   })
 
   const filteredLanGroupsList = computed(() => {
-    return lanGroupsList.value.filter(group => !deletedGroupIds.value.includes(group.id))
+    let list = lanGroupsList.value.filter(group => !deletedGroupIds.value.includes(group.id))
+    if (searchQuery.value.trim()) {
+      const q = searchQuery.value.trim().toLowerCase()
+      list = list.filter(g => g.name.toLowerCase().includes(q))
+    }
+    return list
+  })
+
+  const filteredPublicGroupsList = computed(() => {
+    let list = publicGroupsList.value.filter(group => !deletedGroupIds.value.includes(group.id))
+    if (searchQuery.value.trim()) {
+      const q = searchQuery.value.trim().toLowerCase()
+      list = list.filter(g => g.name.toLowerCase().includes(q))
+    }
+    return list
   })
 
   const normalizeMessage = (msg) => {
@@ -81,6 +102,22 @@ export function useChatRoom() {
 
   const onImageLoad = () => {}
 
+  // 搜索用户（调用服务端 API）
+  watch(searchQuery, async (query) => {
+    if (!query.trim() || !window.electronAPI) {
+      searchResults.value = []
+      return
+    }
+    if (activeTab.value === 'add') {
+      const result = await window.electronAPI.searchUsers(query.trim())
+      if (result.success && result.users) {
+        searchResults.value = result.users
+      }
+    } else {
+      searchResults.value = []
+    }
+  })
+
   const loadFriendsList = async () => {
     if (window.electronAPI) {
       const result = await window.electronAPI.getFriendsList(currentUsername.value)
@@ -98,7 +135,7 @@ export function useChatRoom() {
   const loadFriendRequests = async () => {
     if (window.electronAPI) {
       const result = await window.electronAPI.getFriendRequests(currentUsername.value, 'received')
-      if (result.success) friendRequests.value = result.requests || []
+      if (result.success) friendRequests.value = (result.requests || []).filter(r => r.status === 'pending')
     }
   }
 
@@ -232,7 +269,6 @@ export function useChatRoom() {
     }
   }
 
-  const handleSearch = (query) => {}
 
   const loadLanFriendsList = async () => {
     if (!lanSettings.value.serverIP) return
@@ -262,6 +298,12 @@ export function useChatRoom() {
     }
   }
 
+  const loadPublicGroupsList = async () => {
+    if (!window.electronAPI) return
+    const result = await window.electronAPI.getGroups(currentUsername.value)
+    if (result.success) publicGroupsList.value = result.groups || []
+  }
+
   const selectGroup = async (group) => {
     selectedGroup.value = group
     selectedUser.value = null
@@ -269,58 +311,71 @@ export function useChatRoom() {
   }
 
   const loadGroupMessages = async (append = false) => {
-    if (!selectedGroup.value || !lanSettings.value.serverIP) return
+    if (!selectedGroup.value) return
     const groupId = selectedGroup.value.id
     if (deletedGroupIds.value.includes(groupId)) {
       deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
       localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
     }
-    try {
+    let data
+    if (chatMode.value === 'lan' && lanSettings.value.serverIP) {
       const response = await fetch(
-        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages?groupId=${encodeURIComponent(selectedGroup.value.id)}`,
+        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages?groupId=${encodeURIComponent(groupId)}`,
         { method: 'GET' }
       )
-      const data = await response.json()
-      if (data.success) {
-        const newMessages = (data.messages || []).map(normalizeMessage)
-        if (append) {
-          const existingIds = new Set(chatMessages.value.map(m => m.id))
-          const uniqueNewMessages = newMessages.filter(m => m.id && !existingIds.has(m.id))
-          chatMessages.value = [...chatMessages.value, ...uniqueNewMessages]
-        } else {
-          chatMessages.value = newMessages
-        }
+      data = await response.json()
+    } else if (window.electronAPI) {
+      const result = await window.electronAPI.getGroupMessages(groupId)
+      data = result
+    } else {
+      return
+    }
+    if (data.success) {
+      const newMessages = (data.messages || []).map(normalizeMessage)
+      if (append) {
+        const existingIds = new Set(chatMessages.value.map(m => m.id))
+        const uniqueNewMessages = newMessages.filter(m => m.id && !existingIds.has(m.id))
+        chatMessages.value = [...chatMessages.value, ...uniqueNewMessages]
+      } else {
+        chatMessages.value = newMessages
       }
-    } catch (error) {
-      console.error('[Chat] load group msgs failed:', error)
     }
   }
 
   const sendGroupMessage = async () => {
     const message = inputMessage.value.trim()
-    if (!message || !selectedGroup.value || !lanSettings.value.serverIP) return
+    if (!message || !selectedGroup.value) return
     const groupId = selectedGroup.value.id
     if (deletedGroupIds.value.includes(groupId)) {
       deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
       localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
     }
-    try {
-      const response = await fetch(
-        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ groupId: selectedGroup.value.id, from: currentUsername.value, message, type: 'text' })
-        }
-      )
-      const data = await response.json()
-      if (data.success) {
-        chatMessages.value.push(data.data)
-        inputMessage.value = ''
+    let data
+    if (chatMode.value === 'lan' && lanSettings.value.serverIP) {
+      try {
+        const response = await fetch(
+          `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groupId, from: currentUsername.value, message, type: 'text' })
+          }
+        )
+        data = await response.json()
+      } catch (error) {
+        console.error('[Chat] send group msg failed:', error)
+        ElMessage.error('发送失败')
+        return
       }
-    } catch (error) {
-      console.error('[Chat] send group msg failed:', error)
-      ElMessage.error('发送失败')
+    } else if (window.electronAPI) {
+      const result = await window.electronAPI.sendGroupMessage(groupId, currentUsername.value, message, 'text')
+      data = result
+    } else {
+      return
+    }
+    if (data.success) {
+      chatMessages.value.push(data.data)
+      inputMessage.value = ''
     }
   }
 
@@ -329,28 +384,34 @@ export function useChatRoom() {
       ElMessage.warning('请输入群名称')
       return
     }
-    try {
-      const response = await fetch(
-        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/groups`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: newGroupName.value.trim(), creator: currentUsername.value, members: newGroupMembers.value })
-        }
-      )
-      const data = await response.json()
-      if (data.success) {
-        ElMessage.success('群聊创建成功')
-        showCreateGroupDialog.value = false
-        newGroupName.value = ''
-        newGroupMembers.value = []
-        await loadLanGroupsList()
-      } else {
-        ElMessage.error(data.message || '创建失败')
+    const groupData = { name: newGroupName.value.trim(), creator: currentUsername.value, members: newGroupMembers.value }
+    let data
+    if (chatMode.value === 'lan' && lanSettings.value.serverIP) {
+      try {
+        const response = await fetch(
+          `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/groups`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(groupData) }
+        )
+        data = await response.json()
+      } catch (error) {
+        console.error('[Chat] create group failed:', error)
+        ElMessage.error('创建失败')
+        return
       }
-    } catch (error) {
-      console.error('[Chat] create group failed:', error)
-      ElMessage.error('创建失败')
+    } else if (window.electronAPI) {
+      data = await window.electronAPI.createGroup(groupData)
+    } else {
+      return
+    }
+    if (data.success) {
+      ElMessage.success('群聊创建成功')
+      showCreateGroupDialog.value = false
+      newGroupName.value = ''
+      newGroupMembers.value = []
+      if (chatMode.value === 'lan') await loadLanGroupsList()
+      else await loadPublicGroupsList()
+    } else {
+      ElMessage.error(data.message || '创建失败')
     }
   }
 
@@ -369,36 +430,46 @@ export function useChatRoom() {
     }
     selectedGroup.value = null
     chatMessages.value = []
-    loadLanGroupsList()
+    if (chatMode.value === 'lan') loadLanGroupsList()
+    else loadPublicGroupsList()
     ElMessage.success('群聊已隐藏')
   }
 
   const handleDisbandGroup = async () => {
     if (!selectedGroup.value) return
-    try {
-      const response = await fetch(
-        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/groups/${selectedGroup.value.id}`,
-        {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: currentUsername.value })
-        }
-      )
-      const data = await response.json()
-      if (data.success) {
-        ElMessage.success('群聊已解散')
-        const groupId = selectedGroup.value.id
-        deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
-        localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
-        selectedGroup.value = null
-        chatMessages.value = []
-        await loadLanGroupsList()
-      } else {
-        ElMessage.error(data.message || '解散失败')
+    let data
+    if (chatMode.value === 'lan' && lanSettings.value.serverIP) {
+      try {
+        const response = await fetch(
+          `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/groups/${selectedGroup.value.id}`,
+          {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUsername.value })
+          }
+        )
+        data = await response.json()
+      } catch (error) {
+        console.error('[Chat] disband group failed:', error)
+        ElMessage.error('解散群聊失败')
+        return
       }
-    } catch (error) {
-      console.error('[Chat] disband group failed:', error)
-      ElMessage.error('解散群聊失败')
+    } else if (window.electronAPI) {
+      data = await window.electronAPI.disbandGroup(selectedGroup.value.id, currentUsername.value)
+    } else {
+      return
+    }
+    if (data.success) {
+      ElMessage.success('群聊已解散')
+      const groupId = selectedGroup.value.id
+      deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
+      localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
+      selectedGroup.value = null
+      chatMessages.value = []
+      if (chatMode.value === 'lan') await loadLanGroupsList()
+      else await loadPublicGroupsList()
+    } else {
+      ElMessage.error(data.message || '解散失败')
     }
   }
 
@@ -406,6 +477,7 @@ export function useChatRoom() {
     chatMessages.value = []
     selectedUser.value = null
     selectedGroup.value = null
+    reloadLanSettings()
     if (mode === 'lan') {
       activeTab.value = 'users'
       await loadLanFriendsList()
@@ -413,6 +485,20 @@ export function useChatRoom() {
     } else {
       activeTab.value = 'friends'
       await loadFriendsList()
+      await loadPublicGroupsList()
+    }
+  }
+
+  const reloadLanSettings = () => {
+    const savedLanSettings = localStorage.getItem('lanChatSettings')
+    if (savedLanSettings) {
+      const settings = JSON.parse(savedLanSettings)
+      lanSettings.value.serverIP = settings.serverIP || settings.lanServerIP || ''
+      lanSettings.value.serverPort = settings.serverPort || settings.lanServerPort || '3000'
+      enablePinyinSearch.value = settings.enablePinyinSearch || false
+    } else {
+      lanSettings.value.serverIP = ''
+      lanSettings.value.serverPort = '3000'
     }
   }
 
@@ -448,13 +534,7 @@ export function useChatRoom() {
   }
 
   onMounted(() => {
-    const savedLanSettings = localStorage.getItem('lanChatSettings')
-    if (savedLanSettings) {
-      const settings = JSON.parse(savedLanSettings)
-      lanSettings.value.serverIP = settings.serverIP || settings.lanServerIP || ''
-      lanSettings.value.serverPort = settings.serverPort || settings.lanServerPort || '3000'
-      enablePinyinSearch.value = settings.enablePinyinSearch || false
-    }
+    reloadLanSettings()
     const savedDeletedGroups = localStorage.getItem('deletedGroupIds')
     if (savedDeletedGroups) {
       deletedGroupIds.value = JSON.parse(savedDeletedGroups)
@@ -474,20 +554,21 @@ export function useChatRoom() {
     activeTab, chatMode, useLanChat, lanSettings, searchQuery,
     selectedUser, selectedGroup, inputMessage,
     friendsList, allUsersList, friendRequests, chatMessages,
-    lanFriendsList, lanGroupsList,
+    lanFriendsList, lanGroupsList, publicGroupsList,
     showCreateGroupDialog, newGroupName, newGroupMembers,
     deletedGroupIds, showRecommended, enablePinyinSearch,
-    currentUsername, filteredUsers, filteredLanGroupsList,
+    pendingRequestsCount,
+    currentUsername, filteredUsers, filteredLanGroupsList, filteredPublicGroupsList,
     loadFriendsList, loadAllUsers, loadFriendRequests,
     selectUser, loadChatMessages, loadLanChatMessages,
     sendLanMessage, sendMessage, handleImageSelect,
-    handleAddFriend, handleRequest, handleSearch,
+    handleAddFriend, handleRequest,
     normalizeMessage, formatDate, formatMessageTime,
     isImageMessage, onImageLoad,
     startMessagePolling, stopMessagePolling,
     handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
     selectGroup, loadGroupMessages, sendGroupMessage,
     createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
-    showRecommended
+    loadPublicGroupsList
   }
 }

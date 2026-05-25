@@ -30,6 +30,16 @@ export const setLMStudioAPI = (url) => {
     }
 }
 
+// 下载目录（运行时可变）
+let downloadDir = null
+
+export const getDownloadDir = () => downloadDir || app.getPath('downloads')
+
+export const setDownloadDir = (dir) => {
+    downloadDir = dir
+    console.log('[Config] Download dir updated:', downloadDir)
+}
+
 export let mainWindow = null
 
 export const setMainWindow = (win) => {

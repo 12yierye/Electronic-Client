@@ -53,7 +53,7 @@ export function registerUserIpc() {
     })
 
     ipcMain.handle('search-users', async (event, searchTerm) => {
-        try { return (await axios.get(`${getAPIBase()}/users/search?q=${searchTerm}`)).data }
+        try { return (await axios.get(`${getAPIBase()}/users/search?query=${searchTerm}`)).data }
         catch (error) { return { success: false, message: error.message } }
     })
 
@@ -84,6 +84,38 @@ export function registerUserIpc() {
 
     ipcMain.handle('get-chat-messages', async (event, sender, receiver) => {
         try { return (await axios.get(`${getAPIBase()}/chat/messages?sender=${sender}&receiver=${receiver}`)).data }
+        catch (error) { return { success: false, message: error.message } }
+    })
+
+    // ========== 公网群聊 ==========
+
+    ipcMain.handle('get-groups', async (event, username) => {
+        try { return (await axios.get(`${getAPIBase()}/api/groups?username=${encodeURIComponent(username)}`)).data }
+        catch (error) { return { success: false, message: error.message } }
+    })
+
+    ipcMain.handle('create-group', async (event, data) => {
+        try { return (await axios.post(`${getAPIBase()}/api/groups`, data)).data }
+        catch (error) { return { success: false, message: error.message } }
+    })
+
+    ipcMain.handle('disband-group', async (event, groupId, username) => {
+        try { return (await axios.delete(`${getAPIBase()}/api/groups/${groupId}`, { data: { username } })).data }
+        catch (error) { return { success: false, message: error.message } }
+    })
+
+    ipcMain.handle('get-group-messages', async (event, groupId) => {
+        try { return (await axios.get(`${getAPIBase()}/api/group-messages?groupId=${encodeURIComponent(groupId)}`)).data }
+        catch (error) { return { success: false, message: error.message } }
+    })
+
+    ipcMain.handle('send-group-message', async (event, groupId, from, message, type) => {
+        try { return (await axios.post(`${getAPIBase()}/api/group-messages`, { groupId, from, message, type: type || 'text' })).data }
+        catch (error) { return { success: false, message: error.message } }
+    })
+
+    ipcMain.handle('join-group', async (event, groupId, username) => {
+        try { return (await axios.post(`${getAPIBase()}/api/groups/join`, { groupId, username })).data }
         catch (error) { return { success: false, message: error.message } }
     })
 }

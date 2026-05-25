@@ -13,11 +13,14 @@
           </div>
 
           <el-radio-group v-model="activeTab" size="small">
-            <!-- 公网模式显示：好友、添加好友、申请 -->
+            <!-- 公网模式显示：好友、群聊、添加好友、申请 -->
             <template v-if="chatMode === 'public'">
               <el-radio-button label="friends">{{ t('chatRoom.friends') }}</el-radio-button>
+              <el-radio-button label="groups">{{ t('chatRoom.groups') }}</el-radio-button>
               <el-radio-button label="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
-              <el-radio-button label="requests">{{ t('chatRoom.requests') }}</el-radio-button>
+              <el-radio-button label="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
+                {{ t('chatRoom.requests') }}
+              </el-radio-button>
             </template>
             <!-- 内网模式显示：用户、群聊 -->
             <template v-else>
@@ -31,10 +34,9 @@
         <div class="search-box">
           <el-input
             v-model="searchQuery"
-            :placeholder="t('chatRoom.searchUser')"
+            :placeholder="searchPlaceholder"
             :prefix-icon="Search"
             clearable
-            @input="handleSearch"
           />
         </div>
         
@@ -62,6 +64,30 @@
               ><Star /></el-icon>
             </div>
             <el-empty v-if="friendsList.length === 0" :description="t('chatRoom.noFriends')" />
+          </template>
+          
+          <!-- 公网：群聊列表 -->
+          <template v-else-if="chatMode === 'public' && activeTab === 'groups'">
+            <div class="group-actions">
+              <el-button type="primary" size="small" @click="showCreateGroupDialog = true">
+                {{ t('chatRoom.createGroup') }}
+              </el-button>
+            </div>
+            <div
+              v-for="group in filteredPublicGroupsList"
+              :key="group.id"
+              :class="['user-item', { active: selectedGroup?.id === group.id }]"
+              @click="selectGroup(group)"
+            >
+              <el-avatar :size="40" style="background: var(--accent-color)">
+                <el-icon><ChatDotRound /></el-icon>
+              </el-avatar>
+              <div class="user-info">
+                <div class="user-name">{{ group.name }}</div>
+                <div class="user-role">{{ t('chatRoom.members', { n: group.members.length }) }}</div>
+              </div>
+            </div>
+            <el-empty v-if="filteredPublicGroupsList.length === 0" :description="t('chatRoom.noGroups')" />
           </template>
           
           <!-- 内网：用户列表 -->
@@ -273,6 +299,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { Search, Star, Promotion, Picture, ChatDotRound } from '@element-plus/icons-vue'
 import { useChatRoom } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
@@ -283,27 +310,54 @@ const {
   activeTab, chatMode, useLanChat, lanSettings, searchQuery,
   selectedUser, selectedGroup, inputMessage,
   friendsList, allUsersList, friendRequests, chatMessages,
-  lanFriendsList, lanGroupsList,
+  lanFriendsList, lanGroupsList, publicGroupsList,
   showCreateGroupDialog, newGroupName, newGroupMembers,
   deletedGroupIds, showRecommended, enablePinyinSearch,
-  currentUsername, filteredUsers, filteredLanGroupsList,
+  pendingRequestsCount,
+  currentUsername, filteredUsers, filteredLanGroupsList, filteredPublicGroupsList,
   loadFriendsList, loadAllUsers, loadFriendRequests,
   selectUser, loadChatMessages, loadLanChatMessages,
   sendLanMessage, sendMessage, handleImageSelect,
-  handleAddFriend, handleRequest, handleSearch,
+  handleAddFriend, handleRequest,
   normalizeMessage, formatDate, formatMessageTime,
   isImageMessage, onImageLoad,
   startMessagePolling, stopMessagePolling,
   handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
   selectGroup, loadGroupMessages, sendGroupMessage,
-  createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup
+  createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
+  loadPublicGroupsList
 } = useChatRoom()
+
+const searchPlaceholder = computed(() => {
+  if (chatMode.value === 'public' && activeTab.value === 'groups') {
+    return t('chatRoom.searchGroupPlaceholder')
+  }
+  if (chatMode.value === 'lan' && activeTab.value === 'groups') {
+    return t('chatRoom.searchGroupPlaceholder')
+  }
+  return t('chatRoom.searchUser')
+})
 </script>
 
 <style lang="scss" scoped>
 .chat-room-view {
   height: calc(100vh - 60px);
-  
+
+  :deep(.has-pending) .el-radio-button__inner {
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #f56c6c;
+    }
+  }
+
   .el-container {
     height: 100%;
   }
@@ -369,6 +423,23 @@ const {
         
         &.starred {
           color: #f1c40f;
+        }
+      }
+    }
+
+    .request-item {
+      .request-info {
+        flex: 1;
+      }
+
+      .request-actions {
+        display: flex;
+        gap: 6px;
+
+        .el-button {
+          flex: 1;
+          min-width: 0;
+          padding: 5px 8px;
         }
       }
     }

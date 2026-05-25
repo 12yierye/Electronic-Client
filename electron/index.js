@@ -1,7 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import fs from 'fs'
-import { setMainWindow } from './config.js'
 import { createWindow } from './window.js'
 import { registerAuthIpc } from './ipc/auth.js'
 import { registerUserIpc } from './ipc/user.js'
@@ -57,9 +56,8 @@ app.setUserTasks([
 ])
 
 app.on('before-quit', () => {
-  // console.log('[Main] cleaning up before quit...')
-  clearAllScheduledTasks()
   saveScheduledTasks()
+  clearAllScheduledTasks()
   const mw = BrowserWindow.getAllWindows()[0]
   if (mw && !mw.isDestroyed()) {
     mw.removeAllListeners()

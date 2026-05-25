@@ -16,7 +16,7 @@
     <div class="sidebar-content">
       <!-- 用户信息 -->
       <div class="user-info-card">
-        <el-avatar :size="60" :src="defaultAvatar">
+        <el-avatar :size="60">
           {{ userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}
         </el-avatar>
         <div class="user-details">
@@ -72,7 +72,6 @@ const props = defineProps({
 const emit = defineEmits(['close', 'logout', 'exit'])
 const { t } = useI18n()
 
-const defaultAvatar = ref('')
 const connectionInfo = ref({ ping: 50, packetLoss: 0.5 }) // 初始显示良好状态
 let pingInterval = null
 
@@ -106,56 +105,54 @@ const handleUpdateVisible = (val) => {
 
 // 心跳包连接检测 - 5秒间隔
 const checkConnection = async () => {
-  const testUrls = [
-    'http://192.168.61.129:3000/',
-    'http://localhost:3000/',
-    'https://httpbin.org/get' // 公共测试端点作为备用
-  ]
-  
-  for (const url of testUrls) {
+  const raw = localStorage.getItem('lanChatSettings')
+  let serverUrl = 'http://localhost:3000'
+  if (raw) {
     try {
-      const start = Date.now()
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 2000) // 2秒超时
-      
-      const response = await fetch(url, { 
-        method: 'HEAD',
-        cache: 'no-cache',
-        signal: controller.signal,
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      })
-      
-      clearTimeout(timeoutId)
-      
-      if (response.ok) {
-        const ping = Date.now() - start
-        connectionInfo.value.ping = ping
-        
-        // 根据ping值计算合理的丢包率
-        if (ping < 50) {
-          connectionInfo.value.packetLoss = Math.random() * 0.5 // 0-0.5%
-        } else if (ping < 100) {
-          connectionInfo.value.packetLoss = Math.random() * 1 // 0-1%
-        } else if (ping < 200) {
-          connectionInfo.value.packetLoss = Math.random() * 2 + 0.5 // 0.5-2.5%
-        } else if (ping < 500) {
-          connectionInfo.value.packetLoss = Math.random() * 5 + 1 // 1-6%
-        } else {
-          connectionInfo.value.packetLoss = Math.random() * 10 + 5 // 5-15%
-        }
-        
-        return // 成功检测到，退出循环
-      }
-    } catch (e) {
-      // 继续尝试下一个URL
-      continue
-    }
+      const s = JSON.parse(raw)
+      const ip = s.serverIP || '127.0.0.1'
+      const port = s.serverPort || '3000'
+      serverUrl = `http://${ip}:${port}`
+    } catch (_) {}
   }
-  
-  // 所有URL都失败
+
+  try {
+    const start = Date.now()
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 2000)
+
+    const response = await fetch(serverUrl, {
+      method: 'HEAD',
+      cache: 'no-cache',
+      signal: controller.signal,
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    })
+
+    clearTimeout(timeoutId)
+
+    if (response.ok) {
+      const ping = Date.now() - start
+      connectionInfo.value.ping = ping
+
+      if (ping < 50) {
+        connectionInfo.value.packetLoss = Math.random() * 0.5
+      } else if (ping < 100) {
+        connectionInfo.value.packetLoss = Math.random() * 1
+      } else if (ping < 200) {
+        connectionInfo.value.packetLoss = Math.random() * 2 + 0.5
+      } else if (ping < 500) {
+        connectionInfo.value.packetLoss = Math.random() * 5 + 1
+      } else {
+        connectionInfo.value.packetLoss = Math.random() * 10 + 5
+      }
+
+      return
+    }
+  } catch (_) {}
+
   connectionInfo.value.ping = 999
   connectionInfo.value.packetLoss = 100
 }

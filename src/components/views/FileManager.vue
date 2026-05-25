@@ -3,84 +3,100 @@
     <div class="file-header">
       <h2>{{ t('files.title') }}</h2>
     </div>
-    
-    <!-- 拖放区域 -->
-    <el-upload
-      ref="uploadRef"
-      class="file-uploader"
-      drag
-      multiple
-      :auto-upload="false"
-      :on-change="handleFileChange"
-      :file-list="fileList"
-    >
-      <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-      <div class="el-upload__text">
-        {{ t('files.dropOrClick') }}
-      </div>
-    </el-upload>
-    
-    <!-- 文件列表 -->
+
+    <div class="file-uploader">
+      <el-upload
+        ref="uploadRef"
+        class="upload-area"
+        drag
+        multiple
+        :auto-upload="false"
+        :on-change="handleFileChange"
+        :file-list="uploadFileList"
+      >
+        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+        <div class="el-upload__text">
+          {{ t('files.dropOrClick') }}
+        </div>
+      </el-upload>
+    </div>
+
     <div class="file-list">
       <h3>{{ t('files.savedFiles') }}</h3>
-      
-      <el-table :data="files" stripe style="width: 100%">
+
+      <el-table
+        :data="sortedFiles"
+        stripe
+        style="width: 100%"
+        :empty-text="t('files.noSavedFiles')"
+      >
         <el-table-column prop="name" :label="t('files.fileName')" min-width="200">
           <template #default="{ row }">
             <div class="file-name-cell">
               <el-icon><Document /></el-icon>
               <span>{{ row.name }}</span>
+              <el-tag v-if="row.uploader === currentUsername" size="small" type="success" effect="plain" class="self-tag">
+                {{ t('files.self') }}
+              </el-tag>
             </div>
           </template>
         </el-table-column>
-        
-        <el-table-column prop="size" :label="t('files.size')" width="120">
+
+        <el-table-column prop="uploader" :label="t('files.publisher')" width="130">
+          <template #default="{ row }">
+            <span :class="{ 'is-self': row.uploader === currentUsername }">{{ row.uploader }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="size" :label="t('files.size')" width="100">
           <template #default="{ row }">
             {{ formatFileSize(row.size) }}
           </template>
         </el-table-column>
-        
-        <el-table-column prop="lastModified" :label="t('files.date')" width="180">
+
+        <el-table-column prop="uploadTime" :label="t('files.publishTime')" width="170">
           <template #default="{ row }">
-            {{ formatDate(row.lastModified) }}
+            {{ formatDate(row.uploadTime) }}
           </template>
         </el-table-column>
-        
-        <el-table-column :label="t('files.actions')" width="180" fixed="right">
+
+        <el-table-column :label="t('files.actions')" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button 
-              size="small" 
-              type="primary" 
-              @click="handleDownload(row)"
-              :loading="downloadingFiles.includes(row.name)"
-            >
-              <template v-if="downloadProgress[row.name] !== undefined">
-                {{ downloadProgress[row.name] }}%
-              </template>
-              <template v-else>
-                <el-icon><Download /></el-icon>
-                {{ t('files.download') }}
-              </template>
-            </el-button>
-            <el-button 
-              size="small" 
-              type="danger" 
-              @click="handleDelete(row)"
-            >
-              <el-icon><Delete /></el-icon>
-              {{ t('files.delete') }}
-            </el-button>
+            <template v-if="row.uploader === currentUsername">
+              <el-button
+                size="small"
+                type="danger"
+                @click="handleDelete(row)"
+              >
+                <el-icon><Delete /></el-icon>
+                {{ t('files.delete') }}
+              </el-button>
+            </template>
+            <template v-else>
+              <el-button
+                size="small"
+                type="primary"
+                @click="handleDownload(row)"
+                :loading="downloadingFiles.includes(row.name + row.uploader)"
+              >
+                <template v-if="downloadProgress[row.name + row.uploader] !== undefined">
+                  {{ downloadProgress[row.name + row.uploader] }}%
+                </template>
+                <template v-else>
+                  <el-icon><Download /></el-icon>
+                  {{ t('files.download') }}
+                </template>
+              </el-button>
+            </template>
           </template>
         </el-table-column>
       </el-table>
-      
-      <el-empty v-if="files.length === 0" :description="t('files.noSavedFiles')" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { UploadFilled, Document, Download, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from '../../composables/useI18n'
@@ -88,109 +104,91 @@ import { useI18n } from '../../composables/useI18n'
 const { t } = useI18n()
 
 const uploadRef = ref(null)
-const files = ref([])
-const fileList = ref([])
+const allFiles = ref([])
+const uploadFileList = ref([])
 const downloadingFiles = ref([])
 const downloadProgress = ref({})
 const currentUsername = ref('')
+let refreshTimer = null
 
-const STORAGE_KEY = 'uploadedFiles'
+const sortedFiles = computed(() => {
+  return [...allFiles.value].sort((a, b) => {
+    const ta = a.uploadTime ? new Date(a.uploadTime).getTime() : 0
+    const tb = b.uploadTime ? new Date(b.uploadTime).getTime() : 0
+    return tb - ta
+  })
+})
 
-// 初始化
 onMounted(() => {
   const user = localStorage.getItem('userInfo')
   if (user) {
     currentUsername.value = JSON.parse(user).username
   }
-  loadFilesFromStorage()
+  loadAllFiles()
+  refreshTimer = setInterval(loadAllFiles, 10000)
 })
 
-// 加载文件列表
-const loadFilesFromStorage = () => {
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored) {
-    files.value = JSON.parse(stored)
-  }
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+})
+
+const loadAllFiles = async () => {
+  if (!window.electronAPI) return
+  try {
+    const result = await window.electronAPI.getAllFiles()
+    if (result.success) {
+      allFiles.value = result.files || []
+    }
+  } catch (_) {}
 }
 
-// 保存到本地存储
-const saveToStorage = () => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(files.value))
-}
-
-// 处理文件上传
 const handleFileChange = async (file, uploadFiles) => {
-  fileList.value = uploadFiles
-  
+  uploadFileList.value = uploadFiles
+
   for (const f of uploadFiles) {
-    const fileInfo = {
-      name: f.name,
-      size: f.size,
-      type: f.raw?.type || '',
-      lastModified: f.raw?.lastModified || Date.now()
-    }
-    
-    // 检查是否已存在
-    const exists = files.value.some(fi => fi.name === fileInfo.name)
-    if (exists) {
-      try {
-        await ElMessageBox.confirm(
-          t('files.fileExists', { name: fileInfo.name }),
-          t('common.confirm'),
-          { confirmButtonText: t('common.replace'), cancelButtonText: t('common.skip') }
-        )
-        // 替换
-        files.value = files.value.filter(fi => fi.name !== fileInfo.name)
-        files.value.push(fileInfo)
-      } catch {
-        // 跳过
-        continue
-      }
-    } else {
-      files.value.push(fileInfo)
-    }
-    
-    // 上传到服务器
     if (window.electronAPI && f.raw) {
       try {
-        await window.electronAPI.uploadFile(
+        const result = await window.electronAPI.uploadFile(
           currentUsername.value,
-          fileInfo.name,
+          f.name,
           await f.raw.arrayBuffer()
         )
-        ElMessage.success(t('files.uploadSuccess', { name: fileInfo.name }))
+        if (result.success) {
+          ElMessage.success(t('files.uploadSuccess', { name: f.name }))
+        } else {
+          ElMessage.error(result.message)
+        }
       } catch (error) {
         ElMessage.error(t('files.uploadFailed', { error: error.message }))
       }
     }
-
-    // 每个文件处理完立即保存，防止并发覆盖
-    saveToStorage()
   }
-  
-  fileList.value = []
+
+  uploadFileList.value = []
+  await loadAllFiles()
 }
 
-// 下载文件
 const handleDownload = async (file) => {
+  if (file.uploader === currentUsername) {
+    ElMessage.warning(t('files.cannotDownloadSelf'))
+    return
+  }
   if (!window.electronAPI) return
-  
-  downloadingFiles.value.push(file.name)
-  
-  // 设置下载进度
-  downloadProgress.value[file.name] = 0
-  
-  // 监听下载进度（如果支持）
+
+  const downloadKey = file.name + file.uploader
+  downloadingFiles.value.push(downloadKey)
+  downloadProgress.value[downloadKey] = 0
+
   if (window.electronAPI && window.electronAPI.onDownloadProgress) {
     window.electronAPI.onDownloadProgress((data) => {
       if (data.filename === file.name) {
-        downloadProgress.value[file.name] = data.percentCompleted
+        downloadProgress.value[downloadKey] = data.percentCompleted
       }
     })
   }
-  
+
   try {
-    const result = await window.electronAPI.downloadFile(currentUsername.value, file.name)
+    const result = await window.electronAPI.downloadFile(file.uploader, file.name)
     if (result.success) {
       ElMessage.success(t('files.downloadSuccess'))
     } else {
@@ -198,14 +196,12 @@ const handleDownload = async (file) => {
     }
   } catch (error) {
     ElMessage.error(t('files.downloadFailed', { error: error.message }))
-    // 清理不完整的文件由服务端处理
   } finally {
-    downloadingFiles.value = downloadingFiles.value.filter(f => f !== file.name)
-    delete downloadProgress.value[file.name]
+    downloadingFiles.value = downloadingFiles.value.filter(f => f !== downloadKey)
+    delete downloadProgress.value[downloadKey]
   }
 }
 
-// 删除文件
 const handleDelete = async (file) => {
   try {
     await ElMessageBox.confirm(
@@ -213,23 +209,19 @@ const handleDelete = async (file) => {
       t('common.warning'),
       { confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel'), type: 'warning' }
     )
-    
+
     if (window.electronAPI) {
       const result = await window.electronAPI.deleteFile(currentUsername.value, file.name)
       if (result.success) {
-        files.value = files.value.filter(f => f.name !== file.name)
-        saveToStorage()
         ElMessage.success(t('files.deleteSuccess'))
+        await loadAllFiles()
       } else {
         ElMessage.error(result.message)
       }
     }
-  } catch {
-    // 取消删除
-  }
+  } catch {}
 }
 
-// 格式化文件大小
 const formatFileSize = (bytes) => {
   if (!bytes) return '0 B'
   const k = 1024
@@ -238,8 +230,8 @@ const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-// 格式化日期
 const formatDate = (timestamp) => {
+  if (!timestamp) return '-'
   return new Date(timestamp).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -255,45 +247,56 @@ const formatDate = (timestamp) => {
   padding: 30px;
   max-width: 1000px;
   margin: 0 auto;
-  
+
   .file-header {
     margin-bottom: 30px;
-    
+
     h2 {
       margin: 0;
       color: var(--text-primary);
     }
   }
-  
+
   .file-uploader {
     margin-bottom: 30px;
-    
-    :deep(.el-upload-dragger) {
-      padding: 40px;
-      background: var(--bg-secondary);
-      border-color: var(--text-secondary);
-      
-      &:hover {
-        border-color: var(--accent-color);
-      }
-      
-      .el-icon--upload {
-        font-size: 60px;
-        color: var(--accent-color);
+
+    .upload-area {
+      :deep(.el-upload-dragger) {
+        padding: 40px;
+        background: var(--bg-secondary);
+        border-color: var(--text-secondary);
+
+        &:hover {
+          border-color: var(--accent-color);
+        }
+
+        .el-icon--upload {
+          font-size: 60px;
+          color: var(--accent-color);
+        }
       }
     }
   }
-  
+
   .file-list {
     h3 {
       margin: 0 0 20px;
       color: var(--text-primary);
     }
-    
+
     .file-name-cell {
       display: flex;
       align-items: center;
       gap: 8px;
+
+      .self-tag {
+        flex-shrink: 0;
+      }
+    }
+
+    .is-self {
+      color: var(--accent-color);
+      font-weight: 500;
     }
   }
 }
