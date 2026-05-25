@@ -6,16 +6,18 @@ import { DOC_SERVER, setMainWindow } from './config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-function createElectronWindow(URL) {
-  const win = new BrowserWindow({
-    title: 'Electron Docs',
-    width: 1000,
-    height: 750,
-    webPreferences: { webSecurity: false, cache: false }
-  })
-  win.maximize()
-  win.loadURL(URL)
-}
+Menu.setApplicationMenu(null)
+
+// function createElectronWindow(URL) {
+//   const win = new BrowserWindow({
+//     title: 'Electron Docs',
+//     width: 1000,
+//     height: 750,
+//     webPreferences: { webSecurity: false, cache: false }
+//   })
+//   win.maximize()
+//   win.loadURL(URL)
+// }
 
 export function createWindow() {
   const preloadPath = join(__dirname, 'preload.cjs')
@@ -27,6 +29,7 @@ export function createWindow() {
     height: 600,
     minWidth: 850,
     minHeight: 500,
+    // frame: false,
     icon: join(__dirname, '../res/index/Electronic Client.ico'),
     webPreferences: {
       preload: preloadPath,
@@ -49,16 +52,16 @@ export function createWindow() {
     console.log('[Main] Page Load Failed:', errorCode, errorDesc)
   })
 
-  const menu = Menu.buildFromTemplate([
-    { label: 'File', submenu: [
-      { label: 'Quit', role: 'quit', click: () => app.quit() }
-    ]},
-    { label: 'Help', submenu: [
-      { label: 'About Electronic', click: () => createElectronWindow(DOC_SERVER) },
-      { label: 'Electron Docs (zh-cn)', click: () => createElectronWindow('https://www.electronjs.org/zh/docs/latest') }
-    ]}
-  ])
-  mainWindow.setMenu(menu)
+  // const menu = Menu.buildFromTemplate([
+  //   { label: 'File', submenu: [
+  //     { label: 'Quit', role: 'quit', click: () => app.quit() }
+  //   ]},
+  //   { label: 'Help', submenu: [
+  //     { label: 'About Electronic', click: () => createElectronWindow(DOC_SERVER) },
+  //     { label: 'Electron Docs (zh-cn)', click: () => createElectronWindow('https://www.electronjs.org/zh/docs/latest') }
+  //   ]}
+  // ])
+  // mainWindow.setMenu(menu)
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)

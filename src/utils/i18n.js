@@ -13,7 +13,15 @@ const messages = {
   'zh-CN': {
     app: {
       title: 'AI 助手',
-      version: '版本'
+      version: '版本',
+      author: '开发者',
+      copyright: '版权所有',
+      poweredBy: '基于',
+      github: 'GitHub',
+      reportIssue: '反馈问题',
+      website: '官网',
+      projectName: '项目名称',
+      buildDate: '构建日期'
     },
     common: {
       confirm: '确认',
@@ -91,6 +99,8 @@ const messages = {
       description: '您的个人AI助手',
       selectLanguage: '选择语言',
       languageTip: '界面语言将立即切换',
+      useSystemBrowser: '使用系统默认浏览器',
+      useSystemBrowserTip: '开启后将用系统浏览器打开链接，否则使用应用内置浏览器',
       serverTitle: '服务端设置',
       serverIP: '服务端IP',
       serverIPPlaceholder: '例如: 127.0.0.1',
@@ -115,7 +125,15 @@ const messages = {
       downloadTitle: '下载目录设置',
       downloadDir: '下载目录',
       downloadDirPlaceholder: '选择或输入下载保存路径',
-      downloadDirTip: '留空则使用默认下载目录，输入不存在的路径将自动新建'
+      downloadDirTip: '留空则使用默认下载目录，输入不存在的路径将自动新建',
+      checkUpdate: '检查更新',
+      checkUpdateBtn: '检查更新',
+      currentVersion: '当前版本',
+      checking: '检查中...',
+      alreadyLatest: '已是最新版本',
+      updateFound: '发现新版本',
+      updateFailed: '检查更新失败，请检查网络连接',
+      noReleases: '仓库暂无发布版本'
     },
     aiChat: {
       personalAssistant: '您的个人AI助手',
@@ -204,7 +222,15 @@ const messages = {
   'en': {
     app: {
       title: 'AI Assistant',
-      version: 'Version'
+      version: 'Version',
+      author: 'Developer',
+      copyright: 'All rights reserved',
+      poweredBy: 'Powered by',
+      github: 'GitHub',
+      reportIssue: 'Report Issue',
+      website: 'Website',
+      projectName: 'Project',
+      buildDate: 'Build Date'
     },
     common: {
       confirm: 'Confirm',
@@ -282,6 +308,8 @@ const messages = {
       description: 'Your personal AI assistant',
       selectLanguage: 'Select Language',
       languageTip: 'Interface language will change immediately',
+      useSystemBrowser: 'Use System Default Browser',
+      useSystemBrowserTip: 'Open links with system browser, otherwise use built-in browser',
       serverTitle: 'Server Settings',
       serverIP: 'Server IP',
       serverIPPlaceholder: 'e.g. 127.0.0.1',
@@ -306,7 +334,15 @@ const messages = {
       downloadTitle: 'Download Directory Settings',
       downloadDir: 'Download Directory',
       downloadDirPlaceholder: 'Choose or enter download path',
-      downloadDirTip: 'Leave empty to use default download directory, non-existent paths will be auto-created'
+      downloadDirTip: 'Leave empty to use default download directory, non-existent paths will be auto-created',
+      checkUpdate: 'Check Updates',
+      checkUpdateBtn: 'Check for Updates',
+      currentVersion: 'Current Version',
+      checking: 'Checking...',
+      alreadyLatest: 'Already up to date',
+      updateFound: 'New version found',
+      updateFailed: 'Failed to check for updates, please check your network',
+      noReleases: 'No releases found in repository'
     },
     aiChat: {
       personalAssistant: 'Your personal AI assistant',
@@ -395,7 +431,15 @@ const messages = {
   'ja': {
     app: {
       title: 'AIアシスタント',
-      version: 'バージョン'
+      version: 'バージョン',
+      author: '開発者',
+      copyright: '全著作権所有',
+      poweredBy: '搭載',
+      github: 'GitHub',
+      reportIssue: '問題を報告',
+      website: '公式サイト',
+      projectName: 'プロジェクト名',
+      buildDate: 'ビルド日'
     },
     common: {
       confirm: '確認',
@@ -473,6 +517,8 @@ const messages = {
       description: 'あなたの個人AIアシスタント',
       selectLanguage: '言語を選択',
       languageTip: 'インターフェース言語が直ちに切り替わります',
+      useSystemBrowser: 'システムのデフォルトブラウザを使用',
+      useSystemBrowserTip: '有効にするとシステムブラウザでリンクを開き、無効の場合はアプリ内蔵ブラウザを使用します',
       serverTitle: 'サーバー設定',
       serverIP: 'サーバーIP',
       serverIPPlaceholder: '例: 127.0.0.1',
@@ -497,7 +543,15 @@ const messages = {
       downloadTitle: 'ダウンロードディレクトリ設定',
       downloadDir: 'ダウンロードディレクトリ',
       downloadDirPlaceholder: 'ダウンロード先を選択または入力',
-      downloadDirTip: '空の場合はデフォルトのダウンロードディレクトリを使用し、存在しないパスは自動で作成されます'
+      downloadDirTip: '空の場合はデフォルトのダウンロードディレクトリを使用し、存在しないパスは自動で作成されます',
+      checkUpdate: 'アップデートを確認',
+      checkUpdateBtn: '更新を確認',
+      currentVersion: '現在のバージョン',
+      checking: '確認中...',
+      alreadyLatest: '最新バージョンです',
+      updateFound: '新しいバージョンが見つかりました',
+      updateFailed: '更新の確認に失敗しました。ネットワークを確認してください',
+      noReleases: 'リポジトリにリリースがありません'
     },
     aiChat: {
       personalAssistant: 'あなたの個人AIアシスタント',

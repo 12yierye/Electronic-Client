@@ -88,7 +88,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { User, Lock, EditPen } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import { useI18n } from '../../composables/useI18n'
 
 const emit = defineEmits(['login-success', 'auto-login-success'])

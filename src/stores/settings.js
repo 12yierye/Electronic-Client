@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref('dark')   // 用户偏好: 'dark' | 'light' | 'auto'
   const language = ref('zh-CN')
+  const useSystemBrowser = ref(false)  // 是否使用系统默认浏览器打开链接
 
   // 系统主题监听
   let systemThemeMedia = null
@@ -26,6 +27,7 @@ export const useSettingsStore = defineStore('settings', () => {
       const settings = JSON.parse(stored)
       theme.value = settings.theme || 'dark'
       language.value = settings.language || 'zh-CN'
+      useSystemBrowser.value = settings.useSystemBrowser || false
     }
     applyTheme()
   }
@@ -34,7 +36,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const saveSettings = () => {
     localStorage.setItem('appSettings', JSON.stringify({
       theme: theme.value,
-      language: language.value
+      language: language.value,
+      useSystemBrowser: useSystemBrowser.value
     }))
   }
 
@@ -74,14 +77,21 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSettings()
   }
 
+  const toggleUseSystemBrowser = (value) => {
+    useSystemBrowser.value = value
+    saveSettings()
+  }
+
   return {
     theme,
     language,
+    useSystemBrowser,
     effectiveTheme,
     loadSettings,
     saveSettings,
     applyTheme,
     toggleTheme,
-    toggleLanguage
+    toggleLanguage,
+    toggleUseSystemBrowser
   }
 })

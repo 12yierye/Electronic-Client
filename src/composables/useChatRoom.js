@@ -1,5 +1,4 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
 import { matchByPinyin } from '../utils/pinyin'
 
 export function useChatRoom() {

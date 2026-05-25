@@ -66,7 +66,6 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { ElMessageBox } from 'element-plus'
 import { getUserAvatar } from '../../composables/useAvatar'
 
 const props = defineProps({

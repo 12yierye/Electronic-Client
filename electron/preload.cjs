@@ -126,7 +126,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAiApiUrl: (url) => ipcRenderer.invoke('set-ai-api-url', url),
 
   // 动态设置服务端 API 地址
-  setApiBaseUrl: (url) => ipcRenderer.invoke('set-api-base', url)
+  setApiBaseUrl: (url) => ipcRenderer.invoke('set-api-base', url),
+
+  // 打开外部链接（优先系统默认浏览器，失败则回退到 Electron 窗口）
+  openExternal: (url) => ipcRenderer.invoke('open-external', url)
 })
 
 console.log('[Preload] ready')

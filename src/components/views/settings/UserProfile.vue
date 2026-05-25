@@ -67,7 +67,6 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
 import { clearAvatarCache } from '../../../composables/useAvatar'
 
 const avatarInputRef = ref(null)

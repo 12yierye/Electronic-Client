@@ -59,6 +59,13 @@
               <div class="setting-tip">{{ t('settings.languageTip') }}</div>
             </div>
           </el-form-item>
+
+          <el-form-item :label="t('settings.useSystemBrowser') + '：'">
+            <div class="switch-with-tip">
+              <el-switch v-model="useSystemBrowser" @change="handleUseSystemBrowserChange" />
+              <div class="setting-tip">{{ t('settings.useSystemBrowserTip') }}</div>
+            </div>
+          </el-form-item>
         </div>
 
         <!-- AI 模型 -->
@@ -137,9 +144,48 @@
         <!-- 关于 -->
         <div v-else-if="activeNav === 'about'" class="settings-section">
           <h3>{{ t('settings.about') }}</h3>
-          <div class="about-section">
-            <p>{{ t('app.version') }}: 1.0.0</p>
-            <p>{{ t('app.title') }} - {{ t('settings.description') }}</p>
+          <div class="about-info-list">
+            <div class="about-row">
+              <span class="about-label">{{ t('app.projectName') }}</span>
+              <span class="about-value">Electronic</span>
+            </div>
+            <div class="about-row">
+              <span class="about-label">{{ t('app.version') }}</span>
+              <span class="about-value">v{{ appVersion }}</span>
+            </div>
+            <div class="about-row">
+              <span class="about-label">{{ t('app.author') }}</span>
+              <span class="about-value">FireOut</span>
+            </div>
+            <div class="about-row">
+              <span class="about-label">{{ t('app.github') }}</span>
+              <el-link type="primary" :underline="false" @click="handleOpenLink('https://github.com/12yierye/Electronic-Client')">Electronic-Client</el-link>
+            </div>
+            <div class="about-row">
+              <span class="about-label">{{ t('app.website') }}</span>
+              <el-link type="primary" :underline="false" @click="handleOpenLink('https://electronic-app.com')">Electronic.com</el-link>
+            </div>
+            <div class="about-row">
+              <span class="about-label">{{ t('app.reportIssue') }}</span>
+              <el-link type="primary" :underline="false" @click="handleReportIssue">GitHub Issues</el-link>
+            </div>
+          </div>
+        </div>
+
+        <!-- 检查更新 -->
+        <div v-else-if="activeNav === 'checkUpdate'" class="settings-section">
+          <h3>{{ t('settings.checkUpdate') }}</h3>
+          <div class="update-section">
+            <div class="about-row">
+              <span class="about-label">{{ t('settings.currentVersion') }}</span>
+              <span class="about-value">v{{ appVersion }}</span>
+            </div>
+            <div class="update-actions">
+              <el-button type="primary" @click="handleCheckUpdate" :loading="checkingUpdate">
+                {{ checkingUpdate ? t('settings.checking') : t('settings.checkUpdateBtn') }}
+              </el-button>
+            </div>
+            <div v-if="updateMessage" class="update-message" :class="updateMessageType">{{ updateMessage }}</div>
           </div>
         </div>
       </div>
@@ -149,15 +195,17 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { Moon, Sunny, Monitor, FolderOpened, User, Setting, MagicStick, Link, Search, Folder, InfoFilled } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { Moon, Sunny, Monitor, FolderOpened, User, Setting, MagicStick, Link, Search, Folder, InfoFilled, Message, RefreshRight } from '@element-plus/icons-vue'
 import { useSettingsStore } from '../../stores/settings'
 import { useI18n } from '../../composables/useI18n'
 import { languages } from '../../utils/i18n'
 import UserProfile from './settings/UserProfile.vue'
+import pkg from '../../../package.json'
 
 const settingsStore = useSettingsStore()
 const { t, setLocale } = useI18n()
+
+const appVersion = pkg.version
 
 const activeNav = ref('profile')
 
@@ -168,6 +216,7 @@ const navItems = [
     { key: 'server', label: '服务端', icon: Link },
     { key: 'friendSearch', label: '好友搜索', icon: Search },
     { key: 'download', label: '下载目录', icon: Folder },
+    { key: 'checkUpdate', label: '检查更新', icon: RefreshRight },
     { key: 'about', label: '关于', icon: InfoFilled }
 ]
 
@@ -177,6 +226,10 @@ const serverIP = ref('127.0.0.1')
 const serverPort = ref('3000')
 const testingServer = ref(false)
 const enablePinyinSearch = ref(false)
+const useSystemBrowser = ref(false)
+const checkingUpdate = ref(false)
+const updateMessage = ref('')
+const updateMessageType = ref('')
 
 const AI_SETTINGS_KEY = 'aiApiSettings'
 
@@ -244,6 +297,7 @@ const saveAiApiSettings = () => {
 onMounted(() => {
     theme.value = settingsStore.theme
     language.value = settingsStore.language || 'zh-CN'
+    useSystemBrowser.value = settingsStore.useSystemBrowser
 
     const aiSettings = localStorage.getItem(AI_SETTINGS_KEY)
     if (aiSettings) {
@@ -284,6 +338,10 @@ const handleLanguageChange = (value) => {
     setLocale(value)
 }
 
+const handleUseSystemBrowserChange = (value) => {
+    settingsStore.toggleUseSystemBrowser(value)
+}
+
 const saveServerSettings = () => {
     const settings = {
         serverIP: serverIP.value,
@@ -317,6 +375,66 @@ const testServerConnection = async () => {
         ElMessage.error(t('settings.connectionError') + error.message)
     } finally {
         testingServer.value = false
+    }
+}
+
+const handleOpenLink = async (url) => {
+    if (useSystemBrowser.value && window.electronAPI?.openExternal) {
+        await window.electronAPI.openExternal(url)
+    } else {
+        window.open(url, '_blank')
+    }
+}
+
+const handleReportIssue = () => {
+    handleOpenLink('https://github.com/12yierye/Electronic-Client/issues')
+}
+
+const handleCheckUpdate = async () => {
+    checkingUpdate.value = true
+    updateMessage.value = ''
+    updateMessageType.value = ''
+
+    try {
+        const res = await fetch('https://api.github.com/repos/12yierye/Electronic-Client/releases/latest')
+
+        if (res.status === 404) {
+            updateMessage.value = t('settings.noReleases')
+            updateMessageType.value = 'error'
+            return
+        }
+
+        if (res.status === 403 || res.status === 429) {
+            updateMessage.value = t('settings.updateFailed')
+            updateMessageType.value = 'error'
+            return
+        }
+
+        if (!res.ok) throw new Error('GitHub API error')
+
+        const data = await res.json()
+
+        if (!data || !data.tag_name) {
+            updateMessage.value = t('settings.updateFailed')
+            updateMessageType.value = 'error'
+            return
+        }
+
+        const latestVersion = data.tag_name.replace(/^v/, '')
+        const current = appVersion
+
+        if (latestVersion === current) {
+            updateMessage.value = t('settings.alreadyLatest') + ' (v' + current + ')'
+            updateMessageType.value = 'success'
+        } else {
+            updateMessage.value = t('settings.updateFound') + ': v' + latestVersion
+            updateMessageType.value = 'info'
+        }
+    } catch {
+        updateMessage.value = t('settings.updateFailed')
+        updateMessageType.value = 'error'
+    } finally {
+        checkingUpdate.value = false
     }
 }
 </script>
@@ -426,10 +544,84 @@ const testServerConnection = async () => {
                     }
                 }
 
-                .about-section {
-                    p {
-                        margin: 8px 0;
-                        color: var(--text-secondary);
+                .about-info-list {
+                    .about-row {
+                        display: flex;
+                        align-items: center;
+                        padding: 10px 0;
+                        border-bottom: 1px solid var(--border-color);
+
+                        &:last-child {
+                            border-bottom: none;
+                        }
+
+                        .about-label {
+                            width: 100px;
+                            flex-shrink: 0;
+                            font-size: 14px;
+                            color: var(--text-secondary);
+                        }
+
+                        .about-value {
+                            font-size: 14px;
+                            color: var(--text-primary);
+                            font-weight: 500;
+                        }
+
+                        .el-link {
+                            font-size: 14px;
+                        }
+                    }
+                }
+
+                .update-section {
+                    .about-row {
+                        display: flex;
+                        align-items: center;
+                        padding: 10px 0;
+                        border-bottom: 1px solid var(--border-color);
+
+                        .about-label {
+                            width: 100px;
+                            flex-shrink: 0;
+                            font-size: 14px;
+                            color: var(--text-secondary);
+                        }
+
+                        .about-value {
+                            font-size: 14px;
+                            color: var(--text-primary);
+                            font-weight: 500;
+                        }
+                    }
+
+                    .update-actions {
+                        margin-top: 20px;
+                    }
+
+                    .update-message {
+                        margin-top: 16px;
+                        padding: 10px 16px;
+                        border-radius: 8px;
+                        font-size: 14px;
+
+                        &.success {
+                            background: rgba(103, 194, 58, 0.1);
+                            color: #67c23a;
+                            border: 1px solid rgba(103, 194, 58, 0.2);
+                        }
+
+                        &.info {
+                            background: rgba(64, 158, 255, 0.1);
+                            color: #409eff;
+                            border: 1px solid rgba(64, 158, 255, 0.2);
+                        }
+
+                        &.error {
+                            background: rgba(245, 108, 108, 0.1);
+                            color: #f56c6c;
+                            border: 1px solid rgba(245, 108, 108, 0.2);
+                        }
                     }
                 }
 

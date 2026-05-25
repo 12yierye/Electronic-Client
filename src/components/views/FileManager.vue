@@ -98,7 +98,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { UploadFilled, Document, Download, Delete } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from '../../composables/useI18n'
 
 const { t } = useI18n()
