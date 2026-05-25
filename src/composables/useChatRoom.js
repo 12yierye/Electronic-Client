@@ -384,6 +384,10 @@ export function useChatRoom() {
       ElMessage.warning('请输入群名称')
       return
     }
+    if (newGroupMembers.value.length < 2) {
+      ElMessage.warning('至少添加 2 名成员')
+      return
+    }
     const groupData = { name: newGroupName.value.trim(), creator: currentUsername.value, members: newGroupMembers.value }
     let data
     if (chatMode.value === 'lan' && lanSettings.value.serverIP) {
