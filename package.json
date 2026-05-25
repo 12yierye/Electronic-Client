@@ -9,7 +9,7 @@
     "dev": "vite",
     "electron": "chcp 65001 && vite --mode electron",
     "build": "vite build --mode electron",
-    "dist": "vite build --mode electron && electron-builder",
+    "pack": "vite build --mode electron && electron-builder && if exist release\\*.blockmap del /q release\\*.blockmap && if exist release\\latest.yml del /q release\\latest.yml",
     "preview": "vite preview",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -39,10 +39,18 @@
       "output": "release"
     },
     "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
+      "target": [{
+        "target": "nsis",
+        "arch": ["x64"]
+      }]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Electronic",
+      "artifactName": "${productName} Setup ${version}.${ext}"
     },
     "files": [
       "dist/**/*",
