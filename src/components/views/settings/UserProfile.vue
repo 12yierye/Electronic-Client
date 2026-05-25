@@ -68,6 +68,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { clearAvatarCache } from '../../../composables/useAvatar'
 
 const avatarInputRef = ref(null)
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp']
@@ -137,6 +138,7 @@ const handleAvatarSelected = (e) => {
 const handleSave = () => {
   const key = getProfileKey()
   localStorage.setItem(key, JSON.stringify(profile.value))
+  clearAvatarCache()
   ElMessage.success('已保存')
 }
 

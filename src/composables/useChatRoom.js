@@ -26,6 +26,8 @@ export function useChatRoom() {
   const searchResults = ref([])
   const publicGroupsList = ref([])
   const groupUnread = ref({})
+  const pendingMessages = ref([])
+  const SEND_TIMEOUT = 10000
 
   const pendingRequestsCount = computed(() => friendRequests.value.length)
 
@@ -56,7 +58,7 @@ export function useChatRoom() {
   })
 
   const filteredLanGroupsList = computed(() => {
-    let list = lanGroupsList.value.filter(group => !deletedGroupIds.value.includes(group.id))
+    let list = lanGroupsList.value.filter(group => !deletedGroupIds.value.includes(group.id) && group.networkType !== 'public')
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.trim().toLowerCase()
       list = list.filter(g => g.name.toLowerCase().includes(q))
@@ -65,7 +67,7 @@ export function useChatRoom() {
   })
 
   const filteredPublicGroupsList = computed(() => {
-    let list = publicGroupsList.value.filter(group => !deletedGroupIds.value.includes(group.id))
+    let list = publicGroupsList.value.filter(group => !deletedGroupIds.value.includes(group.id) && group.networkType !== 'lan')
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.trim().toLowerCase()
       list = list.filter(g => g.name.toLowerCase().includes(q))
@@ -141,8 +143,9 @@ export function useChatRoom() {
   }
 
   const selectUser = async (user, mode = chatMode.value) => {
-    selectedUser.value = { ...user, chatMode: mode }
     selectedGroup.value = null
+    chatMessages.value = []
+    selectedUser.value = { ...user, chatMode: mode }
     if (mode === 'lan') await loadLanChatMessages()
     else await loadChatMessages()
   }
@@ -187,9 +190,22 @@ export function useChatRoom() {
     }
   }
 
-  const sendLanMessage = async () => {
-    const message = inputMessage.value.trim()
+  const sendLanMessage = async (messageText, msgType = 'text') => {
+    const message = messageText.trim()
     if (!message || !selectedUser.value || !lanSettings.value.serverIP) return
+    const tempId = 'pending_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+    const tempMsg = {
+      id: tempId, from: currentUsername.value, to: selectedUser.value.username,
+      message, type: msgType, timestamp: new Date().toISOString(), _pending: true
+    }
+    chatMessages.value = [...chatMessages.value, tempMsg]
+    let resolved = false
+    const timeoutId = setTimeout(() => {
+      if (!resolved) {
+        resolved = true
+        updateMessageStatus(tempId, false)
+      }
+    }, SEND_TIMEOUT)
     try {
       const response = await fetch(
         `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/messages`,
@@ -198,48 +214,116 @@ export function useChatRoom() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             from: currentUsername.value, to: selectedUser.value.username,
-            message: message, timestamp: new Date().toISOString()
+            message, timestamp: new Date().toISOString()
           })
         }
       )
-      const data = await response.json()
-      if (data.success) {
-        chatMessages.value.push(normalizeMessage(data.message))
-        inputMessage.value = ''
+      clearTimeout(timeoutId)
+      if (!resolved) {
+        resolved = true
+        const data = await response.json()
+        if (data.success) {
+          updateMessageStatus(tempId, true, data.message?.id || data.data?.id)
+        } else {
+          updateMessageStatus(tempId, false)
+        }
       }
     } catch (error) {
-      console.error('[Chat] send LAN msg failed:', error)
-      ElMessage.error('发送失败: ' + error.message)
+      clearTimeout(timeoutId)
+      if (!resolved) {
+        resolved = true
+        updateMessageStatus(tempId, false)
+      }
     }
   }
 
-  const sendMessage = async () => {
+  const sendMessage = async (messageText, msgType = 'text') => {
     if (selectedUser.value?.chatMode === 'lan') {
-      await sendLanMessage()
+      await sendLanMessage(messageText, msgType)
       return
     }
-    const message = inputMessage.value.trim()
+    const message = messageText.trim()
     if (!message || !selectedUser.value || !window.electronAPI) return
-    const result = await window.electronAPI.sendChatMessage({
-      sender: currentUsername.value, receiver: selectedUser.value.username,
-      message, timestamp: new Date().toISOString()
-    })
-    if (result.success) {
-      chatMessages.value.push(normalizeMessage(result.data))
-      inputMessage.value = ''
+    const tempId = 'pending_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+    const tempMsg = {
+      id: tempId, from: currentUsername.value, to: selectedUser.value.username,
+      message, type: msgType, timestamp: new Date().toISOString(), _pending: true
     }
+    chatMessages.value = [...chatMessages.value, tempMsg]
+    let resolved = false
+    const timeoutId = setTimeout(() => {
+      if (!resolved) {
+        resolved = true
+        updateMessageStatus(tempId, false)
+      }
+    }, SEND_TIMEOUT)
+    try {
+      const result = await window.electronAPI.sendChatMessage({
+        sender: currentUsername.value, receiver: selectedUser.value.username,
+        message, messageType: msgType, timestamp: new Date().toISOString()
+      })
+      clearTimeout(timeoutId)
+      if (!resolved) {
+        resolved = true
+        if (result.success) {
+          updateMessageStatus(tempId, true, result.data?.id)
+        } else {
+          updateMessageStatus(tempId, false)
+        }
+      }
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (!resolved) {
+        resolved = true
+        updateMessageStatus(tempId, false)
+      }
+    }
+  }
+
+  const updateMessageStatus = (tempId, success, realId) => {
+    const idx = chatMessages.value.findIndex(m => m.id === tempId)
+    if (idx === -1) return
+    if (success) {
+      const updated = { ...chatMessages.value[idx], _pending: false, _failed: false }
+      if (realId) updated.id = realId
+      chatMessages.value[idx] = updated
+      ElMessage.success('发送成功')
+    } else {
+      chatMessages.value[idx] = { ...chatMessages.value[idx], _pending: false, _failed: true }
+    }
+  }
+
+  const retryMessage = async (msg) => {
+    if (!msg._failed) return
+    const idx = chatMessages.value.findIndex(m => m.id === msg.id)
+    if (idx === -1) return
+    chatMessages.value.splice(idx, 1)
+    if (selectedGroup.value) {
+      inputMessage.value = msg.message
+      await sendGroupMessage(msg.message, msg.type || 'text')
+    } else {
+      inputMessage.value = msg.message
+      await (selectedUser.value?.chatMode === 'lan'
+        ? sendLanMessage(msg.message, msg.type || 'text')
+        : sendMessage(msg.message, msg.type || 'text'))
+    }
+    inputMessage.value = ''
   }
 
   const handleImageSelect = async (file) => {
     if (!selectedUser.value || !window.electronAPI) return
     const reader = new FileReader()
     reader.onload = async (e) => {
-      const result = await window.electronAPI.sendChatMessage({
-        sender: currentUsername.value, receiver: selectedUser.value.username,
-        message: e.target.result, messageType: 'image',
-        timestamp: new Date().toISOString()
-      })
-      if (result.success) chatMessages.value.push(normalizeMessage(result.data))
+      await sendMessage(e.target.result, 'image')
+    }
+    reader.readAsDataURL(file.raw)
+  }
+
+  const handleGroupImageSelect = async (file) => {
+    if (!selectedGroup.value) return
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      await sendGroupMessage(e.target.result, 'image')
     }
     reader.readAsDataURL(file.raw)
   }
@@ -320,8 +404,9 @@ export function useChatRoom() {
   }
 
   const selectGroup = async (group) => {
-    selectedGroup.value = group
     selectedUser.value = null
+    chatMessages.value = []
+    selectedGroup.value = group
     if (group?.id) clearGroupUnread(group.id)
     await loadGroupMessages()
   }
@@ -334,7 +419,8 @@ export function useChatRoom() {
       localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
     }
     let data
-    if (chatMode.value === 'lan' && lanSettings.value.serverIP) {
+    if (chatMode.value === 'lan') {
+      if (!lanSettings.value.serverIP) return
       const response = await fetch(
         `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages?groupId=${encodeURIComponent(groupId)}`,
         { method: 'GET' }
@@ -358,40 +444,66 @@ export function useChatRoom() {
     }
   }
 
-  const sendGroupMessage = async () => {
-    const message = inputMessage.value.trim()
+  const sendGroupMessage = async (messageText, msgType = 'text') => {
+    const message = messageText.trim()
     if (!message || !selectedGroup.value) return
     const groupId = selectedGroup.value.id
     if (deletedGroupIds.value.includes(groupId)) {
       deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
       localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
     }
+    const tempId = 'pending_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+    const tempMsg = {
+      id: tempId, from: currentUsername.value, groupId, message,
+      type: msgType, timestamp: new Date().toISOString(), _pending: true
+    }
+    chatMessages.value = [...chatMessages.value, tempMsg]
+    let resolved = false
+    const timeoutId = setTimeout(() => {
+      if (!resolved) {
+        resolved = true
+        updateMessageStatus(tempId, false)
+      }
+    }, SEND_TIMEOUT)
     let data
-    if (chatMode.value === 'lan' && lanSettings.value.serverIP) {
+    if (chatMode.value === 'lan') {
+      if (!lanSettings.value.serverIP) return
       try {
         const response = await fetch(
           `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ groupId, from: currentUsername.value, message, type: 'text' })
+            body: JSON.stringify({ groupId, from: currentUsername.value, message, type: msgType })
           }
         )
-        data = await response.json()
+        clearTimeout(timeoutId)
+        if (!resolved) {
+          resolved = true
+          data = await response.json()
+          if (data.success) updateMessageStatus(tempId, true, data.data?.id)
+          else updateMessageStatus(tempId, false)
+        }
       } catch (error) {
-        console.error('[Chat] send group msg failed:', error)
-        ElMessage.error('发送失败')
-        return
+        clearTimeout(timeoutId)
+        if (!resolved) { resolved = true; updateMessageStatus(tempId, false) }
       }
     } else if (window.electronAPI) {
-      const result = await window.electronAPI.sendGroupMessage(groupId, currentUsername.value, message, 'text')
-      data = result
+      try {
+        const result = await window.electronAPI.sendGroupMessage(groupId, currentUsername.value, message, msgType)
+        clearTimeout(timeoutId)
+        if (!resolved) {
+          resolved = true
+          if (result.success) updateMessageStatus(tempId, true, result.data?.id)
+          else updateMessageStatus(tempId, false)
+        }
+      } catch (error) {
+        clearTimeout(timeoutId)
+        if (!resolved) { resolved = true; updateMessageStatus(tempId, false) }
+      }
     } else {
-      return
-    }
-    if (data.success) {
-      chatMessages.value.push(data.data)
-      inputMessage.value = ''
+      clearTimeout(timeoutId)
+      if (!resolved) { resolved = true; updateMessageStatus(tempId, false) }
     }
   }
 
@@ -404,9 +516,13 @@ export function useChatRoom() {
       ElMessage.warning('至少添加 2 名成员')
       return
     }
-    const groupData = { name: newGroupName.value.trim(), creator: currentUsername.value, members: [...newGroupMembers.value] }
+    const groupData = { name: newGroupName.value.trim(), creator: currentUsername.value, members: [...newGroupMembers.value], networkType: chatMode.value }
     let data
-    if (chatMode.value === 'lan' && lanSettings.value.serverIP) {
+    if (chatMode.value === 'lan') {
+      if (!lanSettings.value.serverIP) {
+        ElMessage.error('请先配置内网服务器地址')
+        return
+      }
       try {
         const response = await fetch(
           `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/groups`,
@@ -442,9 +558,12 @@ export function useChatRoom() {
   }
 
   const handleSendMessage = () => {
-    if (selectedGroup.value) sendGroupMessage()
-    else if (selectedUser.value?.chatMode === 'lan') sendLanMessage()
-    else sendMessage()
+    const msg = inputMessage.value.trim()
+    if (!msg) return
+    if (selectedGroup.value) sendGroupMessage(msg, 'text')
+    else if (selectedUser.value?.chatMode === 'lan') sendLanMessage(msg, 'text')
+    else sendMessage(msg, 'text')
+    inputMessage.value = ''
   }
 
   const handleDeleteGroup = () => {
@@ -464,7 +583,11 @@ export function useChatRoom() {
   const handleDisbandGroup = async () => {
     if (!selectedGroup.value) return
     let data
-    if (chatMode.value === 'lan' && lanSettings.value.serverIP) {
+    if (chatMode.value === 'lan') {
+      if (!lanSettings.value.serverIP) {
+        ElMessage.error('请先配置内网服务器地址')
+        return
+      }
       try {
         const response = await fetch(
           `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/groups/${selectedGroup.value.id}`,
@@ -503,6 +626,7 @@ export function useChatRoom() {
     chatMessages.value = []
     selectedUser.value = null
     selectedGroup.value = null
+    inputMessage.value = ''
     reloadLanSettings()
     if (mode === 'lan') {
       activeTab.value = 'users'
@@ -588,10 +712,10 @@ export function useChatRoom() {
     currentUsername, filteredUsers, filteredLanGroupsList, filteredPublicGroupsList,
     loadFriendsList, loadAllUsers, loadFriendRequests,
     selectUser, loadChatMessages, loadLanChatMessages,
-    sendLanMessage, sendMessage, handleImageSelect,
+    sendLanMessage, sendMessage, handleImageSelect, handleGroupImageSelect,
     handleAddFriend, handleRequest,
     normalizeMessage, formatDate, formatMessageTime,
-    isImageMessage, onImageLoad,
+    isImageMessage, onImageLoad, retryMessage,
     startMessagePolling, stopMessagePolling,
     handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
     selectGroup, loadGroupMessages, sendGroupMessage,

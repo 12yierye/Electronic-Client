@@ -97,6 +97,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { MagicStick, ArrowDown, ArrowRight, Monitor } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
+import { getUserAvatar } from '../../composables/useAvatar'
 
 const aiStore = useAIStore()
 const { t } = useI18n()
@@ -109,7 +110,16 @@ const SCROLL_THRESHOLD = 200             // 距底部超过此值显示跳转按
 
 const messages = computed(() => aiStore.messages)
 const greeting = computed(() => aiStore.getGreeting())
-const userAvatar = ref('')
+
+function getCurrentUsername() {
+  try {
+    const stored = localStorage.getItem('userInfo')
+    if (stored) return JSON.parse(stored).username || ''
+  } catch { /* ignore */ }
+  return ''
+}
+
+const userAvatar = ref(getUserAvatar(getCurrentUsername()))
 const aiAvatar = ref('')
 
 // 当前是否有 AI 消息正在流式输出
@@ -261,12 +271,14 @@ onUnmounted(() => {
     
     .message-item {
       display: flex;
+      align-items: flex-start;
       gap: 12px;
       margin-bottom: 20px;
       
       // 防止头像被内容挤压变形
       :deep(.el-avatar) {
         flex-shrink: 0;
+        margin-top: 2px;
       }
       
       &.user {

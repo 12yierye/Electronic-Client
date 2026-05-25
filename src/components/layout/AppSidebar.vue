@@ -16,7 +16,7 @@
     <div class="sidebar-content">
       <!-- 用户信息 -->
       <div class="user-info-card">
-        <el-avatar :size="60">
+        <el-avatar :size="60" :src="getUserAvatar(userInfo?.username)">
           {{ userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}
         </el-avatar>
         <div class="user-details">
@@ -63,6 +63,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { SwitchButton, Close, Loading } from '@element-plus/icons-vue'
 import { useI18n } from '../../composables/useI18n'
+import { getUserAvatar } from '../../composables/useAvatar'
 
 const props = defineProps({
   visible: Boolean,

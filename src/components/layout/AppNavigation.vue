@@ -28,6 +28,7 @@
 import { computed } from 'vue'
 import { ChatDotRound, Files, Setting, MagicStick, User } from '@element-plus/icons-vue'
 import { useI18n } from '../../composables/useI18n'
+import { getUserAvatar } from '../../composables/useAvatar'
 
 const props = defineProps({
   currentView: {
@@ -60,7 +61,7 @@ const toggleSidebar = () => {
 
 // 用户头像相关计算属性
 const userAvatar = computed(() => {
-  return props.userInfo?.avatar || ''
+  return props.userInfo?.avatar || getUserAvatar(props.userInfo?.username) || ''
 })
 
 const userInitial = computed(() => {

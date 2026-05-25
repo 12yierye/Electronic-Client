@@ -66,9 +66,6 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   clearAllScheduledTasks()
-  if (process.env.VITE_DEV_SERVER_URL) {
-    try { process.kill(process.ppid) } catch (_) {}
-  }
 })
 
 // console.log("[Main] Starting App...")

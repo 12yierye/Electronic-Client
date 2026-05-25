@@ -8,7 +8,7 @@
           :key="member"
           class="member-item"
         >
-          <el-avatar :size="48" class="member-avatar">{{ member.charAt(0).toUpperCase() }}</el-avatar>
+          <el-avatar :size="48" :src="getUserAvatar(member)" class="member-avatar">{{ member.charAt(0).toUpperCase() }}</el-avatar>
           <div v-if="showUsername" class="member-name">{{ formatName(member) }}</div>
         </div>
       </div>
@@ -67,6 +67,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessageBox } from 'element-plus'
+import { getUserAvatar } from '../../composables/useAvatar'
 
 const props = defineProps({
     members: { type: Array, default: () => [] },

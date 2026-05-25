@@ -51,7 +51,7 @@
               :class="['user-item', { active: selectedUser?.username === friend.username }]"
               @click="selectUser(friend, 'public')"
             >
-              <el-avatar :size="40">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
+              <el-avatar :size="40" :src="getUserAvatar(friend.username)">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
               <div class="user-info">
                 <div class="user-name">{{ friend.username }}</div>
                 <div class="user-role">
@@ -104,7 +104,7 @@
               :class="['user-item', { active: selectedUser?.username === user.username }]"
               @click="selectUser(user, 'lan')"
             >
-              <el-avatar :size="40">{{ user.username.charAt(0).toUpperCase() }}</el-avatar>
+              <el-avatar :size="40" :src="getUserAvatar(user.username)">{{ user.username.charAt(0).toUpperCase() }}</el-avatar>
               <div class="user-info">
                 <div class="user-name">{{ user.username }}</div>
                 <div class="user-role">
@@ -158,7 +158,7 @@
               :key="user.username"
               class="user-item"
             >
-              <el-avatar :size="40">{{ user.username.charAt(0).toUpperCase() }}</el-avatar>
+              <el-avatar :size="40" :src="getUserAvatar(user.username)">{{ user.username.charAt(0).toUpperCase() }}</el-avatar>
               <div class="user-info">
                 <div class="user-name">{{ user.username }}</div>
               </div>
@@ -176,7 +176,7 @@
               :key="request.id"
               class="request-item"
             >
-              <el-avatar :size="40">{{ request.sender.charAt(0).toUpperCase() }}</el-avatar>
+              <el-avatar :size="40" :src="getUserAvatar(request.sender)">{{ request.sender.charAt(0).toUpperCase() }}</el-avatar>
               <div class="request-info">
                 <div class="user-name">{{ request.sender }}</div>
                 <div class="request-date">{{ formatDate(request.timestamp) }}</div>
@@ -215,22 +215,42 @@
           
           <div class="chat-messages" ref="chatMessagesRef">
             <template v-if="selectedUser || selectedGroup">
-              <div 
-                v-for="msg in chatMessages" 
+              <div
+                v-for="msg in chatMessages"
                 :key="msg.id"
                 :class="['chat-message', msg.from === currentUsername ? 'sent' : 'received']"
               >
-                <!-- 群聊显示发送者 -->
-                <div v-if="selectedGroup && msg.from !== currentUsername" class="message-sender">
-                  {{ msg.from }}
+                <!-- 接收方头像（左侧） -->
+                <el-avatar v-if="msg.from !== currentUsername" :size="36" :src="getUserAvatar(msg.from)" class="msg-avatar msg-avatar-left">
+                  {{ msg.from.charAt(0).toUpperCase() }}
+                </el-avatar>
+
+                <div class="msg-body">
+                  <!-- 群聊显示发送者 -->
+                  <div v-if="selectedGroup && msg.from !== currentUsername" class="message-sender">
+                    {{ msg.from }}
+                  </div>
+
+                  <!-- 图片消息 -->
+                  <div v-if="isImageMessage(msg.message)" class="message-content image-message">
+                    <img :src="msg.message" :alt="t('chatRoom.image')" @load="onImageLoad" />
+                  </div>
+                  <!-- 文本消息 -->
+                  <div v-else class="message-content">{{ msg.message }}</div>
+
+                  <div class="message-time">
+                    {{ formatMessageTime(msg.timestamp) }}
+                    <!-- 发送中 -->
+                    <el-icon v-if="msg._pending" class="msg-status sending"><Loading /></el-icon>
+                    <!-- 发送失败 -->
+                    <el-icon v-if="msg._failed" class="msg-status failed" @click="retryMessage(msg)"><WarningFilled /></el-icon>
+                  </div>
                 </div>
-                <!-- 图片消息 -->
-                <div v-if="isImageMessage(msg.message)" class="message-content image-message">
-                  <img :src="msg.message" :alt="t('chatRoom.image')" @load="onImageLoad" />
-                </div>
-                <!-- 文本消息 -->
-                <div v-else class="message-content">{{ msg.message }}</div>
-                <div class="message-time">{{ formatMessageTime(msg.timestamp) }}</div>
+
+                <!-- 自己的头像（右侧） -->
+                <el-avatar v-if="msg.from === currentUsername" :size="36" :src="getUserAvatar(currentUsername)" class="msg-avatar msg-avatar-right">
+                  {{ currentUsername.charAt(0).toUpperCase() }}
+                </el-avatar>
               </div>
               <el-empty v-if="chatMessages.length === 0" :description="t('chatRoom.noChatHistory')" />
             </template>
@@ -238,13 +258,13 @@
           </div>
           
           <div class="chat-input">
-            <!-- 图片上传按钮（仅私聊时显示） -->
+            <!-- 图片上传 -->
             <el-upload
-              v-if="selectedUser && !selectedGroup"
+              v-if="selectedUser || selectedGroup"
               class="image-uploader"
               :show-file-list="false"
               :auto-upload="false"
-              :on-change="handleImageSelect"
+              :on-change="selectedGroup ? handleGroupImageSelect : handleImageSelect"
               accept="image/*"
             >
               <el-button :icon="Picture" circle size="small" />
@@ -323,9 +343,10 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled } from '@element-plus/icons-vue'
+import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled } from '@element-plus/icons-vue'
 import { useChatRoom } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
+import { getUserAvatar } from '../../composables/useAvatar'
 import GroupMemberPanel from './GroupMemberPanel.vue'
 
 const { t } = useI18n()
@@ -344,10 +365,10 @@ const {
   currentUsername, filteredUsers, filteredLanGroupsList, filteredPublicGroupsList,
   loadFriendsList, loadAllUsers, loadFriendRequests,
   selectUser, loadChatMessages, loadLanChatMessages,
-  sendLanMessage, sendMessage, handleImageSelect,
+  sendLanMessage, sendMessage, handleImageSelect, handleGroupImageSelect,
   handleAddFriend, handleRequest,
   normalizeMessage, formatDate, formatMessageTime,
-  isImageMessage, onImageLoad,
+  isImageMessage, onImageLoad, retryMessage,
   startMessagePolling, stopMessagePolling,
   handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
   selectGroup, loadGroupMessages, sendGroupMessage,
@@ -535,23 +556,56 @@ const searchPlaceholder = computed(() => {
       padding: 20px;
       
       .chat-message {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
         margin-bottom: 15px;
-        max-width: 70%;
-        width: fit-content;
+        max-width: 80%;
+
+        .msg-avatar {
+          flex-shrink: 0;
+          font-size: 14px;
+          margin-top: 2px;
+
+          &.msg-avatar-left {
+            order: 0;
+          }
+          &.msg-avatar-right {
+            order: 2;
+          }
+        }
+
+        .msg-body {
+          display: flex;
+          flex-direction: column;
+          order: 1;
+          flex: 1;
+          min-width: 0;
+        }
         
         &.sent {
           margin-left: auto;
           
+          .msg-body {
+            align-items: flex-end;
+          }
+
           .message-content {
             background: var(--accent-color);
             color: white;
+            border-bottom-right-radius: 4px;
           }
         }
         
         &.received {
+          .msg-body {
+            align-items: flex-start;
+          }
+
           .message-content {
             background: var(--bg-secondary);
             color: var(--text-primary);
+            border-bottom-left-radius: 4px;
           }
         }
         
@@ -583,14 +637,42 @@ const searchPlaceholder = computed(() => {
           font-size: 12px;
           color: var(--text-secondary);
           margin-bottom: 3px;
+          padding: 0 4px;
         }
         
         .message-time {
           font-size: 11px;
           color: var(--text-secondary);
           margin-top: 5px;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+
+          .msg-status {
+            font-size: 14px;
+
+            &.sending {
+              color: var(--accent-color);
+              animation: spin 0.8s linear infinite;
+            }
+
+            &.failed {
+              color: #f56c6c;
+              cursor: pointer;
+              transition: transform 0.15s;
+
+              &:hover {
+                transform: scale(1.3);
+              }
+            }
+          }
         }
       }
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
     
     .chat-input {
