@@ -301,6 +301,7 @@
     <!-- 群成员侧边栏 -->
     <el-drawer
       v-model="showGroupMemberPanel"
+      class="group-member-drawer"
       direction="rtl"
       size="280px"
       :title="`${selectedGroup?.name || ''} (${selectedGroup?.members?.length || 0})`"
@@ -383,6 +384,10 @@ const searchPlaceholder = computed(() => {
       border-radius: 50%;
       background: #f56c6c;
     }
+  }
+
+  :deep(.group-member-drawer .el-drawer__body) {
+    padding: 0;
   }
 
   .el-container {

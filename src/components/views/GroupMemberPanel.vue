@@ -2,7 +2,6 @@
   <div class="group-member-panel">
     <!-- 成员区域 -->
     <div class="section section-members">
-      <div class="section-label">群成员</div>
       <div class="member-grid">
         <div
           v-for="member in members"
@@ -21,7 +20,7 @@
     <div class="section section-settings">
       <el-form label-width="0">
         <el-form-item label="">
-          <div class="setting-row">
+          <div class="setting-row vertical">
             <span class="setting-label">我在本群聊的昵称</span>
             <el-input
               v-model="myNickname"
@@ -29,7 +28,6 @@
               placeholder="默认使用用户名"
               maxlength="20"
               show-word-limit
-              style="width: 180px"
               @blur="saveSettings"
             />
           </div>
@@ -132,15 +130,19 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     height: 100%;
-    padding: 0 16px;
+    padding: 16px;
+
+    :deep(.el-divider--horizontal) {
+        margin: 4px 0;
+    }
 
     .section {
-        padding: 12px 0;
+        padding: 8px 0;
 
         .section-label {
             font-size: 12px;
             color: var(--text-secondary);
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             font-weight: 500;
         }
 
@@ -148,8 +150,8 @@ onMounted(() => {
             .member-grid {
                 display: flex;
                 flex-wrap: wrap;
-                gap: 12px;
-                justify-content: flex-start;
+                gap: 8px;
+                justify-content: center;
 
                 .member-item {
                     display: flex;
@@ -180,6 +182,12 @@ onMounted(() => {
                 justify-content: space-between;
                 width: 100%;
 
+                &.vertical {
+                    flex-direction: column;
+                    align-items: stretch;
+                    gap: 6px;
+                }
+
                 .setting-label {
                     font-size: 13px;
                     color: var(--text-primary);
@@ -189,7 +197,7 @@ onMounted(() => {
             }
 
             .el-form-item {
-                margin-bottom: 12px;
+            margin-bottom: 8px;
 
                 &:last-child {
                     margin-bottom: 0;

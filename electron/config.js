@@ -15,7 +15,7 @@ export const setAPIBase = (url) => {
     }
 }
 
-export const DOC_SERVER = process.env.DOC_SERVER || 'http://127.0.0.1:3000'
+export const DOC_SERVER = process.env.DOC_SERVER || 'http://120.24.26.164'
 export const SCHEDULED_TASKS_FILE = app.getPath('userData') + '/scheduled-tasks.json'
 
 // LM Studio API 地址（运行时可变）

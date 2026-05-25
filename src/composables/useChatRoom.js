@@ -142,6 +142,7 @@ export function useChatRoom() {
 
   const selectUser = async (user, mode = chatMode.value) => {
     selectedUser.value = { ...user, chatMode: mode }
+    selectedGroup.value = null
     if (mode === 'lan') await loadLanChatMessages()
     else await loadChatMessages()
   }
