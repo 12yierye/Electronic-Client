@@ -423,7 +423,21 @@ const handleCheckUpdate = async () => {
         const latestVersion = data.tag_name.replace(/^v/, '')
         const current = appVersion
 
-        if (latestVersion === current) {
+        const compareVersions = (a, b) => {
+            const pa = a.split('.').map(Number)
+            const pb = b.split('.').map(Number)
+            for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+                const va = pa[i] || 0
+                const vb = pb[i] || 0
+                if (va > vb) return 1
+                if (va < vb) return -1
+            }
+            return 0
+        }
+
+        const cmp = compareVersions(latestVersion, current)
+
+        if (cmp <= 0) {
             updateMessage.value = t('settings.alreadyLatest') + ' (v' + current + ')'
             updateMessageType.value = 'success'
         } else {
