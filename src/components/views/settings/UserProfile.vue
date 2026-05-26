@@ -134,25 +134,83 @@ const handleAvatarSelected = (e) => {
   e.target.value = ''
 }
 
-const handleSave = () => {
-  const key = getProfileKey()
-  localStorage.setItem(key, JSON.stringify(profile.value))
-  clearAvatarCache()
-  ElMessage.success('已保存')
+function getServerBaseUrl() {
+  try {
+    const raw = localStorage.getItem('lanChatSettings')
+    if (raw) {
+      const s = JSON.parse(raw)
+      const ip = s.serverIP || '127.0.0.1'
+      const port = s.serverPort || '3000'
+      return `http://${ip}:${port}`
+    }
+  } catch {}
+  return 'http://localhost:3000'
+}
+
+const handleSave = async () => {
+  const username = getCurrentUsername()
+  const baseUrl = getServerBaseUrl()
+
+  try {
+    const res = await fetch(`${baseUrl}/user/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username,
+        signature: profile.value.signature,
+        birthday: profile.value.birthday,
+        gender: profile.value.gender
+      })
+    })
+
+    const data = await res.json()
+
+    if (!data.success) {
+      ElMessage.error(data.message || '保存失败')
+      return
+    }
+
+    // 同步更新 userInfo（保持签名/生日/性别一致）
+    try {
+      const userInfo = JSON.parse(localStorage.getItem('userInfo'))
+      if (userInfo) {
+        userInfo.signature = profile.value.signature
+        userInfo.birthday = profile.value.birthday
+        userInfo.gender = profile.value.gender
+        localStorage.setItem('userInfo', JSON.stringify(userInfo))
+      }
+    } catch {}
+
+    // 仍写入 localStorage（用于离线头像回退）
+    const key = getProfileKey()
+    localStorage.setItem(key, JSON.stringify(profile.value))
+    clearAvatarCache()
+    ElMessage.success('已保存')
+  } catch (e) {
+    ElMessage.error('保存失败，无法连接到服务器')
+  }
 }
 
 onMounted(() => {
   const username = getCurrentUsername()
   profile.value.username = username
 
+  // 优先从 userInfo（服务端数据）加载
+  try {
+    const userInfo = JSON.parse(localStorage.getItem('userInfo'))
+    if (userInfo) {
+      profile.value.signature = userInfo.signature || ''
+      profile.value.birthday = userInfo.birthday || ''
+      profile.value.gender = userInfo.gender || 'none'
+    }
+  } catch {}
+
+  // 从本地 profile 缓存加载头像
   const key = getProfileKey()
   const saved = localStorage.getItem(key)
   if (saved) {
     try {
       const data = JSON.parse(saved)
-      profile.value.signature = data.signature || ''
-      profile.value.birthday = data.birthday || ''
-      profile.value.gender = data.gender || 'none'
       profile.value.avatar = data.avatar || ''
     } catch {
       // ignore
