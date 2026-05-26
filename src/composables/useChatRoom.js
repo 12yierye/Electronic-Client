@@ -1,5 +1,6 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { matchByPinyin } from '../utils/pinyin'
+import { loadUsersAvatars } from './useAvatar'
 
 export function useChatRoom() {
   const activeTab = ref('friends')
@@ -126,6 +127,7 @@ export function useChatRoom() {
       const result = await window.electronAPI.searchUsers(query.trim())
       if (result.success && result.users) {
         searchResults.value = result.users
+        loadUsersAvatars(searchResults.value.map(u => u.username))
       }
     } else {
       searchResults.value = []
@@ -135,14 +137,20 @@ export function useChatRoom() {
   const loadFriendsList = async () => {
     if (window.electronAPI) {
       const result = await window.electronAPI.getFriendsList(currentUsername.value)
-      if (result.success) friendsList.value = result.friends || []
+      if (result.success) {
+        friendsList.value = result.friends || []
+        loadUsersAvatars(friendsList.value.map(f => f.username))
+      }
     }
   }
 
   const loadAllUsers = async () => {
     if (window.electronAPI) {
       const result = await window.electronAPI.getUserList()
-      if (result.success) allUsersList.value = result.users || []
+      if (result.success) {
+        allUsersList.value = result.users || []
+        loadUsersAvatars(allUsersList.value.map(u => u.username))
+      }
     }
   }
 
@@ -150,7 +158,10 @@ export function useChatRoom() {
     if (window.electronAPI?.getFriendRequests) {
       try {
         const result = await window.electronAPI.getFriendRequests(currentUsername.value, 'received')
-        if (result.success) friendRequests.value = (result.requests || []).filter(r => r.status === 'pending')
+        if (result.success) {
+          friendRequests.value = (result.requests || []).filter(r => r.status === 'pending')
+          loadUsersAvatars(friendRequests.value.map(r => r.sender))
+        }
       } catch (e) {
         console.error('[Chat] load friend requests failed:', e)
       }
@@ -178,6 +189,7 @@ export function useChatRoom() {
       } else {
         chatMessages.value = newMessages
       }
+      loadUsersAvatars(newMessages.map(m => m.from))
     }
   }
 
@@ -198,6 +210,7 @@ export function useChatRoom() {
         } else {
           chatMessages.value = newMessages
         }
+        loadUsersAvatars(newMessages.map(m => m.from))
       }
     } catch (error) {
       console.error('[Chat] load LAN msgs failed:', error)
@@ -403,7 +416,10 @@ export function useChatRoom() {
         { method: 'GET', headers: { 'Content-Type': 'application/json' } }
       )
       const data = await response.json()
-      if (data.success) lanFriendsList.value = data.friends || []
+      if (data.success) {
+        lanFriendsList.value = data.friends || []
+        loadUsersAvatars(lanFriendsList.value.map(f => f.username))
+      }
     } catch (error) {
       console.error('[Chat] load LAN users failed:', error)
     }
@@ -417,7 +433,10 @@ export function useChatRoom() {
         { method: 'GET', headers: { 'Content-Type': 'application/json' } }
       )
       const data = await response.json()
-      if (data.success) lanGroupsList.value = data.groups || []
+      if (data.success) {
+        lanGroupsList.value = data.groups || []
+        lanGroupsList.value.forEach(g => loadUsersAvatars(g.members || []))
+      }
     } catch (error) {
       console.error('[Chat] load LAN groups failed:', error)
     }
@@ -427,7 +446,10 @@ export function useChatRoom() {
     if (!window.electronAPI?.getGroups) return
     try {
       const result = await window.electronAPI.getGroups(currentUsername.value)
-      if (result.success) publicGroupsList.value = result.groups || []
+      if (result.success) {
+        publicGroupsList.value = result.groups || []
+        publicGroupsList.value.forEach(g => loadUsersAvatars(g.members || []))
+      }
     } catch (e) {
       console.error('[Chat] load public groups failed:', e)
     }
@@ -483,6 +505,7 @@ export function useChatRoom() {
       } else {
         chatMessages.value = newMessages
       }
+      loadUsersAvatars(newMessages.map(m => m.from))
     }
   }
 

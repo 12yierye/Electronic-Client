@@ -13,7 +13,7 @@ export function registerAuthIpc() {
     ipcMain.handle('login', async (event, username, password) => {
         const result = await validateLogin(username, password)
         if (result.success && result.user) {
-            global.userInfo = { username: result.user.username, email: result.user.email || '', role: result.user.role || '' }
+            global.userInfo = { username: result.user.username, email: result.user.email || '', role: result.user.role || '', avatar: result.user.avatar || '' }
         }
         return result
     })

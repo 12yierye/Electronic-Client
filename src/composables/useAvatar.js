@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 
 const cache = ref(new Map())
+const pendingFetches = new Set()
 
 function getServerBaseUrl() {
   try {
@@ -22,10 +23,16 @@ export function getAvatarUrl(url) {
   return url
 }
 
-export function getUserAvatar(username) {
+export function getUserAvatar(username, serverAvatarUrl) {
   if (!username) return ''
   const map = cache.value
   if (map.has(username)) return map.get(username)
+
+  if (serverAvatarUrl) {
+    const url = getAvatarUrl(serverAvatarUrl)
+    if (url) map.set(username, url)
+    return url || ''
+  }
 
   try {
     const userInfo = JSON.parse(localStorage.getItem('userInfo'))
@@ -40,6 +47,38 @@ export function getUserAvatar(username) {
   return ''
 }
 
+export async function loadUserAvatar(username) {
+  if (!username) return ''
+  const map = cache.value
+  if (map.has(username)) return map.get(username)
+  if (pendingFetches.has(username)) return
+
+  pendingFetches.add(username)
+
+  try {
+    let data
+    if (window.electronAPI?.getUserByUsername) {
+      data = await window.electronAPI.getUserByUsername(username)
+    } else {
+      const res = await fetch(`${getServerBaseUrl()}/user/${encodeURIComponent(username)}`)
+      data = await res.json()
+    }
+    if (data.success && data.user?.avatar) {
+      const url = getAvatarUrl(data.user.avatar)
+      map.set(username, url)
+      return url
+    }
+  } catch {}
+  map.set(username, '')
+  return ''
+}
+
+export function loadUsersAvatars(usernames) {
+  const unique = [...new Set(usernames.filter(Boolean))]
+  unique.forEach(u => loadUserAvatar(u))
+}
+
 export function clearAvatarCache() {
   cache.value = new Map()
+  pendingFetches.clear()
 }

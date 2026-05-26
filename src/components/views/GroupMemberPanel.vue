@@ -65,8 +65,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getUserAvatar } from '../../composables/useAvatar'
+import { ref, onMounted, watch } from 'vue'
+import { getUserAvatar, loadUsersAvatars } from '../../composables/useAvatar'
 
 const props = defineProps({
     members: { type: Array, default: () => [] },
@@ -122,6 +122,11 @@ const handleExit = () => {
 onMounted(() => {
     myNickname.value = localStorage.getItem(nicknameKey()) || ''
     dndEnabled.value = localStorage.getItem(dndKey()) === '1'
+    loadUsersAvatars(props.members)
+})
+
+watch(() => props.members, (members) => {
+    loadUsersAvatars(members)
 })
 </script>
 
