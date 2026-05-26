@@ -12,32 +12,44 @@
             </el-radio-group>
           </div>
 
-          <el-radio-group v-model="activeTab" size="small">
-            <!-- 公网模式显示：好友、群聊、添加好友、申请 -->
-            <template v-if="chatMode === 'public'">
-              <el-radio-button label="friends">{{ t('chatRoom.friends') }}</el-radio-button>
-              <el-radio-button label="groups">{{ t('chatRoom.groups') }}</el-radio-button>
-              <el-radio-button label="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
-              <el-radio-button label="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
-                {{ t('chatRoom.requests') }}
-              </el-radio-button>
-            </template>
-            <!-- 内网模式显示：用户、群聊 -->
-            <template v-else>
-              <el-radio-button label="users">{{ t('chatRoom.users') }}</el-radio-button>
-              <el-radio-button label="groups">{{ t('chatRoom.groups') }}</el-radio-button>
-            </template>
-          </el-radio-group>
+          <div class="tab-row">
+            <el-radio-group v-model="activeTab" size="small">
+              <!-- 公网模式显示：好友、群聊、添加好友、申请 -->
+              <template v-if="chatMode === 'public'">
+                <el-radio-button label="friends">{{ t('chatRoom.friends') }}</el-radio-button>
+                <el-radio-button label="groups">{{ t('chatRoom.groups') }}</el-radio-button>
+                <el-radio-button label="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
+                <el-radio-button label="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
+                  {{ t('chatRoom.requests') }}
+                </el-radio-button>
+              </template>
+              <!-- 内网模式显示：用户、群聊 -->
+              <template v-else>
+                <el-radio-button label="users">{{ t('chatRoom.users') }}</el-radio-button>
+                <el-radio-button label="groups">{{ t('chatRoom.groups') }}</el-radio-button>
+              </template>
+            </el-radio-group>
+          </div>
         </div>
         
         <!-- 搜索框 -->
         <div class="search-box">
-          <el-input
-            v-model="searchQuery"
-            :placeholder="searchPlaceholder"
-            :prefix-icon="Search"
-            clearable
-          />
+          <div class="search-row">
+            <el-input
+              v-model="searchQuery"
+              :placeholder="searchPlaceholder"
+              :prefix-icon="Search"
+              clearable
+            />
+            <el-button
+              v-if="activeTab === 'groups'"
+              :icon="Plus"
+              size="small"
+              circle
+              @click="showCreateGroupDialog = true"
+              class="create-group-btn"
+            />
+          </div>
         </div>
         
         <!-- 好友/用户列表 -->
@@ -70,11 +82,6 @@
           <!-- 公网：群聊列表 -->
           <template v-else-if="chatMode === 'public' && activeTab === 'groups'">
             <div class="category-header">我的群聊</div>
-            <div class="group-actions">
-              <el-button type="primary" size="small" @click="showCreateGroupDialog = true">
-                {{ t('chatRoom.createGroup') }}
-              </el-button>
-            </div>
             <div
               v-for="group in filteredPublicGroupsList"
               :key="group.id"
@@ -119,11 +126,6 @@
           <!-- 内网：群聊列表 -->
           <template v-else-if="chatMode === 'lan' && activeTab === 'groups'">
             <div class="category-header">我的群聊</div>
-            <div class="group-actions">
-              <el-button type="primary" size="small" @click="showCreateGroupDialog = true">
-                {{ t('chatRoom.createGroup') }}
-              </el-button>
-            </div>
             <div
               v-for="group in filteredLanGroupsList"
               :key="group.id"
@@ -343,7 +345,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled } from '@element-plus/icons-vue'
+import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus } from '@element-plus/icons-vue'
 import { useChatRoom } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
 import { getUserAvatar } from '../../composables/useAvatar'
@@ -423,16 +425,37 @@ const searchPlaceholder = computed(() => {
   }
   
   .chat-tabs {
-    padding: 15px;
-    border-bottom: 1px solid var(--border-color);
+      padding: 15px;
+      border-bottom: 1px solid var(--border-color);
 
-    .mode-switch-row {
-      margin-bottom: 10px;
-    }
+      .mode-switch-row {
+          margin-bottom: 10px;
+      }
+
+      .tab-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+      }
   }
   
   .search-box {
-    padding: 10px 15px;
+      padding: 10px 15px;
+
+      .search-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+
+          .el-input {
+              flex: 1;
+          }
+
+          .create-group-btn {
+              flex-shrink: 0;
+          }
+      }
   }
   
   .user-list {
@@ -541,13 +564,6 @@ const searchPlaceholder = computed(() => {
       .placeholder {
         color: var(--text-secondary);
       }
-
-      .group-actions {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 8px;
-        padding: 0 4px;
-    }
     }
     
     .chat-messages {

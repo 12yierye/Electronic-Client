@@ -142,9 +142,9 @@ export function useChatRoom() {
   }
 
   const selectUser = async (user, mode = chatMode.value) => {
+    selectedUser.value = { ...user, chatMode: mode }
     selectedGroup.value = null
     chatMessages.value = []
-    selectedUser.value = { ...user, chatMode: mode }
     if (mode === 'lan') await loadLanChatMessages()
     else await loadChatMessages()
   }
@@ -403,9 +403,9 @@ export function useChatRoom() {
   }
 
   const selectGroup = async (group) => {
+    selectedGroup.value = group
     selectedUser.value = null
     chatMessages.value = []
-    selectedGroup.value = group
     if (group?.id) clearGroupUnread(group.id)
     await loadGroupMessages()
   }

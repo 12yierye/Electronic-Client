@@ -145,6 +145,7 @@ onMounted(() => {
   background: var(--bg-primary);
   color: var(--text-primary);
   transition: background 0.3s ease, color 0.3s ease;
+  overflow: hidden;
 }
 
 .main-wrapper {
