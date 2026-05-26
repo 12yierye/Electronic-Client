@@ -102,7 +102,7 @@ const messages = {
       useSystemBrowser: '使用系统默认浏览器',
       useSystemBrowserTip: '开启后将用系统浏览器打开链接，否则使用应用内置浏览器',
       serverTitle: '服务端设置',
-      serverIP: '服务端IP',
+      serverIP: '服务端地址',
       serverIPPlaceholder: '例如: 127.0.0.1',
       serverPort: '服务端端口',
       serverPortPlaceholder: '例如: 3000',
