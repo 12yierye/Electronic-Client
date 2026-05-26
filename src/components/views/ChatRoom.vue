@@ -272,23 +272,23 @@
           <div class="chat-input">
             <el-popover
               v-if="selectedUser || selectedGroup"
-              :visible="uploadMenuVisible"
+              v-model:visible="uploadMenuVisible"
               placement="top-start"
               :width="140"
               trigger="click"
             >
               <template #reference>
-                <el-button :icon="Plus" circle size="small" @click="uploadMenuVisible = !uploadMenuVisible" />
+                <el-button :icon="Plus" circle size="small" />
               </template>
               <div class="upload-menu">
-                <div class="upload-menu-item" @click="uploadMenuVisible = false; handleSelectImage()">
+                <el-button class="upload-menu-btn" text @click="uploadMenuVisible = false; handleSelectImage()">
                   <el-icon><Picture /></el-icon>
                   <span>{{ t('chatRoom.sendImage') }}</span>
-                </div>
-                <div class="upload-menu-item" @click="uploadMenuVisible = false; handleSelectDocument()">
+                </el-button>
+                <el-button class="upload-menu-btn" text @click="uploadMenuVisible = false; handleSelectDocument()">
                   <span class="upload-menu-icon">&#128196;</span>
                   <span>{{ t('chatRoom.sendDocument') }}</span>
-                </div>
+                </el-button>
               </div>
             </el-popover>
             <el-input
@@ -364,7 +364,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus } from '@element-plus/icons-vue'
 import { useChatRoom } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
@@ -410,6 +410,10 @@ const searchPlaceholder = computed(() => {
   }
   return t('chatRoom.searchUser')
 })
+
+watch([selectedUser, selectedGroup], () => {
+  uploadMenuVisible.value = false
+})
 </script>
 
 <style lang="scss" scoped>
@@ -437,6 +441,10 @@ const searchPlaceholder = computed(() => {
 
   .el-container {
     height: 100%;
+  }
+
+  .el-main {
+    padding: 0;
   }
   
   .el-aside {
@@ -719,37 +727,100 @@ const searchPlaceholder = computed(() => {
       display: flex;
       align-items: center;
       gap: 10px;
-      
+
       .image-uploader {
         display: inline-block;
-        
+
         :deep(.el-upload) {
           border: none;
         }
       }
-      
+
       .el-input {
         flex: 1;
-        
+
         :deep(.el-input__wrapper) {
           border-radius: 20px;
           background: var(--bg-primary);
-          
+
           .el-input__inner {
             color: var(--text-primary);
           }
         }
       }
-      
+
       .el-button {
         height: 40px;
         padding: 0 20px;
         border-radius: 20px;
         font-weight: 500;
-        
+
         :deep(.el-icon) {
           margin-right: 6px;
           font-size: 16px;
+        }
+      }
+    }
+
+    .upload-menu {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+
+      .upload-menu-btn {
+        width: 100%;
+        justify-content: flex-start;
+        padding: 6px 8px;
+        height: auto;
+        font-size: 14px;
+        gap: 8px;
+
+        .upload-menu-icon {
+          font-size: 18px;
+          line-height: 1;
+        }
+      }
+    }
+
+    .document-message {
+      padding: 0;
+      background: transparent !important;
+
+      .doc-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        min-width: 160px;
+
+        .doc-icon {
+          font-size: 28px;
+          line-height: 1;
+        }
+
+        .doc-info {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+
+          .doc-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .doc-ext {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+          }
         }
       }
     }
