@@ -142,4 +142,37 @@ export function registerFileIpc() {
         }
         return { success: true }
     })
+
+    ipcMain.handle('select-image-file', async () => {
+        const result = await dialog.showOpenDialog({
+            title: '选择图片',
+            filters: [{ name: '图片文件', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'] }],
+            properties: ['openFile']
+        })
+        if (result.canceled || result.filePaths.length === 0) return { success: false }
+        const filePath = result.filePaths[0]
+        const data = fs.readFileSync(filePath, { encoding: 'base64' })
+        const ext = parse(filePath).ext.toLowerCase()
+        const mimeMap = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp' }
+        const mime = mimeMap[ext] || 'image/png'
+        return { success: true, data: `data:${mime};base64,${data}`, name: parse(filePath).base }
+    })
+
+    const DOCUMENT_EXTENSIONS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'pdf', 'txt', 'md', 'csv', 'rtf', 'odt', 'ods', 'odp']
+
+    ipcMain.handle('select-document-file', async () => {
+        const docPath = join(app.getPath('documents'))
+        const result = await dialog.showOpenDialog({
+            title: '选择文档',
+            defaultPath: fs.existsSync(docPath) ? docPath : app.getPath('home'),
+            filters: [{ name: '文档文件', extensions: DOCUMENT_EXTENSIONS }],
+            properties: ['openFile']
+        })
+        if (result.canceled || result.filePaths.length === 0) return { success: false }
+        const filePath = result.filePaths[0]
+        const data = fs.readFileSync(filePath, { encoding: 'base64' })
+        const name = parse(filePath).base
+        const ext = parse(filePath).ext.toLowerCase()
+        return { success: true, data, name, ext }
+    })
 }

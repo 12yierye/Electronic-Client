@@ -237,6 +237,16 @@
                   <div v-if="isImageMessage(msg.message)" class="message-content image-message">
                     <img :src="msg.message" :alt="t('chatRoom.image')" @load="onImageLoad" />
                   </div>
+                  <!-- 文档消息 -->
+                  <div v-else-if="isDocumentMessage(msg)" class="message-content document-message">
+                    <div class="doc-card">
+                      <span class="doc-icon">&#128196;</span>
+                      <div class="doc-info">
+                        <span class="doc-name">{{ parseDocumentInfo(msg.message)?.name || t('chatRoom.unknownDocument') }}</span>
+                        <span class="doc-ext">{{ parseDocumentInfo(msg.message)?.ext || '' }}</span>
+                      </div>
+                    </div>
+                  </div>
                   <!-- 文本消息 -->
                   <div v-else class="message-content">{{ msg.message }}</div>
 
@@ -260,17 +270,27 @@
           </div>
           
           <div class="chat-input">
-            <!-- 图片上传 -->
-            <el-upload
+            <el-popover
               v-if="selectedUser || selectedGroup"
-              class="image-uploader"
-              :show-file-list="false"
-              :auto-upload="false"
-              :on-change="selectedGroup ? handleGroupImageSelect : handleImageSelect"
-              accept="image/*"
+              :visible="uploadMenuVisible"
+              placement="top-start"
+              :width="140"
+              trigger="click"
             >
-              <el-button :icon="Picture" circle size="small" />
-            </el-upload>
+              <template #reference>
+                <el-button :icon="Plus" circle size="small" @click="uploadMenuVisible = !uploadMenuVisible" />
+              </template>
+              <div class="upload-menu">
+                <div class="upload-menu-item" @click="uploadMenuVisible = false; handleSelectImage()">
+                  <el-icon><Picture /></el-icon>
+                  <span>{{ t('chatRoom.sendImage') }}</span>
+                </div>
+                <div class="upload-menu-item" @click="uploadMenuVisible = false; handleSelectDocument()">
+                  <span class="upload-menu-icon">&#128196;</span>
+                  <span>{{ t('chatRoom.sendDocument') }}</span>
+                </div>
+              </div>
+            </el-popover>
             <el-input
               v-model="inputMessage"
               :placeholder="t('chatRoom.enterMessage')"
@@ -355,6 +375,7 @@ const { t } = useI18n()
 
 const showGroupMemberPanel = ref(false)
 const showUsernameInPanel = ref(true)
+const uploadMenuVisible = ref(false)
 
 const {
   activeTab, chatMode, useLanChat, lanSettings, searchQuery,
@@ -368,9 +389,10 @@ const {
   loadFriendsList, loadAllUsers, loadFriendRequests,
   selectUser, loadChatMessages, loadLanChatMessages,
   sendLanMessage, sendMessage, handleImageSelect, handleGroupImageSelect,
+  handleSelectImage, handleSelectDocument,
   handleAddFriend, handleRequest,
   normalizeMessage, formatDate, formatMessageTime,
-  isImageMessage, onImageLoad, retryMessage,
+  isImageMessage, isDocumentMessage, parseDocumentInfo, onImageLoad, retryMessage,
   startMessagePolling, stopMessagePolling,
   handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
   selectGroup, loadGroupMessages, sendGroupMessage,

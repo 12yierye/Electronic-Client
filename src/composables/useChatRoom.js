@@ -102,6 +102,18 @@ export function useChatRoom() {
     return false
   }
 
+  const isDocumentMessage = (msg) => {
+    return msg && (msg.type === 'document' || msg.messageType === 'document')
+  }
+
+  const parseDocumentInfo = (message) => {
+    try {
+      return typeof message === 'string' ? JSON.parse(message) : message
+    } catch {
+      return null
+    }
+  }
+
   const onImageLoad = () => {}
 
   // 搜索用户（调用服务端 API）
@@ -324,6 +336,31 @@ export function useChatRoom() {
       await sendGroupMessage(e.target.result, 'image')
     }
     reader.readAsDataURL(file.raw)
+  }
+
+  const handleSelectImage = async () => {
+    if (!window.electronAPI) return
+    const result = await window.electronAPI.selectImageFile()
+    if (!result.success) return
+    if (selectedGroup.value) {
+      await sendGroupMessage(result.data, 'image')
+    } else if (selectedUser.value) {
+      if (selectedUser.value.chatMode === 'lan') await sendLanMessage(result.data, 'image')
+      else await sendMessage(result.data, 'image')
+    }
+  }
+
+  const handleSelectDocument = async () => {
+    if (!window.electronAPI) return
+    const result = await window.electronAPI.selectDocumentFile()
+    if (!result.success) return
+    const docInfo = JSON.stringify({ name: result.name, ext: result.ext, data: result.data })
+    if (selectedGroup.value) {
+      await sendGroupMessage(docInfo, 'document')
+    } else if (selectedUser.value) {
+      if (selectedUser.value.chatMode === 'lan') await sendLanMessage(docInfo, 'document')
+      else await sendMessage(docInfo, 'document')
+    }
   }
 
   const handleAddFriend = async (user) => {
@@ -710,9 +747,10 @@ export function useChatRoom() {
     loadFriendsList, loadAllUsers, loadFriendRequests,
     selectUser, loadChatMessages, loadLanChatMessages,
     sendLanMessage, sendMessage, handleImageSelect, handleGroupImageSelect,
+    handleSelectImage, handleSelectDocument,
     handleAddFriend, handleRequest,
     normalizeMessage, formatDate, formatMessageTime,
-    isImageMessage, onImageLoad, retryMessage,
+    isImageMessage, isDocumentMessage, parseDocumentInfo, onImageLoad, retryMessage,
     startMessagePolling, stopMessagePolling,
     handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
     selectGroup, loadGroupMessages, sendGroupMessage,

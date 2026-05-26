@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadFile: (username, filename) => ipcRenderer.invoke('download-file', username, filename),
   uploadFile: (username, filename, fileData) => ipcRenderer.invoke('upload-file', username, filename, fileData),
   deleteFile: (username, filename) => ipcRenderer.invoke('delete-file', username, filename),
+  selectImageFile: () => ipcRenderer.invoke('select-image-file'),
+  selectDocumentFile: () => ipcRenderer.invoke('select-document-file'),
   
   // 用户列表
   getUserList: () => ipcRenderer.invoke('get-user-list'),
