@@ -1,39 +1,56 @@
 // 浏览器环境下的 Mock API
-// 用于开发调试，不需要连接后端服务器
+// login 和 register 调用真实服务端接口
+// 其余方法提供安全桩防止崩溃
 
-const mockUsers = [
-  { username: 'test', password: '123456', email: 'test@example.com' },
-  { username: 'admin', password: 'admin', email: 'admin@example.com' }
-]
+const SERVER_SETTINGS_KEY = 'lanChatSettings'
 
-const mockFriends = [
-  { username: 'alice', email: 'alice@example.com' },
-  { username: 'bob', email: 'bob@example.com' }
-]
+function getServerBaseUrl() {
+  try {
+    const raw = localStorage.getItem(SERVER_SETTINGS_KEY)
+    if (raw) {
+      const s = JSON.parse(raw)
+      const ip = s.serverIP || '127.0.0.1'
+      const port = s.serverPort || '3000'
+      return `http://${ip}:${port}`
+    }
+  } catch {}
+  return 'http://localhost:3000'
+}
 
-const mockMessages = []
-
-// 凭证存储（模拟服务端验证）
-const credentials = {}
+async function serverFetch(url, body) {
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    return await res.json()
+  } catch (e) {
+    return { success: false, message: `无法连接到服务器 (${e.message})` }
+  }
+}
 
 export const mockElectronAPI = {
+  // ===== 真实服务端请求 =====
+
   login: async (username, password) => {
-    await new Promise(resolve => setTimeout(resolve, 500))
-    const user = mockUsers.find(u => u.username === username && u.password === password)
-    if (user) {
-      return { success: true, user: { username: user.username, email: user.email } }
-    }
-    return { success: false, message: '用户名或密码错误 (测试账号: test/123456)' }
+    return serverFetch(`${getServerBaseUrl()}/login`, { username, password })
   },
 
   register: async (userData) => {
-    await new Promise(resolve => setTimeout(resolve, 500))
-    if (mockUsers.find(u => u.username === userData.username)) {
-      return { success: false, message: '用户名已存在' }
-    }
-    mockUsers.push({ ...userData })
-    return { success: true }
+    return serverFetch(`${getServerBaseUrl()}/register`, userData)
   },
+
+  getUserByUsername: async (username) => {
+    try {
+      const res = await fetch(`${getServerBaseUrl()}/user/${encodeURIComponent(username)}`)
+      return await res.json()
+    } catch (e) {
+      return { success: false, message: `无法连接到服务器 (${e.message})` }
+    }
+  },
+
+  // ===== 保持原有实现（localStorage / 本地逻辑） =====
 
   logout: async () => {},
 
@@ -41,80 +58,202 @@ export const mockElectronAPI = {
 
   setUser: async () => {},
 
-  getUserList: async () => {
-    return mockUsers.filter(u => u.username !== 'test')
-  },
-
-  getFriendsList: async () => {
-    return mockFriends
-  },
-
-  addFriend: async () => {
-    return { success: true }
-  },
-
-  sendChatMessage: async () => {
-    return { success: true }
-  },
-
-  getChatMessages: async () => {
-    return []
-  },
-
-  downloadFile: async () => {
-    return { success: true, message: '下载成功（Mock）' }
-  },
-
-  uploadFile: async () => {
-    return { success: true, message: '上传成功（Mock）' }
-  },
-
-  deleteFile: async () => {
-    return { success: true }
-  },
-
-  // 验证凭证
   verifyCredential: async (username, token) => {
     await new Promise(resolve => setTimeout(resolve, 200))
-    // 检查本地存储的凭证
     const stored = localStorage.getItem('autoLoginCredential')
     if (stored) {
-      const cred = JSON.parse(stored)
-      if (cred.username === username && cred.token === token) {
-        return { success: true }
-      }
+      try {
+        const cred = JSON.parse(stored)
+        if (cred.username === username && cred.token === token) {
+          return { success: true }
+        }
+      } catch {}
     }
     return { success: false, message: '凭证无效' }
   },
 
-  // 根据用户名获取用户信息
-  getUserByUsername: async (username) => {
-    await new Promise(resolve => setTimeout(resolve, 200))
-    const user = mockUsers.find(u => u.username === username)
-    if (user) {
-      return { success: true, user: { username: user.username, email: user.email } }
-    }
-    return { success: false, message: '用户不存在' }
-  },
-
-  // 创建凭证
   createCredential: async (username) => {
     await new Promise(resolve => setTimeout(resolve, 200))
     const token = btoa(`${username}:${Date.now()}:${Math.random().toString(36).substr(2)}`)
     return { success: true, token }
   },
 
-  // 设置 AI API 地址（Mock）
   setAiApiUrl: async (url) => {
     console.log('[Mock] AI API URL set:', url)
     return { success: true }
   },
 
-  // 设置服务端 API 地址（Mock）
   setApiBaseUrl: async (url) => {
     console.log('[Mock] API Base URL set:', url)
     return { success: true }
-  }
+  },
+
+  // ===== 数据查询桩 =====
+
+  getUserList: async () => {
+    return []
+  },
+
+  getFriendsList: async () => {
+    return []
+  },
+
+  searchUsers: async () => {
+    return []
+  },
+
+  getFriendRequests: async () => {
+    return []
+  },
+
+  getGroups: async () => {
+    return []
+  },
+
+  getGroupMessages: async () => {
+    return []
+  },
+
+  getChatMessages: async () => {
+    return []
+  },
+
+  getAllFiles: async () => {
+    return []
+  },
+
+  getUserFiles: async () => {
+    return []
+  },
+
+  getStarredUsers: async () => {
+    return []
+  },
+
+  getCurrentModel: async () => {
+    return null
+  },
+
+  // ===== 用户操作桩 =====
+
+  addFriend: async () => {
+    return { success: false, message: '浏览器环境不支持此功能' }
+  },
+
+  removeFriend: async () => {
+    return { success: false, message: '浏览器环境不支持此功能' }
+  },
+
+  sendFriendRequest: async () => {
+    return { success: false, message: '浏览器环境不支持此功能' }
+  },
+
+  handleFriendRequest: async () => {
+    return { success: false, message: '浏览器环境不支持此功能' }
+  },
+
+  starUser: async () => {
+    return { success: false, message: '浏览器环境不支持此功能' }
+  },
+
+  createGroup: async () => {
+    return { success: false, message: '浏览器环境不支持此功能' }
+  },
+
+  disbandGroup: async () => {
+    return { success: false, message: '浏览器环境不支持此功能' }
+  },
+
+  joinGroup: async () => {
+    return { success: false, message: '浏览器环境不支持此功能' }
+  },
+
+  // ===== 消息操作桩 =====
+
+  sendChatMessage: async () => {
+    return { success: true }
+  },
+
+  sendGroupMessage: async () => {
+    return { success: true }
+  },
+
+  scheduleFileSend: async () => {
+    return { success: true }
+  },
+
+  scheduleMessageSend: async () => {
+    return { success: true }
+  },
+
+  sendFileNow: async () => {
+    return { success: true }
+  },
+
+  sendMessageNow: async () => {
+    return { success: true }
+  },
+
+  // ===== 文件操作桩 =====
+
+  downloadFile: async () => {
+    return { success: false, message: '浏览器环境不支持下载' }
+  },
+
+  uploadFile: async () => {
+    return { success: false, message: '浏览器环境不支持上传' }
+  },
+
+  deleteFile: async () => {
+    return { success: false, message: '浏览器环境不支持删除' }
+  },
+
+  // ===== Electron 对话框桩 =====
+
+  selectImageFile: async () => {
+    return { success: false, message: '浏览器环境不支持文件选择' }
+  },
+
+  selectDocumentFile: async () => {
+    return { success: false, message: '浏览器环境不支持文件选择' }
+  },
+
+  selectDirectory: async () => {
+    return { success: false, message: '浏览器环境不支持目录选择' }
+  },
+
+  ensureDir: async () => {
+    return { success: true }
+  },
+
+  // ===== 设置桩 =====
+
+  setDownloadDir: async () => {
+    return { success: true }
+  },
+
+  getDownloadDir: async () => {
+    return { success: true, dir: '' }
+  },
+
+  openExternal: async (url) => {
+    window.open(url, '_blank')
+    return { success: true }
+  },
+
+  // ===== AI 流式聊天桩 =====
+
+  aiChatStream: async () => {
+    return { success: false, message: '浏览器环境不支持AI聊天' }
+  },
+
+  onAIChatStreamChunk: () => {},
+
+  removeAIChatStreamListener: () => {},
+
+  // ===== 下载进度桩 =====
+
+  onDownloadProgress: () => {}
 }
 
 // 在浏览器环境中注入 mock API

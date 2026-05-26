@@ -6,7 +6,7 @@
       <el-form-item label="头像">
         <div class="avatar-section">
           <el-avatar :size="80" class="profile-avatar" v-if="profile.avatar">
-            <img :src="profile.avatar" alt="avatar" />
+            <img :src="getAvatarUrl(profile.avatar)" alt="avatar" />
           </el-avatar>
           <el-avatar :size="80" class="profile-avatar" v-else>{{ displayInitial }}</el-avatar>
           <div class="avatar-actions">
@@ -67,7 +67,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { clearAvatarCache } from '../../../composables/useAvatar'
+import { clearAvatarCache, getAvatarUrl } from '../../../composables/useAvatar'
 
 const avatarInputRef = ref(null)
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp']
@@ -80,11 +80,6 @@ function getCurrentUsername() {
   } catch {
     return ''
   }
-}
-
-function getProfileKey() {
-  const username = getCurrentUsername()
-  return username ? `profile_${username}` : 'profile'
 }
 
 const profile = ref({
@@ -110,7 +105,7 @@ const triggerAvatarUpload = () => {
   avatarInputRef.value?.click()
 }
 
-const handleAvatarSelected = (e) => {
+const handleAvatarSelected = async (e) => {
   const file = e.target.files?.[0]
   if (!file) return
 
@@ -126,11 +121,40 @@ const handleAvatarSelected = (e) => {
     return
   }
 
-  const reader = new FileReader()
-  reader.onload = (ev) => {
-    profile.value.avatar = ev.target.result
+  const username = getCurrentUsername()
+  const baseUrl = getServerBaseUrl()
+
+  try {
+    const arrayBuffer = await file.arrayBuffer()
+    const res = await fetch(`${baseUrl}/user/avatar/upload?username=${encodeURIComponent(username)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type },
+      body: arrayBuffer
+    })
+    const data = await res.json()
+
+    if (!data.success) {
+      ElMessage.error(data.message || '头像上传失败')
+      return
+    }
+
+    profile.value.avatar = data.avatar
+
+    // 同步更新 userInfo
+    try {
+      const userInfo = JSON.parse(localStorage.getItem('userInfo'))
+      if (userInfo) {
+        userInfo.avatar = data.avatar
+        localStorage.setItem('userInfo', JSON.stringify(userInfo))
+      }
+    } catch {}
+
+    clearAvatarCache()
+    ElMessage.success('头像已更新')
+  } catch (e) {
+    ElMessage.error('头像上传失败，无法连接到服务器')
   }
-  reader.readAsDataURL(file)
+
   e.target.value = ''
 }
 
@@ -181,9 +205,6 @@ const handleSave = async () => {
       }
     } catch {}
 
-    // 仍写入 localStorage（用于离线头像回退）
-    const key = getProfileKey()
-    localStorage.setItem(key, JSON.stringify(profile.value))
     clearAvatarCache()
     ElMessage.success('已保存')
   } catch (e) {
@@ -195,27 +216,16 @@ onMounted(() => {
   const username = getCurrentUsername()
   profile.value.username = username
 
-  // 优先从 userInfo（服务端数据）加载
+  // 从 userInfo（服务端数据）加载全部资料
   try {
     const userInfo = JSON.parse(localStorage.getItem('userInfo'))
     if (userInfo) {
       profile.value.signature = userInfo.signature || ''
       profile.value.birthday = userInfo.birthday || ''
       profile.value.gender = userInfo.gender || 'none'
+      profile.value.avatar = userInfo.avatar || ''
     }
   } catch {}
-
-  // 从本地 profile 缓存加载头像
-  const key = getProfileKey()
-  const saved = localStorage.getItem(key)
-  if (saved) {
-    try {
-      const data = JSON.parse(saved)
-      profile.value.avatar = data.avatar || ''
-    } catch {
-      // ignore
-    }
-  }
 })
 </script>
 

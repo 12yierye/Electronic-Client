@@ -293,8 +293,10 @@
             </el-popover>
             <el-input
               v-model="inputMessage"
+              type="textarea"
               :placeholder="t('chatRoom.enterMessage')"
               :disabled="!selectedUser && !selectedGroup"
+              :autosize="{ minRows: 1, maxRows: 5 }"
               @keydown.enter.exact="handleSendMessage"
             />
             <el-button 
@@ -736,28 +738,59 @@ watch([selectedUser, selectedGroup], () => {
         }
       }
 
-      .el-input {
+      .el-textarea {
         flex: 1;
+        overflow: hidden;
+        border-radius: 20px;
+        padding-right: 5px;
 
-        :deep(.el-input__wrapper) {
+        :deep(.el-textarea__inner) {
           border-radius: 20px;
           background: var(--bg-primary);
+          color: var(--text-primary);
+          border: 1px solid var(--border-color);
+          padding: 8px 15px;
+          resize: none;
+          line-height: 1.4;
+          min-height: 35px;
+          box-shadow: none;
+          transition: border-color 0.2s;
+          scrollbar-width: thin;
+          display: block;
 
-          .el-input__inner {
-            color: var(--text-primary);
+          &::-webkit-scrollbar-track {
+            margin-block: 2px;
+            background: transparent;
+          }
+
+          &::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+          }
+
+          &:focus {
+            border-color: var(--accent-color);
           }
         }
       }
 
       .el-button {
-        height: 40px;
-        padding: 0 20px;
         border-radius: 20px;
         font-weight: 500;
 
         :deep(.el-icon) {
-          margin-right: 6px;
           font-size: 16px;
+        }
+
+        &.is-circle {
+          width: 35px;
+          height: 35px;
+          padding: 0;
+        }
+
+        &:not(.is-circle) {
+          height: 35px;
+          padding: 0 20px;
         }
       }
     }
