@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-electron
+.DS_Store
+*.log
+TODO
+.trae
+release
+dist-release
