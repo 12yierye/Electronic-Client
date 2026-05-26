@@ -77,7 +77,7 @@ const messages = {
       autoLoginSuccess: '自动登录成功',
       defaultServer: '默认服务器:',
       editServer: '编辑服务器地址',
-      serverIP: '服务器IP',
+      serverIP: '服务器地址',
       serverPort: '端口',
       serverSaved: '服务器地址已更新',
       usernameRequired: '请输入用户名',
