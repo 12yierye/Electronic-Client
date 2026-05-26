@@ -51,10 +51,10 @@
 
       <el-form-item label="性别">
         <el-radio-group v-model="profile.gender">
-          <el-radio-button label="male">男</el-radio-button>
-          <el-radio-button label="female">女</el-radio-button>
-          <el-radio-button label="private">保密</el-radio-button>
-          <el-radio-button label="none">无</el-radio-button>
+          <el-radio-button value="male">男</el-radio-button>
+          <el-radio-button value="female">女</el-radio-button>
+          <el-radio-button value="private">保密</el-radio-button>
+          <el-radio-button value="none">无</el-radio-button>
         </el-radio-group>
       </el-form-item>
 

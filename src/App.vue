@@ -183,22 +183,4 @@ onMounted(() => {
 }
 </style>
 
-<style lang="scss">
-.el-avatar,
-.el-button:not(.el-button--text),
-.el-radio-button__inner,
-.el-drawer__header,
-.el-dialog__header,
-.el-tabs__item,
-.el-badge__content,
-.app-navigation .nav-item span,
-.sidebar-menu-item span,
-.user-item .user-info .user-name,
-.user-item .user-info .user-role,
-.category-header,
-.chat-header span,
-.request-item .request-info,
-.group-member-item .member-name {
-  user-select: none;
-}
-</style>
+

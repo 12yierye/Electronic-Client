@@ -142,6 +142,8 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 html, body {
@@ -478,6 +480,19 @@ html, body {
   &:hover {
     background: #777;
   }
+}
+
+// ============================================================
+// 文本选择 — 仅聊天消息和 AI 对话内容可选中
+// ============================================================
+.chat-message .message-content,
+.chat-message .message-content *,
+.message-bubble,
+.message-bubble *,
+.markdown-content,
+.markdown-content * {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 // ============================================================

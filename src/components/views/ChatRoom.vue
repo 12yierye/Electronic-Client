@@ -7,8 +7,8 @@
           <!-- 聊天模式切换 -->
           <div class="mode-switch-row">
             <el-radio-group v-model="chatMode" size="small" @change="handleChatModeChange">
-              <el-radio-button label="public">{{ t('chatRoom.public') }}</el-radio-button>
-              <el-radio-button v-if="lanSettings.serverIP" label="lan">{{ t('chatRoom.lan') }}</el-radio-button>
+              <el-radio-button value="public">{{ t('chatRoom.public') }}</el-radio-button>
+              <el-radio-button v-if="lanSettings.serverIP" value="lan">{{ t('chatRoom.lan') }}</el-radio-button>
             </el-radio-group>
           </div>
 
@@ -16,17 +16,17 @@
             <el-radio-group v-model="activeTab" size="small">
               <!-- 公网模式显示：好友、群聊、添加好友、申请 -->
               <template v-if="chatMode === 'public'">
-                <el-radio-button label="friends">{{ t('chatRoom.friends') }}</el-radio-button>
-                <el-radio-button label="groups">{{ t('chatRoom.groups') }}</el-radio-button>
-                <el-radio-button label="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
-                <el-radio-button label="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
+                <el-radio-button value="friends">{{ t('chatRoom.friends') }}</el-radio-button>
+                <el-radio-button value="groups">{{ t('chatRoom.groups') }}</el-radio-button>
+                <el-radio-button value="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
+                <el-radio-button value="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
                   {{ t('chatRoom.requests') }}
                 </el-radio-button>
               </template>
               <!-- 内网模式显示：用户、群聊 -->
               <template v-else>
-                <el-radio-button label="users">{{ t('chatRoom.users') }}</el-radio-button>
-                <el-radio-button label="groups">{{ t('chatRoom.groups') }}</el-radio-button>
+                <el-radio-button value="users">{{ t('chatRoom.users') }}</el-radio-button>
+                <el-radio-button value="groups">{{ t('chatRoom.groups') }}</el-radio-button>
               </template>
             </el-radio-group>
           </div>
@@ -286,7 +286,7 @@
                   <span>{{ t('chatRoom.sendImage') }}</span>
                 </el-button>
                 <el-button class="upload-menu-btn" text @click="uploadMenuVisible = false; handleSelectDocument()">
-                  <span class="upload-menu-icon">&#128196;</span>
+                  <el-icon><Document /></el-icon>
                   <span>{{ t('chatRoom.sendDocument') }}</span>
                 </el-button>
               </div>
@@ -365,7 +365,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus } from '@element-plus/icons-vue'
+import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus, Document } from '@element-plus/icons-vue'
 import { useChatRoom } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
 import { getUserAvatar } from '../../composables/useAvatar'
@@ -771,14 +771,9 @@ watch([selectedUser, selectedGroup], () => {
         width: 100%;
         justify-content: flex-start;
         padding: 6px 8px;
+        margin-left: 0;
         height: auto;
         font-size: 14px;
-        gap: 8px;
-
-        .upload-menu-icon {
-          font-size: 18px;
-          line-height: 1;
-        }
       }
     }
 
@@ -825,5 +820,11 @@ watch([selectedUser, selectedGroup], () => {
       }
     }
   }
+}
+</style>
+
+<style>
+.upload-menu .upload-menu-btn {
+  margin-left: 0 !important;
 }
 </style>

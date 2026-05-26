@@ -147,9 +147,13 @@ export function useChatRoom() {
   }
 
   const loadFriendRequests = async () => {
-    if (window.electronAPI) {
-      const result = await window.electronAPI.getFriendRequests(currentUsername.value, 'received')
-      if (result.success) friendRequests.value = (result.requests || []).filter(r => r.status === 'pending')
+    if (window.electronAPI?.getFriendRequests) {
+      try {
+        const result = await window.electronAPI.getFriendRequests(currentUsername.value, 'received')
+        if (result.success) friendRequests.value = (result.requests || []).filter(r => r.status === 'pending')
+      } catch (e) {
+        console.error('[Chat] load friend requests failed:', e)
+      }
     }
   }
 
@@ -420,9 +424,13 @@ export function useChatRoom() {
   }
 
   const loadPublicGroupsList = async () => {
-    if (!window.electronAPI) return
-    const result = await window.electronAPI.getGroups(currentUsername.value)
-    if (result.success) publicGroupsList.value = result.groups || []
+    if (!window.electronAPI?.getGroups) return
+    try {
+      const result = await window.electronAPI.getGroups(currentUsername.value)
+      if (result.success) publicGroupsList.value = result.groups || []
+    } catch (e) {
+      console.error('[Chat] load public groups failed:', e)
+    }
   }
 
   const getGroupDND = (groupId) => {

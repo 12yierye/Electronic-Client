@@ -6,6 +6,8 @@ import { DOC_SERVER, setMainWindow } from './config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+const isDev = false
+
 Menu.setApplicationMenu(null)
 
 // function createElectronWindow(URL) {
@@ -37,7 +39,7 @@ export function createWindow() {
       contextIsolation: true,
       webSecurity: false,
       cache: false,
-      devTools: false,
+      devTools: isDev,
       partition: 'persist:electronic-main'
     }
   })
