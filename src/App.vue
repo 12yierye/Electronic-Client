@@ -1,53 +1,56 @@
 <template>
   <el-config-provider :locale="elementLocale">
     <div :class="['app-container', theme]">
-      <!-- 未登录显示登录页面 -->
-      <Login
-        v-if="!isLoggedIn"
-        ref="loginRef"
-        @login-success="handleLoginSuccess"
-        @auto-login-success="handleLoginSuccess"
-      />
-
-      <!-- 已登录显示主应用 -->
-      <template v-else>
-        <!-- 顶部导航 -->
-        <AppNavigation
-          :current-view="currentView"
-          :user-info="userInfo"
-          @navigate="handleNavigate"
-          @toggle-sidebar="sidebarVisible = true"
+      <transition name="view-switch" mode="out-in">
+        <!-- 未登录显示登录页面 -->
+        <Login
+          v-if="!isLoggedIn"
+          key="login"
+          ref="loginRef"
+          @login-success="handleLoginSuccess"
+          @auto-login-success="handleLoginSuccess"
         />
 
-        <!-- 主内容区 -->
-        <div class="main-content">
-          <transition name="fade" mode="out-in">
-            <component
-              :is="currentComponent"
-              :key="currentView"
-              @logout="handleLogout"
-              @exit="handleExit"
-            />
-          </transition>
+        <!-- 已登录显示主应用 -->
+        <div v-else key="main" class="main-wrapper">
+          <!-- 顶部导航 -->
+          <AppNavigation
+            :current-view="currentView"
+            :user-info="userInfo"
+            @navigate="handleNavigate"
+            @toggle-sidebar="sidebarVisible = true"
+          />
+
+          <!-- 主内容区 -->
+          <div class="main-content">
+            <transition name="fade" mode="out-in">
+              <component
+                :is="currentComponent"
+                :key="currentView"
+                @logout="handleLogout"
+                @exit="handleExit"
+              />
+            </transition>
+          </div>
+
+          <!-- AI 聊天输入框 -->
+          <AIInputFooter v-if="currentView === 'ai'" />
+
+          <!-- 侧边栏 -->
+          <AppSidebar
+            :visible="sidebarVisible"
+            :user-info="userInfo"
+            @close="sidebarVisible = false"
+            @logout="handleLogout"
+            @exit="handleExit"
+          />
+          <div
+            v-if="sidebarVisible"
+            class="sidebar-mask"
+            @click="sidebarVisible = false"
+          ></div>
         </div>
-
-        <!-- AI 聊天输入框 -->
-        <AIInputFooter v-if="currentView === 'ai'" />
-
-        <!-- 侧边栏 -->
-        <AppSidebar
-          :visible="sidebarVisible"
-          :user-info="userInfo"
-          @close="sidebarVisible = false"
-          @logout="handleLogout"
-          @exit="handleExit"
-        />
-        <div
-          v-if="sidebarVisible"
-          class="sidebar-mask"
-          @click="sidebarVisible = false"
-        ></div>
-      </template>
+      </transition>
     </div>
   </el-config-provider>
 </template>
@@ -122,6 +125,17 @@ const handleExit = () => {
 onMounted(() => {
   // 加载设置
   settingsStore.loadSettings()
+
+  // 淡出启动加载动画
+  const loader = document.getElementById('app-loader')
+  if (loader) {
+    loader.classList.add('hidden')
+    setTimeout(() => {
+      if (loader.parentNode) {
+        loader.parentNode.removeChild(loader)
+      }
+    }, 600)
+  }
 })
 </script>
 
@@ -131,6 +145,10 @@ onMounted(() => {
   background: var(--bg-primary);
   color: var(--text-primary);
   transition: background 0.3s ease, color 0.3s ease;
+}
+
+.main-wrapper {
+  min-height: 100vh;
 }
 
 .main-content {
@@ -146,5 +164,20 @@ onMounted(() => {
   height: 100vh;
   background: rgba(0, 0, 0, 0.5);
   z-index: 1999;
+}
+
+.view-switch-enter-active,
+.view-switch-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.view-switch-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.view-switch-leave-to {
+  opacity: 0;
+  transform: translateY(-12px);
 }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-chat-view" ref="chatViewRef" @scroll="onScroll">
+  <div :class="['ai-chat-view', { 'has-messages': messages.length > 0 }]" ref="chatViewRef" @scroll="onScroll">
     <!-- 欢迎/问候语 -->
     <div v-if="messages.length === 0" class="welcome-section">
       <el-icon class="ai-icon" :size="60"><MagicStick /></el-icon>
@@ -214,8 +214,12 @@ onUnmounted(() => {
 .ai-chat-view {
   height: calc(100vh - 60px);
   padding: 20px 30px 100px;
-  overflow-y: auto;
+  overflow-y: hidden;
   position: relative;
+
+  &.has-messages {
+    overflow-y: auto;
+  }
   
   .welcome-section {
     display: flex;
