@@ -69,8 +69,7 @@ export function registerAiIpc() {
         messages: [
           { role: 'system', content: '你是一个友好的AI助手，请用中文回答用户的问题。' },
           { role: 'user', content: userMessage }
-        ],
-        max_tokens: 16384
+        ]
       }
       if (!currentModel.toLowerCase().includes('qwen3') && !currentModel.toLowerCase().includes('qwen')) {
         requestBody.temperature = 0.7
@@ -79,7 +78,7 @@ export function registerAiIpc() {
         requestBody.extra_body = { enable_thinking: true, thinking_budget: 4096 }
       }
 
-      const response = await axios.post(`${apiUrl()}/chat/completions`, requestBody, { timeout: 120000 })
+      const response = await axios.post(`${apiUrl()}/chat/completions`, requestBody, { timeout: 300000 })
       const reply = response.data.choices[0].message.content.trim()
       console.log('[AI Chat] reply length:', reply.length)
       return { success: true, reply }
@@ -139,8 +138,7 @@ export function registerAiIpc() {
         { role: 'system', content: getSystemPrompt(likelyScheduledIntent, likelyImmediateIntent) },
         { role: 'user', content: userMessage }
       ],
-      stream: true,
-      max_tokens: 16384
+      stream: true
     }
 
     if (!currentModel.toLowerCase().includes('qwen3') && !currentModel.toLowerCase().includes('qwen')) {
@@ -158,7 +156,7 @@ export function registerAiIpc() {
       const response = await axios.post(
         `${apiUrl()}/chat/completions`,
         requestBody,
-        { responseType: 'stream', timeout: 120000 }
+        { responseType: 'stream', timeout: 300000 }
       )
 
       return new Promise((resolve) => {
@@ -166,9 +164,10 @@ export function registerAiIpc() {
         let fullReasoning = ''
         let streamBuffer = ''
         let receivedDone = false
+        let resolved = false
 
         response.data.on('data', (chunk) => {
-          streamBuffer += chunk.toString()
+          streamBuffer += chunk.toString().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
           const parts = streamBuffer.split('\n')
           streamBuffer = parts.pop() || ''
 
@@ -246,13 +245,29 @@ export function registerAiIpc() {
           } else {
             event.sender.send('ai-chat-stream-chunk', { done: true })
           }
+          resolved = true
           resolve({ success: true, reply: fullReply, reasoning: fullReasoning })
         })
 
         response.data.on('error', (err) => {
           console.error('[AI Stream] stream error:', err.message)
+          if (resolved) return
+          resolved = true
           event.sender.send('ai-chat-stream-error', { message: err.message })
           resolve({ success: false, message: err.message })
+        })
+
+        response.data.on('close', () => {
+          if (resolved) return
+          console.warn('[AI Stream] connection closed unexpectedly, accumulated:', fullReply.length)
+          resolved = true
+          if (fullReply || fullReasoning) {
+            event.sender.send('ai-chat-stream-chunk', { done: true })
+            resolve({ success: true, reply: fullReply, reasoning: fullReasoning })
+          } else {
+            event.sender.send('ai-chat-stream-error', { message: '连接意外关闭' })
+            resolve({ success: false, message: '连接意外关闭' })
+          }
         })
       })
     } catch (error) {
@@ -281,9 +296,10 @@ export function registerAiIpc() {
           { role: 'system', content: '你是一个代码生成助手。根据用户需求，生成一个 JavaScript 函数。只返回函数代码，不要其他解释，不要任何markdown代码块标记。函数要可以直接用 new Function() 执行。' },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.3
+        temperature: 0.3,
+        max_tokens: 8192
       }
-      const response = await axios.post(`${apiUrl()}/chat/completions`, requestBody, { timeout: 120000 })
+      const response = await axios.post(`${apiUrl()}/chat/completions`, requestBody, { timeout: 300000 })
       const code = response.data.choices[0].message.content.trim()
       console.log('[GenFunc] code length:', code.length)
       return { success: true, code }
