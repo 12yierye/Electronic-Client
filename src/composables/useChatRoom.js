@@ -27,6 +27,36 @@ export function refreshTotalUnread() {
     chatTotalUnread.value = total
 }
 
+// ====== Client-side Read Points (QQ-style read tracking) ======
+function readPointsKey(username) { return 'chat_readPoints_' + username }
+
+export function loadReadPoints(username) {
+  if (!username) return {}
+  try {
+    const raw = localStorage.getItem(readPointsKey(username))
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+function saveReadPoints(username, points) {
+  if (!username) return
+  localStorage.setItem(readPointsKey(username), JSON.stringify(points))
+}
+
+const userConvKey = (target) => 'user:' + target
+const groupConvKey = (groupId) => 'group:' + groupId
+
+function compareIds(a, b) {
+  const na = Number(a), nb = Number(b)
+  if (!isNaN(na) && !isNaN(nb)) return na - nb
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+}
+
+function isNewerThan(msgId, lastReadId) {
+  if (!lastReadId) return true
+  return compareIds(msgId, lastReadId) > 0
+}
+
 export function useChatRoom() {
   const activeTab = ref('friends')
   const chatMode = ref('public')
@@ -53,7 +83,14 @@ export function useChatRoom() {
   const groupUnread = sharedGroupUnread
   const userUnread = sharedUserUnread
   const pendingMessages = ref([])
+  const readPoints = ref({})
   const SEND_TIMEOUT = 10000
+
+  const getLastRealMsgId = () => {
+    const realMsgs = chatMessages.value.filter(m => m.id && !String(m.id).startsWith('pending_'))
+    if (!realMsgs.length) return null
+    return realMsgs.reduce((max, m) => compareIds(max, m.id) >= 0 ? max : m.id, realMsgs[0].id)
+  }
 
   const pendingRequestsCount = computed(() => friendRequests.value.length)
 
@@ -197,9 +234,23 @@ export function useChatRoom() {
   const selectUser = async (user, mode = chatMode.value) => {
     selectedUser.value = { ...user, chatMode: mode }
     selectedGroup.value = null
-    if (user?.username) clearUserUnread(user.username)
+    if (user?.username) {
+      userUnread.value = { ...userUnread.value, [user.username]: 0 }
+      refreshTotalUnread()
+    }
     if (mode === 'lan') await loadLanChatMessages()
     else await loadChatMessages()
+    if (user?.username) {
+      const lastId = getLastRealMsgId()
+      if (lastId) {
+        const ck = userConvKey(user.username)
+        readPoints.value = { ...readPoints.value, [ck]: lastId }
+        saveReadPoints(currentUsername.value, readPoints.value)
+      }
+      if (window.electronAPI) {
+        window.electronAPI.markChatRead(currentUsername.value, user.username, lastId || null).catch(() => {})
+      }
+    }
   }
 
   const loadChatMessages = async (append = false) => {
@@ -497,20 +548,32 @@ export function useChatRoom() {
   const clearGroupUnread = (groupId) => {
     const username = currentUsername.value
     if (!username || !groupId) return
+    const lastId = getLastRealMsgId()
+    if (lastId) {
+      const ck = groupConvKey(groupId)
+      readPoints.value = { ...readPoints.value, [ck]: lastId }
+      saveReadPoints(username, readPoints.value)
+    }
     groupUnread.value = { ...groupUnread.value, [groupId]: 0 }
     refreshTotalUnread()
     if (window.electronAPI) {
-        window.electronAPI.markGroupRead(username, groupId).catch(() => {})
+        window.electronAPI.markGroupRead(username, groupId, lastId || null).catch(() => {})
     }
   }
 
   const clearUserUnread = (targetUsername) => {
     const username = currentUsername.value
     if (!username || !targetUsername) return
+    const lastId = getLastRealMsgId()
+    if (lastId) {
+      const ck = userConvKey(targetUsername)
+      readPoints.value = { ...readPoints.value, [ck]: lastId }
+      saveReadPoints(username, readPoints.value)
+    }
     userUnread.value = { ...userUnread.value, [targetUsername]: 0 }
     refreshTotalUnread()
     if (window.electronAPI) {
-        window.electronAPI.markChatRead(username, targetUsername).catch(() => {})
+        window.electronAPI.markChatRead(username, targetUsername, lastId || null).catch(() => {})
     }
   }
 
@@ -530,8 +593,22 @@ export function useChatRoom() {
   const selectGroup = async (group) => {
     selectedGroup.value = group
     selectedUser.value = null
-    if (group?.id) clearGroupUnread(group.id)
+    if (group?.id) {
+      groupUnread.value = { ...groupUnread.value, [group.id]: 0 }
+      refreshTotalUnread()
+    }
     await loadGroupMessages()
+    if (group?.id) {
+      const lastId = getLastRealMsgId()
+      if (lastId) {
+        const ck = groupConvKey(group.id)
+        readPoints.value = { ...readPoints.value, [ck]: lastId }
+        saveReadPoints(currentUsername.value, readPoints.value)
+      }
+      if (window.electronAPI) {
+        window.electronAPI.markGroupRead(currentUsername.value, group.id, lastId || null).catch(() => {})
+      }
+    }
   }
 
   const loadGroupMessages = async (append = false) => {
@@ -787,16 +864,31 @@ export function useChatRoom() {
     if (!username) return
     try {
       if (window.electronAPI) {
-        const result = await window.electronAPI.getUnreadCounts(username)
+        const rp = readPoints.value
+        const result = await window.electronAPI.getUnreadCounts(username, rp)
         if (result.success) {
-          userUnread.value = result.conversations || {}
-          groupUnread.value = result.groups || {}
+          const selUser = selectedUser.value
+          const updatedUser = { ...userUnread.value }
+          for (const [key, count] of Object.entries(result.conversations || {})) {
+            if (selUser && selUser.username === key) continue
+            updatedUser[key] = count
+          }
+          userUnread.value = updatedUser
+          const selGroup = selectedGroup.value
+          const updatedGroup = { ...groupUnread.value }
+          for (const [key, count] of Object.entries(result.groups || {})) {
+            if (selGroup && String(selGroup.id) === String(key)) continue
+            updatedGroup[key] = count
+          }
+          groupUnread.value = updatedGroup
         }
       }
       if (lanSettings.value.serverIP) {
         for (const friend of lanFriendsList.value) {
           const target = friend.username
           if (selectedUser.value && selectedUser.value.username === target && selectedUser.value.chatMode === 'lan') continue
+          const ck = userConvKey(target)
+          const lastId = readPoints.value[ck] || '0'
           try {
             const response = await fetch(
               `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/messages?from=${encodeURIComponent(username)}&to=${encodeURIComponent(target)}`,
@@ -805,8 +897,8 @@ export function useChatRoom() {
             const data = await response.json()
             if (data.success) {
               const msgs = (data.messages || [])
-              const unread = msgs.filter(m => 
-                m.from !== username && !(m.readBy || []).includes(username)
+              const unread = msgs.filter(m =>
+                m.from !== username && m.id && isNewerThan(m.id, lastId)
               ).length
               userUnread.value = { ...userUnread.value, [target]: unread }
             }
@@ -814,7 +906,9 @@ export function useChatRoom() {
         }
         for (const group of lanGroupsList.value) {
           const gid = group.id
-          if (selectedGroup.value && selectedGroup.value.id === gid) continue
+          if (selectedGroup.value && String(selectedGroup.value.id) === String(gid)) continue
+          const ck = groupConvKey(gid)
+          const lastId = readPoints.value[ck] || '0'
           try {
             const response = await fetch(
               `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages?groupId=${encodeURIComponent(gid)}`,
@@ -823,8 +917,8 @@ export function useChatRoom() {
             const data = await response.json()
             if (data.success) {
               const msgs = (data.messages || [])
-              const unread = msgs.filter(m => 
-                m.from !== username && !(m.readBy || []).includes(username)
+              const unread = msgs.filter(m =>
+                m.from !== username && m.id && isNewerThan(m.id, lastId)
               ).length
               groupUnread.value = { ...groupUnread.value, [gid]: unread }
             }
@@ -877,6 +971,18 @@ export function useChatRoom() {
         if (selectedUser.value.chatMode === 'lan') await loadLanChatMessages(true)
         else await loadChatMessages(true)
       }
+      if (selectedUser.value || selectedGroup.value) {
+        const lastId = getLastRealMsgId()
+        if (lastId) {
+          let ck
+          if (selectedGroup.value) ck = groupConvKey(selectedGroup.value.id)
+          else if (selectedUser.value) ck = userConvKey(selectedUser.value.username)
+          if (ck) {
+            readPoints.value = { ...readPoints.value, [ck]: lastId }
+            saveReadPoints(currentUsername.value, readPoints.value)
+          }
+        }
+      }
     } catch (error) {}
   }
 
@@ -906,6 +1012,7 @@ export function useChatRoom() {
     if (savedDeletedGroups) {
       deletedGroupIds.value = JSON.parse(savedDeletedGroups)
     }
+    readPoints.value = loadReadPoints(currentUsername.value)
     loadFriendsList()
     loadAllUsers()
     loadFriendRequests()

@@ -119,18 +119,18 @@ export function registerUserIpc() {
         catch (error) { return { success: false, message: error.message } }
     })
 
-    ipcMain.handle('get-unread-counts', async (event, username) => {
-        try { return (await axios.get(`${getAPIBase()}/chat/unread-counts?username=${encodeURIComponent(username)}`)).data }
+    ipcMain.handle('get-unread-counts', async (event, username, readPoints) => {
+        try { return (await axios.post(`${getAPIBase()}/chat/unread-counts`, { username, readPoints })).data }
         catch (error) { return { success: false, message: error.message } }
     })
 
-    ipcMain.handle('mark-chat-read', async (event, username, target) => {
-        try { return (await axios.post(`${getAPIBase()}/chat/mark-read`, { username, target })).data }
+    ipcMain.handle('mark-chat-read', async (event, username, target, lastReadId) => {
+        try { return (await axios.post(`${getAPIBase()}/chat/mark-read`, { username, target, lastReadId })).data }
         catch (error) { return { success: false, message: error.message } }
     })
 
-    ipcMain.handle('mark-group-read', async (event, username, groupId) => {
-        try { return (await axios.post(`${getAPIBase()}/chat/mark-read-group`, { username, groupId })).data }
+    ipcMain.handle('mark-group-read', async (event, username, groupId, lastReadId) => {
+        try { return (await axios.post(`${getAPIBase()}/chat/mark-read-group`, { username, groupId, lastReadId })).data }
         catch (error) { return { success: false, message: error.message } }
     })
 }

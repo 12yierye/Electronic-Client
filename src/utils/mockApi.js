@@ -170,6 +170,18 @@ export const mockElectronAPI = {
 
   // ===== 消息操作桩 =====
 
+  getUnreadCounts: async (username, readPoints) => {
+    return { success: true, conversations: {}, groups: {} }
+  },
+
+  markChatRead: async (username, target, lastReadId) => {
+    return { success: true }
+  },
+
+  markGroupRead: async (username, groupId, lastReadId) => {
+    return { success: true }
+  },
+
   sendChatMessage: async () => {
     return { success: true }
   },
