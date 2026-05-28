@@ -920,9 +920,11 @@ export function useChatRoom() {
           groupUnread.value = updatedGroup
         }
       }
-      if (lanSettings.value.serverIP) {
+      if (lanSettings.value.serverIP && chatMode.value === 'lan') {
+        console.log('[DIAG-CLIENT] LAN polling ACTIVE, serverIP:', lanSettings.value.serverIP, 'lanFriends:', lanFriendsList.value.map(f => f.username))
         for (const friend of lanFriendsList.value) {
           const target = friend.username
+          console.log('[DIAG-CLIENT] LAN polling for friend:', target)
           if (selectedUser.value && selectedUser.value.username === target && selectedUser.value.chatMode === 'lan') continue
           const ck = userConvKey(target)
           const lastId = readPoints.value[ck] || '0'
@@ -937,6 +939,7 @@ export function useChatRoom() {
               const unread = msgs.filter(m =>
                 m.from !== username && m.id && isNewerThan(m.id, lastId)
               ).length
+              console.log('[DIAG-CLIENT] LAN poll result for', target, 'unread:', unread, 'before:', userUnread.value[target])
               userUnread.value = { ...userUnread.value, [target]: unread }
             }
           } catch (_) {}
