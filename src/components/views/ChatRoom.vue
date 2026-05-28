@@ -16,8 +16,8 @@
             <el-radio-group v-model="activeTab" size="small">
               <!-- 公网模式显示：好友、群聊、添加好友、申请 -->
               <template v-if="chatMode === 'public'">
-                <el-radio-button value="friends">{{ t('chatRoom.friends') }}</el-radio-button>
-                <el-radio-button value="groups">{{ t('chatRoom.groups') }}</el-radio-button>
+                <el-radio-button value="friends" :class="{ 'has-unread': hasNonDNDFriendUnread }">{{ t('chatRoom.friends') }}</el-radio-button>
+                <el-radio-button value="groups" :class="{ 'has-unread': hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
                 <el-radio-button value="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
                 <el-radio-button value="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
                   {{ t('chatRoom.requests') }}
@@ -25,8 +25,8 @@
               </template>
               <!-- 内网模式显示：用户、群聊 -->
               <template v-else>
-                <el-radio-button value="users">{{ t('chatRoom.users') }}</el-radio-button>
-                <el-radio-button value="groups">{{ t('chatRoom.groups') }}</el-radio-button>
+                <el-radio-button value="users" :class="{ 'has-unread': hasNonDNDFriendUnread }">{{ t('chatRoom.users') }}</el-radio-button>
+                <el-radio-button value="groups" :class="{ 'has-unread': hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
               </template>
             </el-radio-group>
           </div>
@@ -58,12 +58,14 @@
           <template v-if="chatMode === 'public' && activeTab === 'friends'">
             <div class="category-header">{{ t('chatRoom.friends') }}</div>
             <div 
-              v-for="friend in friendsList" 
+              v-for="friend in sortedFriendsList" 
               :key="friend.username"
               :class="['user-item', { active: selectedUser?.username === friend.username }]"
               @click="selectUser(friend, 'public')"
             >
-              <el-avatar :size="40" :src="getUserAvatar(friend.username)">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
+              <el-badge :is-dot="getUserDND(friend.username)" :value="getUserDND(friend.username) ? '' : (userUnread[friend.username] || 0)" :hidden="(userUnread[friend.username] || 0) === 0">
+                <el-avatar :size="40" :src="getUserAvatar(friend.username)">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
+              </el-badge>
               <div class="user-info">
                 <div class="user-name">{{ friend.username }}</div>
                 <div class="user-role">
@@ -71,6 +73,7 @@
                   <span v-else>{{ t('chatRoom.offline') }}</span>
                 </div>
               </div>
+              <el-tag v-if="getUserDND(friend.username)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
               <el-icon 
                 v-if="friend.starred" 
                 class="star-icon starred"
@@ -88,7 +91,7 @@
               :class="['user-item', { active: selectedGroup?.id === group.id }]"
               @click="selectGroup(group)"
             >
-              <el-badge :is-dot="(groupUnread[group.id] || 0) > 0 && !getGroupDND(group.id)" :hidden="getGroupDND(group.id)">
+              <el-badge :is-dot="getGroupDND(group.id)" :value="getGroupDND(group.id) ? '' : (groupUnread[group.id] || 0)" :hidden="(groupUnread[group.id] || 0) === 0">
                 <el-avatar :size="40" style="background: var(--accent-color)">
                   <el-icon><ChatDotRound /></el-icon>
                 </el-avatar>
@@ -106,12 +109,14 @@
           <template v-else-if="chatMode === 'lan' && activeTab === 'users'">
             <div class="category-header">{{ t('chatRoom.users') }}</div>
             <div 
-              v-for="user in lanFriendsList" 
+              v-for="user in sortedLanFriendsList" 
               :key="user.username"
               :class="['user-item', { active: selectedUser?.username === user.username }]"
               @click="selectUser(user, 'lan')"
             >
-              <el-avatar :size="40" :src="getUserAvatar(user.username)">{{ user.username.charAt(0).toUpperCase() }}</el-avatar>
+              <el-badge :is-dot="getUserDND(user.username)" :value="getUserDND(user.username) ? '' : (userUnread[user.username] || 0)" :hidden="(userUnread[user.username] || 0) === 0">
+                <el-avatar :size="40" :src="getUserAvatar(user.username)">{{ user.username.charAt(0).toUpperCase() }}</el-avatar>
+              </el-badge>
               <div class="user-info">
                 <div class="user-name">{{ user.username }}</div>
                 <div class="user-role">
@@ -119,6 +124,7 @@
                   <span v-else>{{ t('chatRoom.offline') }}</span>
                 </div>
               </div>
+              <el-tag v-if="getUserDND(user.username)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
             </div>
             <el-empty v-if="lanFriendsList.length === 0" :description="t('chatRoom.noLanUsers')" />
           </template>
@@ -132,7 +138,7 @@
               :class="['user-item', { active: selectedGroup?.id === group.id }]"
               @click="selectGroup(group)"
             >
-              <el-badge :is-dot="(groupUnread[group.id] || 0) > 0 && !getGroupDND(group.id)" :hidden="getGroupDND(group.id)">
+              <el-badge :is-dot="getGroupDND(group.id)" :value="getGroupDND(group.id) ? '' : (groupUnread[group.id] || 0)" :hidden="(groupUnread[group.id] || 0) === 0">
                 <el-avatar :size="40" style="background: var(--accent-color)">
                   <el-icon><ChatDotRound /></el-icon>
                 </el-avatar>
@@ -204,13 +210,13 @@
             <span v-if="selectedGroup">{{ selectedGroup.name }}</span>
             <span v-else-if="selectedUser">{{ selectedUser.username }}</span>
             <span v-else class="placeholder">{{ t('chatRoom.selectUserToChat') }}</span>
-            <!-- 群聊更多按钮 -->
-            <div v-if="selectedGroup" class="group-more-btn">
+            <!-- 更多按钮 -->
+            <div v-if="selectedGroup || selectedUser" class="group-more-btn">
               <el-button
                 :icon="MoreFilled"
                 circle
                 size="small"
-                @click="showGroupMemberPanel = true"
+                @click="showChatSettingsPanel = true"
               />
             </div>
           </div>
@@ -342,13 +348,13 @@
       </template>
     </el-dialog>
 
-    <!-- 群成员侧边栏 -->
+    <!-- 聊天设置侧边栏 -->
     <el-drawer
-      v-model="showGroupMemberPanel"
+      v-model="showChatSettingsPanel"
       class="group-member-drawer"
       direction="rtl"
       size="280px"
-      :title="`${selectedGroup?.name || ''} (${selectedGroup?.members?.length || 0})`"
+      :title="chatSettingsTitle"
     >
       <GroupMemberPanel
         v-if="selectedGroup"
@@ -357,16 +363,24 @@
         :show-username="showUsernameInPanel"
         :group-id="selectedGroup.id"
         :current-username="currentUsername"
-        @close="showGroupMemberPanel = false"
+        mode="group"
+        @close="showChatSettingsPanel = false"
         @disband="handleDisbandGroup"
         @exit="handleDeleteGroup"
+      />
+      <GroupMemberPanel
+        v-else-if="selectedUser"
+        :current-username="currentUsername"
+        :target-username="selectedUser.username"
+        mode="user"
+        @close="showChatSettingsPanel = false"
       />
     </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onDeactivated } from 'vue'
 import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus, Document } from '@element-plus/icons-vue'
 import { useChatRoom } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
@@ -375,8 +389,14 @@ import GroupMemberPanel from './GroupMemberPanel.vue'
 
 const { t } = useI18n()
 
-const showGroupMemberPanel = ref(false)
+const showChatSettingsPanel = ref(false)
 const showUsernameInPanel = ref(true)
+const dndTick = ref(0)
+
+// 监听设置面板关闭，强制刷新排序和 badge
+watch(showChatSettingsPanel, (val) => {
+  if (!val) dndTick.value++
+})
 const uploadMenuVisible = ref(false)
 
 const {
@@ -400,8 +420,50 @@ const {
   selectGroup, loadGroupMessages, sendGroupMessage,
   createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
   loadPublicGroupsList,
-  groupUnread, getGroupDND
+  groupUnread, getGroupDND,
+  userUnread, getUserDND
 } = useChatRoom()
+
+const chatSettingsTitle = computed(() => {
+  if (selectedGroup.value) return `${selectedGroup.value.name} (${selectedGroup.value.members.length})`
+  if (selectedUser.value) return selectedUser.value.username
+  return ''
+})
+
+const hasNonDNDFriendUnread = computed(() => {
+  for (const [key, count] of Object.entries(userUnread.value)) {
+    if (count > 0 && !getUserDND(key)) return true
+  }
+  return false
+})
+
+const hasNonDNDGroupUnread = computed(() => {
+  for (const [key, count] of Object.entries(groupUnread.value)) {
+    if (count > 0 && !getGroupDND(key)) return true
+  }
+  return false
+})
+
+// 排序列表：免打扰的排到后面
+const sortedFriendsList = computed(() => {
+  void dndTick.value
+  return [...friendsList.value].sort((a, b) => {
+    const aDND = getUserDND(a.username)
+    const bDND = getUserDND(b.username)
+    if (aDND !== bDND) return aDND ? 1 : -1
+    return 0
+  })
+})
+
+const sortedLanFriendsList = computed(() => {
+  void dndTick.value
+  return [...lanFriendsList.value].sort((a, b) => {
+    const aDND = getUserDND(a.username)
+    const bDND = getUserDND(b.username)
+    if (aDND !== bDND) return aDND ? 1 : -1
+    return 0
+  })
+})
 
 const searchPlaceholder = computed(() => {
   if (chatMode.value === 'public' && activeTab.value === 'groups') {
@@ -416,6 +478,12 @@ const searchPlaceholder = computed(() => {
 watch([selectedUser, selectedGroup], () => {
   uploadMenuVisible.value = false
 })
+
+// KeepAlive 停用时清除选中会话，确保未读轮询正常计数
+onDeactivated(() => {
+  selectedUser.value = null
+  selectedGroup.value = null
+})
 </script>
 
 <style lang="scss" scoped>
@@ -423,6 +491,21 @@ watch([selectedUser, selectedGroup], () => {
   height: calc(100vh - 60px);
 
   :deep(.has-pending) .el-radio-button__inner {
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #f56c6c;
+    }
+  }
+
+  :deep(.has-unread) .el-radio-button__inner {
     position: relative;
 
     &::after {

@@ -1,25 +1,27 @@
 <template>
   <div class="group-member-panel">
-    <!-- 成员区域 -->
-    <div class="section section-members">
-      <div class="member-grid">
-        <div
-          v-for="member in members"
-          :key="member"
-          class="member-item"
-        >
-          <el-avatar :size="48" :src="getUserAvatar(member)" class="member-avatar">{{ member.charAt(0).toUpperCase() }}</el-avatar>
-          <div v-if="showUsername" class="member-name">{{ formatName(member) }}</div>
+    <!-- 成员区域（仅群聊模式） -->
+    <template v-if="mode === 'group'">
+      <div class="section section-members">
+        <div class="member-grid">
+          <div
+            v-for="member in members"
+            :key="member"
+            class="member-item"
+          >
+            <el-avatar :size="48" :src="getUserAvatar(member)" class="member-avatar">{{ member.charAt(0).toUpperCase() }}</el-avatar>
+            <div v-if="showUsername" class="member-name">{{ formatName(member) }}</div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <el-divider />
+      <el-divider />
+    </template>
 
     <!-- 我的设置 -->
     <div class="section section-settings">
       <el-form label-width="0">
-        <el-form-item label="">
+        <el-form-item v-if="mode === 'group'" label="">
           <div class="setting-row vertical">
             <span class="setting-label">我在本群聊的昵称</span>
             <el-input
@@ -34,33 +36,35 @@
         </el-form-item>
         <el-form-item label="">
           <div class="setting-row">
-            <span class="setting-label">群聊免打扰</span>
+            <span class="setting-label">{{ mode === 'group' ? '群聊免打扰' : '消息免打扰' }}</span>
             <el-switch v-model="dndEnabled" size="small" @change="saveSettings" />
           </div>
         </el-form-item>
       </el-form>
     </div>
 
-    <el-divider />
+    <!-- 操作按钮（仅群聊模式） -->
+    <template v-if="mode === 'group'">
+      <el-divider />
 
-    <!-- 操作按钮 -->
-    <div class="section section-actions">
-      <el-button
-        v-if="isCreator"
-        type="danger"
-        size="small"
-        @click="handleDisband"
-      >
-        解散群聊
-      </el-button>
-      <el-button
-        v-else
-        size="small"
-        @click="handleExit"
-      >
-        退出群聊
-      </el-button>
-    </div>
+      <div class="section section-actions">
+        <el-button
+          v-if="isCreator"
+          type="danger"
+          size="small"
+          @click="handleDisband"
+        >
+          解散群聊
+        </el-button>
+        <el-button
+          v-else
+          size="small"
+          @click="handleExit"
+        >
+          退出群聊
+        </el-button>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -73,7 +77,9 @@ const props = defineProps({
     isCreator: { type: Boolean, default: false },
     showUsername: { type: Boolean, default: true },
     groupId: { type: [String, Number], default: '' },
-    currentUsername: { type: String, default: '' }
+    currentUsername: { type: String, default: '' },
+    mode: { type: String, default: 'group' },
+    targetUsername: { type: String, default: '' }
 })
 
 const emit = defineEmits(['close', 'disband', 'exit'])
@@ -86,11 +92,16 @@ function nicknameKey() {
 }
 
 function dndKey() {
+    if (props.mode === 'user') {
+        return `userDND_${props.currentUsername}_${props.targetUsername}`
+    }
     return `groupDND_${props.currentUsername}_${props.groupId}`
 }
 
 const saveSettings = () => {
-    localStorage.setItem(nicknameKey(), myNickname.value)
+    if (props.mode === 'group') {
+        localStorage.setItem(nicknameKey(), myNickname.value)
+    }
     localStorage.setItem(dndKey(), dndEnabled.value ? '1' : '0')
 }
 

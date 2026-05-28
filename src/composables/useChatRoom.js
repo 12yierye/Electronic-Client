@@ -2,6 +2,31 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { matchByPinyin } from '../utils/pinyin'
 import { loadUsersAvatars } from './useAvatar'
 
+export const chatTotalUnread = ref(0)
+export const sharedUserUnread = ref({})
+export const sharedGroupUnread = ref({})
+
+export function refreshTotalUnread() {
+    const user = localStorage.getItem('userInfo')
+    if (!user) {
+        chatTotalUnread.value = 0
+        return
+    }
+    const username = JSON.parse(user).username
+    let total = 0
+    for (const [key, count] of Object.entries(sharedUserUnread.value)) {
+        if (localStorage.getItem(`userDND_${username}_${key}`) !== '1') {
+            total += typeof count === 'number' ? count : 0
+        }
+    }
+    for (const [key, count] of Object.entries(sharedGroupUnread.value)) {
+        if (localStorage.getItem(`groupDND_${username}_${key}`) !== '1') {
+            total += typeof count === 'number' ? count : 0
+        }
+    }
+    chatTotalUnread.value = total
+}
+
 export function useChatRoom() {
   const activeTab = ref('friends')
   const chatMode = ref('public')
@@ -25,7 +50,8 @@ export function useChatRoom() {
   const enablePinyinSearch = ref(false)
   const searchResults = ref([])
   const publicGroupsList = ref([])
-  const groupUnread = ref({})
+  const groupUnread = sharedGroupUnread
+  const userUnread = sharedUserUnread
   const pendingMessages = ref([])
   const SEND_TIMEOUT = 10000
 
@@ -171,6 +197,7 @@ export function useChatRoom() {
   const selectUser = async (user, mode = chatMode.value) => {
     selectedUser.value = { ...user, chatMode: mode }
     selectedGroup.value = null
+    if (user?.username) clearUserUnread(user.username)
     if (mode === 'lan') await loadLanChatMessages()
     else await loadChatMessages()
   }
@@ -461,11 +488,43 @@ export function useChatRoom() {
     return localStorage.getItem(`groupDND_${username}_${groupId}`) === '1'
   }
 
+  const getUserDND = (targetUsername) => {
+    const username = currentUsername.value
+    if (!username || !targetUsername) return false
+    return localStorage.getItem(`userDND_${username}_${targetUsername}`) === '1'
+  }
+
   const clearGroupUnread = (groupId) => {
     const username = currentUsername.value
     if (!username || !groupId) return
     groupUnread.value = { ...groupUnread.value, [groupId]: 0 }
-    localStorage.setItem(`groupUnread_${username}_${groupId}`, '0')
+    refreshTotalUnread()
+    if (window.electronAPI) {
+        window.electronAPI.markGroupRead(username, groupId).catch(() => {})
+    }
+  }
+
+  const clearUserUnread = (targetUsername) => {
+    const username = currentUsername.value
+    if (!username || !targetUsername) return
+    userUnread.value = { ...userUnread.value, [targetUsername]: 0 }
+    refreshTotalUnread()
+    if (window.electronAPI) {
+        window.electronAPI.markChatRead(username, targetUsername).catch(() => {})
+    }
+  }
+
+  const getTotalUnread = () => {
+    const username = currentUsername.value
+    if (!username) return 0
+    let total = 0
+    for (const [key, count] of Object.entries(userUnread.value)) {
+      if (!getUserDND(key) && typeof count === 'number') total += count
+    }
+    for (const [key, count] of Object.entries(groupUnread.value)) {
+      if (!getGroupDND(key) && typeof count === 'number') total += count
+    }
+    return total
   }
 
   const selectGroup = async (group) => {
@@ -717,8 +776,95 @@ export function useChatRoom() {
     }
   }
 
-  let messagePollingInterval = null
+  let messagePollingTimer = null
+  let unreadPollingTimer = null
+  let unreadPollingActive = false
   const POLLING_INTERVAL = 2000
+  const UNREAD_POLLING_INTERVAL = 5000
+
+  const pollUnreadCounts = async () => {
+    const username = currentUsername.value
+    if (!username) return
+    try {
+      if (window.electronAPI) {
+        const result = await window.electronAPI.getUnreadCounts(username)
+        if (result.success) {
+          userUnread.value = result.conversations || {}
+          groupUnread.value = result.groups || {}
+        }
+      }
+      if (lanSettings.value.serverIP) {
+        for (const friend of lanFriendsList.value) {
+          const target = friend.username
+          if (selectedUser.value && selectedUser.value.username === target && selectedUser.value.chatMode === 'lan') continue
+          try {
+            const response = await fetch(
+              `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/messages?from=${encodeURIComponent(username)}&to=${encodeURIComponent(target)}`,
+              { method: 'GET' }
+            )
+            const data = await response.json()
+            if (data.success) {
+              const msgs = (data.messages || [])
+              const unread = msgs.filter(m => 
+                m.from !== username && !(m.readBy || []).includes(username)
+              ).length
+              userUnread.value = { ...userUnread.value, [target]: unread }
+            }
+          } catch (_) {}
+        }
+        for (const group of lanGroupsList.value) {
+          const gid = group.id
+          if (selectedGroup.value && selectedGroup.value.id === gid) continue
+          try {
+            const response = await fetch(
+              `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages?groupId=${encodeURIComponent(gid)}`,
+              { method: 'GET' }
+            )
+            const data = await response.json()
+            if (data.success) {
+              const msgs = (data.messages || [])
+              const unread = msgs.filter(m => 
+                m.from !== username && !(m.readBy || []).includes(username)
+              ).length
+              groupUnread.value = { ...groupUnread.value, [gid]: unread }
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    refreshTotalUnread()
+  }
+
+  const scheduleUnreadPoll = () => {
+    if (unreadPollingTimer) clearTimeout(unreadPollingTimer)
+    unreadPollingTimer = setTimeout(async () => {
+      if (unreadPollingActive) {
+        scheduleUnreadPoll()
+        return
+      }
+      unreadPollingActive = true
+      try {
+        await pollUnreadCounts()
+      } finally {
+        unreadPollingActive = false
+        scheduleUnreadPoll()
+      }
+    }, UNREAD_POLLING_INTERVAL)
+  }
+
+  const startUnreadPolling = () => {
+    unreadPollingActive = false
+    pollUnreadCounts()
+    scheduleUnreadPoll()
+  }
+
+  const stopUnreadPolling = () => {
+    if (unreadPollingTimer) {
+      clearTimeout(unreadPollingTimer)
+      unreadPollingTimer = null
+    }
+    unreadPollingActive = false
+  }
 
   const pollForNewMessages = async () => {
     try {
@@ -734,17 +880,23 @@ export function useChatRoom() {
     } catch (error) {}
   }
 
+  const scheduleMessagePoll = () => {
+    if (messagePollingTimer) clearTimeout(messagePollingTimer)
+    messagePollingTimer = setTimeout(async () => {
+      await pollForNewMessages()
+      scheduleMessagePoll()
+    }, POLLING_INTERVAL)
+  }
+
   const startMessagePolling = () => {
-    if (messagePollingInterval) return
-    messagePollingInterval = setInterval(pollForNewMessages, POLLING_INTERVAL)
-    console.log('[Chat] polling started')
+    pollForNewMessages()
+    scheduleMessagePoll()
   }
 
   const stopMessagePolling = () => {
-    if (messagePollingInterval) {
-      clearInterval(messagePollingInterval)
-      messagePollingInterval = null
-      console.log('[Chat] polling stopped')
+    if (messagePollingTimer) {
+      clearTimeout(messagePollingTimer)
+      messagePollingTimer = null
     }
   }
 
@@ -760,10 +912,12 @@ export function useChatRoom() {
     loadPublicGroupsList()
     if (lanSettings.value.serverIP) loadLanFriendsList()
     startMessagePolling()
+    startUnreadPolling()
   })
 
   onUnmounted(() => {
     stopMessagePolling()
+    stopUnreadPolling()
   })
 
   return {
@@ -786,6 +940,7 @@ export function useChatRoom() {
     handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
     selectGroup, loadGroupMessages, sendGroupMessage,
     createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
-    loadPublicGroupsList, groupUnread, getGroupDND, clearGroupUnread
+    loadPublicGroupsList, groupUnread, getGroupDND, clearGroupUnread,
+    userUnread, getUserDND, clearUserUnread, getTotalUnread
   }
 }

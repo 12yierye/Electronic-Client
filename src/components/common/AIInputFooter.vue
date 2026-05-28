@@ -125,9 +125,6 @@ const handleSend = async () => {
   } finally {
     if (!streamEndedNormally) {
       isSending.value = false
-      if (window.electronAPI.removeAIChatStreamListener) {
-        window.electronAPI.removeAIChatStreamListener()
-      }
     }
   }
 }

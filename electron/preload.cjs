@@ -73,6 +73,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendGroupMessage: (groupId, from, message, type) => ipcRenderer.invoke('send-group-message', groupId, from, message, type),
   joinGroup: (groupId, username) => ipcRenderer.invoke('join-group', groupId, username),
 
+  // 未读消息
+  getUnreadCounts: (username) => ipcRenderer.invoke('get-unread-counts', username),
+  markChatRead: (username, target) => ipcRenderer.invoke('mark-chat-read', username, target),
+  markGroupRead: (username, groupId) => ipcRenderer.invoke('mark-group-read', username, groupId),
+
   // 本地 AI 聊天
   aiChat: (message) => ipcRenderer.invoke('ai-chat', message),
 

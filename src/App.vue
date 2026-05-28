@@ -24,12 +24,14 @@
           <!-- 主内容区 -->
           <div class="main-content">
             <transition name="fade" mode="out-in">
-              <component
-                :is="currentComponent"
-                :key="currentView"
-                @logout="handleLogout"
-                @exit="handleExit"
-              />
+              <keep-alive>
+                <component
+                  :is="currentComponent"
+                  :key="currentView"
+                  @logout="handleLogout"
+                  @exit="handleExit"
+                />
+              </keep-alive>
             </transition>
           </div>
 

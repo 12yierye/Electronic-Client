@@ -2,15 +2,30 @@
   <nav class="app-navigation">
     <!-- 左侧导航按钮 -->
     <div class="nav-left">
-      <el-button 
-        v-for="item in navItems" 
-        :key="item.key"
-        :class="['nav-btn', { active: currentView === item.key }]"
-        @click="handleNavigate(item.key)"
-      >
-        <el-icon><component :is="item.icon" /></el-icon>
-        <span>{{ item.label }}</span>
-      </el-button>
+      <template v-for="item in navItems" :key="item.key">
+        <el-badge
+          v-if="item.key === 'chat'"
+          :value="totalUnread"
+          :hidden="totalUnread === 0 || currentView === 'chat'"
+          :max="99"
+        >
+          <el-button
+            :class="['nav-btn', { active: currentView === item.key }]"
+            @click="handleNavigate(item.key)"
+          >
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </el-button>
+        </el-badge>
+        <el-button
+          v-else
+          :class="['nav-btn', { active: currentView === item.key }]"
+          @click="handleNavigate(item.key)"
+        >
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </el-button>
+      </template>
     </div>
 
     <!-- 右侧用户头像按钮 -->
@@ -25,10 +40,11 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { ChatDotRound, Files, Setting, MagicStick, User } from '@element-plus/icons-vue'
 import { useI18n } from '../../composables/useI18n'
 import { getUserAvatar, getAvatarUrl } from '../../composables/useAvatar'
+import { chatTotalUnread, refreshTotalUnread } from '../../composables/useChatRoom'
 
 const props = defineProps({
   currentView: {
@@ -43,6 +59,8 @@ const props = defineProps({
 
 const emit = defineEmits(['navigate', 'toggle-sidebar'])
 const { t } = useI18n()
+
+const totalUnread = ref(0)
 
 const navItems = computed(() => [
   { key: 'ai', icon: 'MagicStick', label: t('navigation.ai') },
@@ -66,6 +84,14 @@ const userAvatar = computed(() => {
 
 const userInitial = computed(() => {
   return props.userInfo?.username?.charAt(0)?.toUpperCase() || 'U'
+})
+
+onMounted(() => {
+  refreshTotalUnread()
+  // 同步共享的响应式 ref，零延迟
+  watch(chatTotalUnread, (val) => {
+    totalUnread.value = val
+  }, { immediate: true })
 })
 </script>
 
