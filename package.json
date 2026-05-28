@@ -19,7 +19,8 @@
     "element-plus": "^2.5.0",
     "marked": "^17.0.5",
     "pinia": "^2.1.7",
-    "vue": "^3.4.0"
+    "vue": "^3.4.0",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
@@ -39,10 +40,14 @@
       "output": "release"
     },
     "win": {
-      "target": [{
-        "target": "nsis",
-        "arch": ["x64"]
-      }]
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

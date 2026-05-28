@@ -78,6 +78,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   markChatRead: (username, target, lastReadId) => ipcRenderer.invoke('mark-chat-read', username, target, lastReadId),
   markGroupRead: (username, groupId, lastReadId) => ipcRenderer.invoke('mark-group-read', username, groupId, lastReadId),
 
+  // WebSocket & 通知
+  wsConnect: (username) => ipcRenderer.invoke('ws-connect', username),
+  wsDisconnect: () => ipcRenderer.invoke('ws-disconnect'),
+  setBadgeCount: (count) => ipcRenderer.invoke('set-badge-count', count),
+  flashWindow: (shouldFlash) => ipcRenderer.invoke('flash-window', shouldFlash),
+
+  // WebSocket 事件监听（主进程 -> 渲染进程）
+  onWsNewMessage: (callback) => {
+    ipcRenderer.on('ws:new_message', (event, data) => callback(data))
+  },
+  onWsNewGroupMessage: (callback) => {
+    ipcRenderer.on('ws:new_group_message', (event, data) => callback(data))
+  },
+  onWsOnlineStatus: (callback) => {
+    ipcRenderer.on('ws:online_status', (event, data) => callback(data))
+  },
+  onWsUpdateBadge: (callback) => {
+    ipcRenderer.on('ws:update_badge', () => callback())
+  },
+  removeWsListeners: () => {
+    ipcRenderer.removeAllListeners('ws:new_message')
+    ipcRenderer.removeAllListeners('ws:new_group_message')
+    ipcRenderer.removeAllListeners('ws:online_status')
+    ipcRenderer.removeAllListeners('ws:update_badge')
+  },
+
   // 本地 AI 聊天
   aiChat: (message) => ipcRenderer.invoke('ai-chat', message),
 

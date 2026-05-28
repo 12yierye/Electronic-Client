@@ -86,7 +86,7 @@
           <template v-else-if="chatMode === 'public' && activeTab === 'groups'">
             <div class="category-header">我的群聊</div>
             <div
-              v-for="group in filteredPublicGroupsList"
+              v-for="group in sortedPublicGroupsList"
               :key="group.id"
               :class="['user-item', { active: selectedGroup?.id === group.id }]"
               @click="selectGroup(group)"
@@ -102,7 +102,7 @@
               </div>
               <el-tag v-if="getGroupDND(group.id)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
             </div>
-            <el-empty v-if="filteredPublicGroupsList.length === 0" :description="t('chatRoom.noGroups')" />
+            <el-empty v-if="sortedPublicGroupsList.length === 0" :description="t('chatRoom.noGroups')" />
           </template>
           
           <!-- 内网：用户列表 -->
@@ -133,7 +133,7 @@
           <template v-else-if="chatMode === 'lan' && activeTab === 'groups'">
             <div class="category-header">我的群聊</div>
             <div
-              v-for="group in filteredLanGroupsList"
+              v-for="group in sortedLanGroupsList"
               :key="group.id"
               :class="['user-item', { active: selectedGroup?.id === group.id }]"
               @click="selectGroup(group)"
@@ -149,7 +149,7 @@
               </div>
               <el-tag v-if="getGroupDND(group.id)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
             </div>
-            <el-empty v-if="filteredLanGroupsList.length === 0" :description="t('chatRoom.noGroups')" />
+            <el-empty v-if="sortedLanGroupsList.length === 0" :description="t('chatRoom.noGroups')" />
           </template>
           
           <!-- 公网：添加好友 -->
@@ -380,9 +380,9 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onDeactivated } from 'vue'
+import { computed, ref, watch, nextTick, onDeactivated, watchEffect } from 'vue'
 import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus, Document } from '@element-plus/icons-vue'
-import { useChatRoom } from '../../composables/useChatRoom'
+import { useChatRoom, sharedLastMsgMap } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
 import { getUserAvatar } from '../../composables/useAvatar'
 import GroupMemberPanel from './GroupMemberPanel.vue'
@@ -444,14 +444,24 @@ const hasNonDNDGroupUnread = computed(() => {
   return false
 })
 
-// 排序列表：免打扰的排到后面
+// 调试日志
+watchEffect(() => {
+  console.log('[DIAG-UI] hasNonDNDFriendUnread:', hasNonDNDFriendUnread.value, 'hasNonDNDGroupUnread:', hasNonDNDGroupUnread.value, 'userUnread keys:', Object.keys(userUnread.value), 'groupUnread keys:', Object.keys(groupUnread.value))
+})
+
+// 排序列表：免打扰的排到后面，再按最后消息时间降序
 const sortedFriendsList = computed(() => {
   void dndTick.value
   return [...friendsList.value].sort((a, b) => {
     const aDND = getUserDND(a.username)
     const bDND = getUserDND(b.username)
     if (aDND !== bDND) return aDND ? 1 : -1
-    return 0
+    // 按最后消息时间降序
+    const aLast = sharedLastMsgMap.value['user:' + a.username]
+    const bLast = sharedLastMsgMap.value['user:' + b.username]
+    const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
+    const bTime = bLast?.time ? new Date(bLast.time).getTime() : 0
+    return bTime - aTime
   })
 })
 
@@ -461,7 +471,40 @@ const sortedLanFriendsList = computed(() => {
     const aDND = getUserDND(a.username)
     const bDND = getUserDND(b.username)
     if (aDND !== bDND) return aDND ? 1 : -1
-    return 0
+    const aLast = sharedLastMsgMap.value['user:' + a.username]
+    const bLast = sharedLastMsgMap.value['user:' + b.username]
+    const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
+    const bTime = bLast?.time ? new Date(bLast.time).getTime() : 0
+    return bTime - aTime
+  })
+})
+
+// 群聊排序：最后消息时间降序
+const sortedPublicGroupsList = computed(() => {
+  void dndTick.value
+  return [...filteredPublicGroupsList.value].sort((a, b) => {
+    const aDND = getGroupDND(a.id)
+    const bDND = getGroupDND(b.id)
+    if (aDND !== bDND) return aDND ? 1 : -1
+    const aLast = sharedLastMsgMap.value['group:' + a.id]
+    const bLast = sharedLastMsgMap.value['group:' + b.id]
+    const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
+    const bTime = bLast?.time ? new Date(bLast.time).getTime() : 0
+    return bTime - aTime
+  })
+})
+
+const sortedLanGroupsList = computed(() => {
+  void dndTick.value
+  return [...filteredLanGroupsList.value].sort((a, b) => {
+    const aDND = getGroupDND(a.id)
+    const bDND = getGroupDND(b.id)
+    if (aDND !== bDND) return aDND ? 1 : -1
+    const aLast = sharedLastMsgMap.value['group:' + a.id]
+    const bLast = sharedLastMsgMap.value['group:' + b.id]
+    const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
+    const bTime = bLast?.time ? new Date(bLast.time).getTime() : 0
+    return bTime - aTime
   })
 })
 
@@ -477,6 +520,27 @@ const searchPlaceholder = computed(() => {
 
 watch([selectedUser, selectedGroup], () => {
   uploadMenuVisible.value = false
+})
+
+const chatMessagesRef = ref(null)
+
+function scrollToBottom() {
+  nextTick(() => {
+    const el = chatMessagesRef.value
+    if (el) {
+      el.scrollTop = el.scrollHeight
+    }
+  })
+}
+
+watch(chatMessages, () => {
+  scrollToBottom()
+}, { deep: false })
+
+watch([selectedUser, selectedGroup], () => {
+  if (selectedUser.value || selectedGroup.value) {
+    scrollToBottom()
+  }
 })
 
 // KeepAlive 停用时清除选中会话，确保未读轮询正常计数

@@ -5,6 +5,8 @@ import { loadUsersAvatars } from './useAvatar'
 export const chatTotalUnread = ref(0)
 export const sharedUserUnread = ref({})
 export const sharedGroupUnread = ref({})
+// 每个会话的最后一条消息信息（用于排序）
+export const sharedLastMsgMap = ref({})
 
 export function refreshTotalUnread() {
     const user = localStorage.getItem('userInfo')
@@ -232,12 +234,11 @@ export function useChatRoom() {
   }
 
   const selectUser = async (user, mode = chatMode.value) => {
+    console.log('[DIAG-CLIENT] selectUser called with:', user?.username, 'stack:', new Error().stack)
     selectedUser.value = { ...user, chatMode: mode }
     selectedGroup.value = null
-    if (user?.username) {
-      userUnread.value = { ...userUnread.value, [user.username]: 0 }
-      refreshTotalUnread()
-    }
+    // 不再立即清零未读 — 改由轮询在 readPoint 更新后自然归零
+    // 这确保未读红点有足够时间渲染到屏幕上
     if (mode === 'lan') await loadLanChatMessages()
     else await loadChatMessages()
     if (user?.username) {
@@ -250,6 +251,10 @@ export function useChatRoom() {
       if (window.electronAPI) {
         window.electronAPI.markChatRead(currentUsername.value, user.username, lastId || null).catch(() => {})
       }
+      // 消息加载完毕、readPoint 更新后，再清零未读（此时用户已看到消息）
+      userUnread.value = { ...userUnread.value, [user.username]: 0 }
+      refreshTotalUnread()
+      updateTaskbarBadge()
     }
   }
 
@@ -268,6 +273,8 @@ export function useChatRoom() {
         chatMessages.value = newMessages
       }
       loadUsersAvatars(newMessages.map(m => m.from))
+      // 更新最后消息
+      updateLastMsgFromMessages(newMessages, selectedUser.value.username)
     }
   }
 
@@ -289,6 +296,7 @@ export function useChatRoom() {
           chatMessages.value = newMessages
         }
         loadUsersAvatars(newMessages.map(m => m.from))
+        updateLastMsgFromMessages(newMessages, selectedUser.value.username)
       }
     } catch (error) {
       console.error('[Chat] load LAN msgs failed:', error)
@@ -329,6 +337,11 @@ export function useChatRoom() {
         const data = await response.json()
         if (data.success) {
           updateMessageStatus(tempId, true, data.message?.id || data.data?.id)
+          // 更新最后消息
+          sharedLastMsgMap.value = {
+            ...sharedLastMsgMap.value,
+            ['user:' + selectedUser.value.username]: { message, time: new Date().toISOString(), from: currentUsername.value }
+          }
         } else {
           updateMessageStatus(tempId, false)
         }
@@ -372,6 +385,11 @@ export function useChatRoom() {
         resolved = true
         if (result.success) {
           updateMessageStatus(tempId, true, result.data?.id)
+          // 更新最后消息
+          sharedLastMsgMap.value = {
+            ...sharedLastMsgMap.value,
+            ['user:' + selectedUser.value.username]: { message, time: new Date().toISOString(), from: currentUsername.value }
+          }
         } else {
           updateMessageStatus(tempId, false)
         }
@@ -593,10 +611,7 @@ export function useChatRoom() {
   const selectGroup = async (group) => {
     selectedGroup.value = group
     selectedUser.value = null
-    if (group?.id) {
-      groupUnread.value = { ...groupUnread.value, [group.id]: 0 }
-      refreshTotalUnread()
-    }
+    // 不立即清零 — 等消息加载完再加零
     await loadGroupMessages()
     if (group?.id) {
       const lastId = getLastRealMsgId()
@@ -608,6 +623,10 @@ export function useChatRoom() {
       if (window.electronAPI) {
         window.electronAPI.markGroupRead(currentUsername.value, group.id, lastId || null).catch(() => {})
       }
+      // 消息加载完后再清零
+      groupUnread.value = { ...groupUnread.value, [group.id]: 0 }
+      refreshTotalUnread()
+      updateTaskbarBadge()
     }
   }
 
@@ -642,6 +661,7 @@ export function useChatRoom() {
         chatMessages.value = newMessages
       }
       loadUsersAvatars(newMessages.map(m => m.from))
+      updateGroupLastMsgFromMessages(newMessages, selectedGroup.value.id)
     }
   }
 
@@ -682,7 +702,10 @@ export function useChatRoom() {
         if (!resolved) {
           resolved = true
           data = await response.json()
-          if (data.success) updateMessageStatus(tempId, true, data.data?.id)
+          if (data.success) {
+            updateMessageStatus(tempId, true, data.data?.id)
+            sharedLastMsgMap.value = { ...sharedLastMsgMap.value, ['group:' + groupId]: { message, time: new Date().toISOString(), from: currentUsername.value } }
+          }
           else updateMessageStatus(tempId, false)
         }
       } catch (error) {
@@ -695,7 +718,10 @@ export function useChatRoom() {
         clearTimeout(timeoutId)
         if (!resolved) {
           resolved = true
-          if (result.success) updateMessageStatus(tempId, true, result.data?.id)
+          if (result.success) {
+            updateMessageStatus(tempId, true, result.data?.id)
+            sharedLastMsgMap.value = { ...sharedLastMsgMap.value, ['group:' + groupId]: { message, time: new Date().toISOString(), from: currentUsername.value } }
+          }
           else updateMessageStatus(tempId, false)
         }
       } catch (error) {
@@ -863,22 +889,33 @@ export function useChatRoom() {
     const username = currentUsername.value
     if (!username) return
     try {
-      if (window.electronAPI) {
-        const rp = readPoints.value
+      if (window.electronAPI && window.electronAPI.getUnreadCounts) {
+        const rp = JSON.parse(JSON.stringify(readPoints.value))
         const result = await window.electronAPI.getUnreadCounts(username, rp)
         if (result.success) {
           const selUser = selectedUser.value
+          console.log('[DIAG-CLIENT] pollUnreadCounts result:', JSON.stringify(result.conversations), 'selectedUser:', selUser?.username || 'none', 'current userUnread:', JSON.stringify(userUnread.value))
           const updatedUser = { ...userUnread.value }
           for (const [key, count] of Object.entries(result.conversations || {})) {
-            if (selUser && selUser.username === key) continue
-            updatedUser[key] = count
+            // 跳过当前正在查看的会话
+            if (selUser && selUser.username === key) {
+              console.log('[DIAG-CLIENT] skipping selected user:', key)
+              updatedUser[key] = 0
+              continue
+            }
+            updatedUser[key] = typeof count === 'number' ? count : 0
           }
+          console.log('[DIAG-CLIENT] setting userUnread to:', JSON.stringify(updatedUser))
           userUnread.value = updatedUser
+
           const selGroup = selectedGroup.value
           const updatedGroup = { ...groupUnread.value }
           for (const [key, count] of Object.entries(result.groups || {})) {
-            if (selGroup && String(selGroup.id) === String(key)) continue
-            updatedGroup[key] = count
+            if (selGroup && String(selGroup.id) === String(key)) {
+              updatedGroup[key] = 0
+              continue
+            }
+            updatedGroup[key] = typeof count === 'number' ? count : 0
           }
           groupUnread.value = updatedGroup
         }
@@ -925,8 +962,20 @@ export function useChatRoom() {
           } catch (_) {}
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      console.error('[Chat] pollUnreadCounts error:', e.message || e)
+    }
     refreshTotalUnread()
+    updateTaskbarBadge()
+    console.log('[DIAG-CLIENT] after refresh, chatTotalUnread =', chatTotalUnread.value)
+  }
+
+  // 更新任务栏角标
+  const updateTaskbarBadge = () => {
+    const total = getTotalUnread()
+    if (window.electronAPI && window.electronAPI.setBadgeCount) {
+      window.electronAPI.setBadgeCount(total).catch(() => {})
+    }
   }
 
   const scheduleUnreadPoll = () => {
@@ -1006,6 +1055,132 @@ export function useChatRoom() {
     }
   }
 
+  // ========== WebSocket 实时事件处理 ==========
+
+  const handleWsNewMessage = (data) => {
+    const username = currentUsername.value
+    if (!username) return
+    const sender = data.conversation?.target || data.message?.sender || data.message?.from
+    if (!sender) return
+
+    // 如果正在查看该用户的聊天，不增加未读
+    if (selectedUser.value && selectedUser.value.username === sender) return
+
+    // 增加未读计数
+    const current = userUnread.value[sender] || 0
+    userUnread.value = { ...userUnread.value, [sender]: current + 1 }
+
+    // 更新最后消息
+    const msg = data.message || {}
+    sharedLastMsgMap.value = {
+      ...sharedLastMsgMap.value,
+      ['user:' + sender]: { message: msg.message || '', time: msg.timestamp || Date.now(), from: sender }
+    }
+
+    refreshTotalUnread()
+    updateTaskbarBadge()
+
+    // 闪烁窗口
+    if (window.electronAPI && window.electronAPI.flashWindow) {
+      window.electronAPI.flashWindow(true).catch(() => {})
+    }
+  }
+
+  const handleWsNewGroupMessage = (data) => {
+    const username = currentUsername.value
+    if (!username) return
+    const groupId = data.conversation?.target || data.message?.groupId
+    if (!groupId) return
+
+    // 如果正在查看该群聊，不增加未读
+    if (selectedGroup.value && String(selectedGroup.value.id) === String(groupId)) return
+
+    // 如果是自己发的消息，不增加未读
+    const msgFrom = data.message?.from || data.message?.sender
+    if (msgFrom === username) return
+
+    const current = groupUnread.value[groupId] || 0
+    groupUnread.value = { ...groupUnread.value, [groupId]: current + 1 }
+
+    // 更新最后消息
+    const msg = data.message || {}
+    sharedLastMsgMap.value = {
+      ...sharedLastMsgMap.value,
+      ['group:' + groupId]: { message: msg.message || '', time: msg.timestamp || Date.now(), from: msgFrom }
+    }
+
+    refreshTotalUnread()
+    updateTaskbarBadge()
+  }
+
+  const handleWsUpdateBadge = () => {
+    updateTaskbarBadge()
+  }
+
+  const setupWebSocket = () => {
+    if (!window.electronAPI) return
+    window.electronAPI.wsConnect(currentUsername.value).catch(() => {})
+
+    window.electronAPI.onWsNewMessage(handleWsNewMessage)
+    window.electronAPI.onWsNewGroupMessage(handleWsNewGroupMessage)
+    window.electronAPI.onWsUpdateBadge(handleWsUpdateBadge)
+  }
+
+  const teardownWebSocket = () => {
+    if (!window.electronAPI) return
+    window.electronAPI.removeWsListeners()
+    window.electronAPI.wsDisconnect().catch(() => {})
+    // 清除角标
+    window.electronAPI.setBadgeCount(0).catch(() => {})
+    window.electronAPI.flashWindow(false).catch(() => {})
+  }
+
+  // 从消息列表更新最后消息时间
+  const updateLastMsgFromMessages = (msgs, targetUser) => {
+    if (!msgs.length || !targetUser) return
+    const last = msgs[msgs.length - 1]
+    const key = 'user:' + targetUser
+    const existing = sharedLastMsgMap.value[key]
+    const newTime = new Date(last.timestamp || Date.now()).getTime()
+    const oldTime = existing?.time ? new Date(existing.time).getTime() : 0
+    if (newTime > oldTime || !existing) {
+      sharedLastMsgMap.value = {
+        ...sharedLastMsgMap.value,
+        [key]: { message: last.message || '', time: last.timestamp || Date.now(), from: last.from || '' }
+      }
+    }
+  }
+
+  // 从群消息列表更新最后消息时间
+  const updateGroupLastMsgFromMessages = (msgs, groupId) => {
+    if (!msgs.length || !groupId) return
+    const last = msgs[msgs.length - 1]
+    const key = 'group:' + groupId
+    const existing = sharedLastMsgMap.value[key]
+    const newTime = new Date(last.timestamp || Date.now()).getTime()
+    const oldTime = existing?.time ? new Date(existing.time).getTime() : 0
+    if (newTime > oldTime || !existing) {
+      sharedLastMsgMap.value = {
+        ...sharedLastMsgMap.value,
+        [key]: { message: last.message || '', time: last.timestamp || Date.now(), from: last.from || '' }
+      }
+    }
+  }
+
+  // 调试：监听 userUnread 的所有变化
+  watch(userUnread, (newVal, oldVal) => {
+    const changedKeys = []
+    for (const key of Object.keys(newVal)) {
+      if (newVal[key] !== oldVal[key]) changedKeys.push(key + ':' + oldVal[key] + '->' + newVal[key])
+    }
+    for (const key of Object.keys(oldVal)) {
+      if (!(key in newVal)) changedKeys.push(key + ':deleted')
+    }
+    if (changedKeys.length > 0) {
+      console.log('[DIAG-CLIENT] userUnread changed:', changedKeys.join(', '), 'stack:', new Error().stack.split('\n').slice(1, 4).join('\n'))
+    }
+  }, { deep: true })
+
   onMounted(() => {
     reloadLanSettings()
     const savedDeletedGroups = localStorage.getItem('deletedGroupIds')
@@ -1013,6 +1188,11 @@ export function useChatRoom() {
       deletedGroupIds.value = JSON.parse(savedDeletedGroups)
     }
     readPoints.value = loadReadPoints(currentUsername.value)
+    // 加载上次保存的最后消息时间
+    try {
+      const saved = localStorage.getItem('chat_lastMsgMap_' + currentUsername.value)
+      if (saved) sharedLastMsgMap.value = JSON.parse(saved)
+    } catch (_) {}
     loadFriendsList()
     loadAllUsers()
     loadFriendRequests()
@@ -1020,9 +1200,13 @@ export function useChatRoom() {
     if (lanSettings.value.serverIP) loadLanFriendsList()
     startMessagePolling()
     startUnreadPolling()
+    setupWebSocket()
   })
 
   onUnmounted(() => {
+    // 保存最后消息时间
+    localStorage.setItem('chat_lastMsgMap_' + currentUsername.value, JSON.stringify(sharedLastMsgMap.value))
+    teardownWebSocket()
     stopMessagePolling()
     stopUnreadPolling()
   })
@@ -1048,6 +1232,7 @@ export function useChatRoom() {
     selectGroup, loadGroupMessages, sendGroupMessage,
     createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
     loadPublicGroupsList, groupUnread, getGroupDND, clearGroupUnread,
-    userUnread, getUserDND, clearUserUnread, getTotalUnread
+    userUnread, getUserDND, clearUserUnread, getTotalUnread,
+    sharedLastMsgMap
   }
 }

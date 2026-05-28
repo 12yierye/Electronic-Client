@@ -3,6 +3,7 @@ import axios from 'axios'
 import { getAPIBase, setAPIBase, mainWindow, setMainWindow } from '../config.js'
 import { validateLogin, validateRegister } from '../services/serverApi.js'
 import { createWindow } from '../window.js'
+import { disconnectWebSocket } from '../services/websocket.js'
 
 export function registerAuthIpc() {
     ipcMain.handle('set-api-base', (event, url) => {
@@ -22,7 +23,23 @@ export function registerAuthIpc() {
         return await validateRegister(userData)
     })
 
+    ipcMain.handle('user-logout', async () => {
+        disconnectWebSocket()
+        global.userInfo = null
+        if (mainWindow) {
+            mainWindow.once('closed', () => {
+                setMainWindow(null)
+                createWindow()
+            })
+            mainWindow.close()
+        } else {
+            createWindow()
+        }
+        return { success: true }
+    })
+
     ipcMain.on('logout', () => {
+        disconnectWebSocket()
         if (mainWindow) {
             mainWindow.once('closed', () => {
                 setMainWindow(null)
@@ -36,6 +53,7 @@ export function registerAuthIpc() {
     })
 
     ipcMain.on('exit-app', () => {
+        disconnectWebSocket()
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.removeAllListeners()
             setMainWindow(null)

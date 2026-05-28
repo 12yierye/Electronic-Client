@@ -2,8 +2,34 @@ import { ipcMain } from 'electron'
 import axios from 'axios'
 import { getAPIBase } from '../config.js'
 import { getErrorHint } from '../config.js'
+import { connectWebSocket, disconnectWebSocket, setBadgeCount, flashWindow } from '../services/websocket.js'
 
 export function registerUserIpc() {
+    // ========== WebSocket & 通知 ==========
+
+    ipcMain.handle('ws-connect', async (event, username) => {
+        connectWebSocket(username)
+        return { success: true }
+    })
+
+    ipcMain.handle('ws-disconnect', async () => {
+        disconnectWebSocket()
+        return { success: true }
+    })
+
+    ipcMain.handle('set-badge-count', async (event, count) => {
+        setBadgeCount(count)
+        return { success: true }
+    })
+
+    ipcMain.handle('flash-window', async (event, shouldFlash) => {
+        flashWindow(shouldFlash)
+        return { success: true }
+    })
+
+    // ========== 原有接口 ==========
+
+
     ipcMain.handle('get-user-list', async () => {
         try { return (await axios.get(`${getAPIBase()}/users`)).data }
         catch (error) {
@@ -120,8 +146,13 @@ export function registerUserIpc() {
     })
 
     ipcMain.handle('get-unread-counts', async (event, username, readPoints) => {
-        try { return (await axios.post(`${getAPIBase()}/chat/unread-counts`, { username, readPoints })).data }
-        catch (error) { return { success: false, message: error.message } }
+        try { 
+            const res = (await axios.post(`${getAPIBase()}/chat/unread-counts`, { username, readPoints })).data
+            return res
+        }
+        catch (error) { 
+            return { success: false, message: error.message } 
+        }
     })
 
     ipcMain.handle('mark-chat-read', async (event, username, target, lastReadId) => {
