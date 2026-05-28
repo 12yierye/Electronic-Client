@@ -90,6 +90,7 @@ onMounted(() => {
   refreshTotalUnread()
   // 同步共享的响应式 ref，零延迟
   watch(chatTotalUnread, (val) => {
+    console.log('[NAV] chatTotalUnread changed:', val, 'currentView:', props.currentView)
     totalUnread.value = val
   }, { immediate: true })
 })

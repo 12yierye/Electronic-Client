@@ -26,6 +26,7 @@ export function refreshTotalUnread() {
             total += typeof count === 'number' ? count : 0
         }
     }
+    console.log('[NAV] refreshTotalUnread: sharedUserUnread =', JSON.stringify(sharedUserUnread.value), 'sharedGroupUnread =', JSON.stringify(sharedGroupUnread.value), 'total =', total)
     chatTotalUnread.value = total
 }
 
@@ -234,7 +235,6 @@ export function useChatRoom() {
   }
 
   const selectUser = async (user, mode = chatMode.value) => {
-    console.log('[DIAG-CLIENT] selectUser called with:', user?.username, 'stack:', new Error().stack)
     selectedUser.value = { ...user, chatMode: mode }
     selectedGroup.value = null
     // 不再立即清零未读 — 改由轮询在 readPoint 更新后自然归零
@@ -889,42 +889,10 @@ export function useChatRoom() {
     const username = currentUsername.value
     if (!username) return
     try {
-      if (window.electronAPI && window.electronAPI.getUnreadCounts) {
-        const rp = JSON.parse(JSON.stringify(readPoints.value))
-        const result = await window.electronAPI.getUnreadCounts(username, rp)
-        if (result.success) {
-          const selUser = selectedUser.value
-          console.log('[DIAG-CLIENT] pollUnreadCounts result:', JSON.stringify(result.conversations), 'selectedUser:', selUser?.username || 'none', 'current userUnread:', JSON.stringify(userUnread.value))
-          const updatedUser = { ...userUnread.value }
-          for (const [key, count] of Object.entries(result.conversations || {})) {
-            // 跳过当前正在查看的会话
-            if (selUser && selUser.username === key) {
-              console.log('[DIAG-CLIENT] skipping selected user:', key)
-              updatedUser[key] = 0
-              continue
-            }
-            updatedUser[key] = typeof count === 'number' ? count : 0
-          }
-          console.log('[DIAG-CLIENT] setting userUnread to:', JSON.stringify(updatedUser))
-          userUnread.value = updatedUser
-
-          const selGroup = selectedGroup.value
-          const updatedGroup = { ...groupUnread.value }
-          for (const [key, count] of Object.entries(result.groups || {})) {
-            if (selGroup && String(selGroup.id) === String(key)) {
-              updatedGroup[key] = 0
-              continue
-            }
-            updatedGroup[key] = typeof count === 'number' ? count : 0
-          }
-          groupUnread.value = updatedGroup
-        }
-      }
       if (lanSettings.value.serverIP && chatMode.value === 'lan') {
-        console.log('[DIAG-CLIENT] LAN polling ACTIVE, serverIP:', lanSettings.value.serverIP, 'lanFriends:', lanFriendsList.value.map(f => f.username))
+        // ===== LAN 模式：只用 LAN 接口 =====
         for (const friend of lanFriendsList.value) {
           const target = friend.username
-          console.log('[DIAG-CLIENT] LAN polling for friend:', target)
           if (selectedUser.value && selectedUser.value.username === target && selectedUser.value.chatMode === 'lan') continue
           const ck = userConvKey(target)
           const lastId = readPoints.value[ck] || '0'
@@ -939,7 +907,6 @@ export function useChatRoom() {
               const unread = msgs.filter(m =>
                 m.from !== username && m.id && isNewerThan(m.id, lastId)
               ).length
-              console.log('[DIAG-CLIENT] LAN poll result for', target, 'unread:', unread, 'before:', userUnread.value[target])
               userUnread.value = { ...userUnread.value, [target]: unread }
             }
           } catch (_) {}
@@ -964,13 +931,39 @@ export function useChatRoom() {
             }
           } catch (_) {}
         }
+      } else if (window.electronAPI && window.electronAPI.getUnreadCounts) {
+        // ===== 公共模式：只用公共接口 =====
+        const rp = JSON.parse(JSON.stringify(readPoints.value))
+        const result = await window.electronAPI.getUnreadCounts(username, rp)
+        if (result.success) {
+          const selUser = selectedUser.value
+          const updatedUser = { ...userUnread.value }
+          for (const [key, count] of Object.entries(result.conversations || {})) {
+            if (selUser && selUser.username === key) {
+              updatedUser[key] = 0
+              continue
+            }
+            updatedUser[key] = typeof count === 'number' ? count : 0
+          }
+          userUnread.value = updatedUser
+
+          const selGroup = selectedGroup.value
+          const updatedGroup = { ...groupUnread.value }
+          for (const [key, count] of Object.entries(result.groups || {})) {
+            if (selGroup && String(selGroup.id) === String(key)) {
+              updatedGroup[key] = 0
+              continue
+            }
+            updatedGroup[key] = typeof count === 'number' ? count : 0
+          }
+          groupUnread.value = updatedGroup
+        }
       }
     } catch (e) {
       console.error('[Chat] pollUnreadCounts error:', e.message || e)
     }
     refreshTotalUnread()
     updateTaskbarBadge()
-    console.log('[DIAG-CLIENT] after refresh, chatTotalUnread =', chatTotalUnread.value)
   }
 
   // 更新任务栏角标
@@ -1171,19 +1164,6 @@ export function useChatRoom() {
   }
 
   // 调试：监听 userUnread 的所有变化
-  watch(userUnread, (newVal, oldVal) => {
-    const changedKeys = []
-    for (const key of Object.keys(newVal)) {
-      if (newVal[key] !== oldVal[key]) changedKeys.push(key + ':' + oldVal[key] + '->' + newVal[key])
-    }
-    for (const key of Object.keys(oldVal)) {
-      if (!(key in newVal)) changedKeys.push(key + ':deleted')
-    }
-    if (changedKeys.length > 0) {
-      console.log('[DIAG-CLIENT] userUnread changed:', changedKeys.join(', '), 'stack:', new Error().stack.split('\n').slice(1, 4).join('\n'))
-    }
-  }, { deep: true })
-
   onMounted(() => {
     reloadLanSettings()
     const savedDeletedGroups = localStorage.getItem('deletedGroupIds')

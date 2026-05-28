@@ -380,7 +380,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, nextTick, onDeactivated, watchEffect } from 'vue'
+import { computed, ref, watch, nextTick, onDeactivated } from 'vue'
 import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus, Document } from '@element-plus/icons-vue'
 import { useChatRoom, sharedLastMsgMap } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
@@ -442,11 +442,6 @@ const hasNonDNDGroupUnread = computed(() => {
     if (count > 0 && !getGroupDND(key)) return true
   }
   return false
-})
-
-// 调试日志
-watchEffect(() => {
-  console.log('[DIAG-UI] hasNonDNDFriendUnread:', hasNonDNDFriendUnread.value, 'hasNonDNDGroupUnread:', hasNonDNDGroupUnread.value, 'userUnread keys:', Object.keys(userUnread.value), 'groupUnread keys:', Object.keys(groupUnread.value))
 })
 
 // 排序列表：免打扰的排到后面，再按最后消息时间降序
