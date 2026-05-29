@@ -7,6 +7,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const useSystemBrowser = ref(false)  // 是否使用系统默认浏览器打开链接
   const sendKey = ref('Enter')        // 发送消息快捷键: 'Enter' | 'Ctrl+Enter'
   const friendListDensity = ref('compact')  // 好友列表密度: 'compact' | 'relaxed'
+  const navFlashIntensity = ref('medium')   // 导航栏未读闪烁程度: 'off' | 'low' | 'medium' | 'high'
+  const cacheRetentionDays = ref(30)        // 缓存消息保留天数
+  const showModeUnreadBadge = ref(true)     // 模式切换按钮（公网/内网）角标红点
+  const showTabUnreadBadge = ref(true)      // 标签页（好友/群聊）角标红点
 
   // 系统主题监听
   let systemThemeMedia = null
@@ -32,6 +36,10 @@ export const useSettingsStore = defineStore('settings', () => {
       useSystemBrowser.value = settings.useSystemBrowser || false
       sendKey.value = settings.sendKey || 'Enter'
       friendListDensity.value = settings.friendListDensity || 'compact'
+      navFlashIntensity.value = settings.navFlashIntensity || 'medium'
+      cacheRetentionDays.value = settings.cacheRetentionDays || 30
+      showModeUnreadBadge.value = settings.showModeUnreadBadge !== undefined ? settings.showModeUnreadBadge : true
+      showTabUnreadBadge.value = settings.showTabUnreadBadge !== undefined ? settings.showTabUnreadBadge : true
     }
     applyTheme()
   }
@@ -43,7 +51,11 @@ export const useSettingsStore = defineStore('settings', () => {
       language: language.value,
       useSystemBrowser: useSystemBrowser.value,
       sendKey: sendKey.value,
-      friendListDensity: friendListDensity.value
+      friendListDensity: friendListDensity.value,
+      navFlashIntensity: navFlashIntensity.value,
+      cacheRetentionDays: cacheRetentionDays.value,
+      showModeUnreadBadge: showModeUnreadBadge.value,
+      showTabUnreadBadge: showTabUnreadBadge.value
     }))
   }
 
@@ -98,12 +110,36 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSettings()
   }
 
+  const setNavFlashIntensity = (value) => {
+    navFlashIntensity.value = value
+    saveSettings()
+  }
+
+  const setCacheRetentionDays = (value) => {
+    cacheRetentionDays.value = value
+    saveSettings()
+  }
+
+  const setShowModeUnreadBadge = (value) => {
+    showModeUnreadBadge.value = value
+    saveSettings()
+  }
+
+  const setShowTabUnreadBadge = (value) => {
+    showTabUnreadBadge.value = value
+    saveSettings()
+  }
+
   return {
     theme,
     language,
     useSystemBrowser,
     sendKey,
     friendListDensity,
+    navFlashIntensity,
+    cacheRetentionDays,
+    showModeUnreadBadge,
+    showTabUnreadBadge,
     effectiveTheme,
     loadSettings,
     saveSettings,
@@ -112,6 +148,10 @@ export const useSettingsStore = defineStore('settings', () => {
     toggleLanguage,
     toggleUseSystemBrowser,
     setSendKey,
-    setFriendListDensity
+    setFriendListDensity,
+    setNavFlashIntensity,
+    setCacheRetentionDays,
+    setShowModeUnreadBadge,
+    setShowTabUnreadBadge
   }
 })

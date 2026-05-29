@@ -7,8 +7,12 @@
           <!-- 聊天模式切换 -->
           <div class="mode-switch-row">
             <el-radio-group v-model="chatMode" size="small" @change="handleChatModeChange">
-              <el-radio-button value="public">{{ t('chatRoom.public') }}</el-radio-button>
-              <el-radio-button v-if="lanSettings.serverIP" value="lan">{{ t('chatRoom.lan') }}</el-radio-button>
+              <el-radio-button value="public" :class="{ 'has-unread': showModeUnread && chatMode === 'lan' && hasPublicUnread }">
+                {{ t('chatRoom.public') }}
+              </el-radio-button>
+              <el-radio-button v-if="lanSettings.serverIP" value="lan" :class="{ 'has-unread': showModeUnread && chatMode === 'public' && hasLanUnread }">
+                {{ t('chatRoom.lan') }}
+              </el-radio-button>
             </el-radio-group>
           </div>
 
@@ -16,8 +20,8 @@
             <el-radio-group v-model="activeTab" size="small">
               <!-- 公网模式显示：好友、群聊、添加好友、申请 -->
               <template v-if="chatMode === 'public'">
-                <el-radio-button value="friends" :class="{ 'has-unread': hasNonDNDFriendUnread }">{{ t('chatRoom.friends') }}</el-radio-button>
-                <el-radio-button value="groups" :class="{ 'has-unread': hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
+                <el-radio-button value="friends" :class="{ 'has-unread': showTabUnread && hasNonDNDFriendUnread }">{{ t('chatRoom.friends') }}</el-radio-button>
+                <el-radio-button value="groups" :class="{ 'has-unread': showTabUnread && hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
                 <el-radio-button value="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
                 <el-radio-button value="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
                   {{ t('chatRoom.requests') }}
@@ -25,8 +29,8 @@
               </template>
               <!-- 内网模式显示：用户、群聊 -->
               <template v-else>
-                <el-radio-button value="users" :class="{ 'has-unread': hasNonDNDFriendUnread }">{{ t('chatRoom.users') }}</el-radio-button>
-                <el-radio-button value="groups" :class="{ 'has-unread': hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
+                <el-radio-button value="users" :class="{ 'has-unread': showTabUnread && hasNonDNDFriendUnread }">{{ t('chatRoom.users') }}</el-radio-button>
+                <el-radio-button value="groups" :class="{ 'has-unread': showTabUnread && hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
               </template>
             </el-radio-group>
           </div>
@@ -424,7 +428,8 @@ const {
   createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
   loadPublicGroupsList,
   groupUnread, getGroupDND,
-  userUnread, getUserDND
+  userUnread, getUserDND,
+  _pubUserUnread, _lanUserUnread, _pubGroupUnread, _lanGroupUnread
 } = useChatRoom()
 
 const chatSettingsTitle = computed(() => {
@@ -447,33 +452,49 @@ const onCtrlEnterKey = (event) => {
   }
 }
 
+// 当前模式的未读（userUnread/groupUnread 已按 chatMode 自动路由到正确存储）
 const hasNonDNDFriendUnread = computed(() => {
-  // 根据当前模式过滤：公网模式只看公网好友，内网模式只看内网用户
-  const modeUserSet = new Set()
-  if (chatMode.value === 'public') {
-    friendsList.value.forEach(f => modeUserSet.add(f.username))
-  } else {
-    lanFriendsList.value.forEach(f => modeUserSet.add(f.username))
-  }
   for (const [key, count] of Object.entries(userUnread.value)) {
-    if (count > 0 && !getUserDND(key) && modeUserSet.has(key)) return true
+    if (count > 0 && !getUserDND(key)) return true
   }
   return false
 })
 
 const hasNonDNDGroupUnread = computed(() => {
-  // 根据当前模式过滤：只看当前模式的群未读
-  const modeGroupSet = new Set()
-  if (chatMode.value === 'public') {
-    filteredPublicGroupsList.value.forEach(g => modeGroupSet.add(String(g.id)))
-  } else {
-    filteredLanGroupsList.value.forEach(g => modeGroupSet.add(String(g.id)))
-  }
   for (const [key, count] of Object.entries(groupUnread.value)) {
-    if (count > 0 && !getGroupDND(key) && modeGroupSet.has(String(key))) return true
+    if (count > 0 && !getGroupDND(key)) return true
   }
   return false
 })
+
+// "另一模式"的未读汇总（用于在模式切换按钮上显示角标）
+const hasPublicUnread = computed(() => {
+  const store = _pubUserUnread.value
+  for (const [key, count] of Object.entries(store)) {
+    if (count > 0 && !getUserDND(key)) return true
+  }
+  const gstore = _pubGroupUnread.value
+  for (const [key, count] of Object.entries(gstore)) {
+    if (count > 0 && !getGroupDND(key)) return true
+  }
+  return false
+})
+
+const hasLanUnread = computed(() => {
+  const store = _lanUserUnread.value
+  for (const [key, count] of Object.entries(store)) {
+    if (count > 0 && !getUserDND(key)) return true
+  }
+  const gstore = _lanGroupUnread.value
+  for (const [key, count] of Object.entries(gstore)) {
+    if (count > 0 && !getGroupDND(key)) return true
+  }
+  return false
+})
+
+// 可从设置控制的角标显示开关
+const showModeUnread = computed(() => settingsStore.showModeUnreadBadge)
+const showTabUnread = computed(() => settingsStore.showTabUnreadBadge)
 
 // 排序列表：免打扰的排到后面，再按最后消息时间降序
 const sortedFriendsList = computed(() => {

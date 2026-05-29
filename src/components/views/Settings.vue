@@ -85,6 +85,42 @@
             </el-radio-group>
             <div class="setting-tip">{{ t('settings.friendListDensityTip') }}</div>
           </el-form-item>
+          <el-divider />
+          <el-form-item :label="t('settings.navFlashIntensity') + '：'">
+            <el-radio-group v-model="navFlashIntensity" @change="handleNavFlashIntensityChange">
+              <el-radio-button value="off">{{ t('settings.flashOff') }}</el-radio-button>
+              <el-radio-button value="low">{{ t('settings.flashLow') }}</el-radio-button>
+              <el-radio-button value="medium">{{ t('settings.flashMedium') }}</el-radio-button>
+              <el-radio-button value="high">{{ t('settings.flashHigh') }}</el-radio-button>
+            </el-radio-group>
+            <div class="setting-tip">{{ t('settings.navFlashIntensityTip') }}</div>
+          </el-form-item>
+          <el-divider />
+          <el-form-item :label="t('settings.cacheRetentionDays') + '：'">
+            <el-select v-model="cacheRetentionDays" @change="handleCacheRetentionDaysChange" style="width: 180px">
+              <el-option v-for="d in cacheDayOptions" :key="d" :label="t('settings.cacheDaysOption', { n: d })" :value="d" />
+            </el-select>
+            <div class="setting-tip">{{ t('settings.cacheRetentionDaysTip') }}</div>
+          </el-form-item>
+          <el-divider />
+          <el-form-item :label="t('settings.unreadBadgeDisplay') + '：'">
+            <div class="badge-settings-list">
+              <div class="badge-setting-row">
+                <div class="switch-with-label">
+                  <el-switch v-model="showModeUnreadBadge" @change="handleShowModeUnreadBadgeChange" />
+                  <span class="badge-label">{{ t('settings.showModeUnreadBadge') }}</span>
+                </div>
+                <div class="setting-tip-inline">{{ t('settings.showModeUnreadBadgeTip') }}</div>
+              </div>
+              <div class="badge-setting-row">
+                <div class="switch-with-label">
+                  <el-switch v-model="showTabUnreadBadge" @change="handleShowTabUnreadBadgeChange" />
+                  <span class="badge-label">{{ t('settings.showTabUnreadBadge') }}</span>
+                </div>
+                <div class="setting-tip-inline">{{ t('settings.showTabUnreadBadgeTip') }}</div>
+              </div>
+            </div>
+          </el-form-item>
         </div>
 
         <!-- AI 模型 -->
@@ -249,6 +285,11 @@ const enablePinyinSearch = ref(false)
 const useSystemBrowser = ref(false)
 const sendKey = ref('Enter')
 const friendListDensity = ref('compact')
+const navFlashIntensity = ref('medium')
+const cacheRetentionDays = ref(30)
+const cacheDayOptions = [7, 14, 30, 60, 90, 180]
+const showModeUnreadBadge = ref(true)
+const showTabUnreadBadge = ref(true)
 const checkingUpdate = ref(false)
 const updateMessage = ref('')
 const updateMessageType = ref('')
@@ -322,6 +363,10 @@ onMounted(() => {
     useSystemBrowser.value = settingsStore.useSystemBrowser
     sendKey.value = settingsStore.sendKey || 'Enter'
     friendListDensity.value = settingsStore.friendListDensity || 'compact'
+    navFlashIntensity.value = settingsStore.navFlashIntensity || 'medium'
+    cacheRetentionDays.value = settingsStore.cacheRetentionDays || 30
+    showModeUnreadBadge.value = settingsStore.showModeUnreadBadge !== undefined ? settingsStore.showModeUnreadBadge : true
+    showTabUnreadBadge.value = settingsStore.showTabUnreadBadge !== undefined ? settingsStore.showTabUnreadBadge : true
 
     const aiSettings = localStorage.getItem(AI_SETTINGS_KEY)
     if (aiSettings) {
@@ -372,6 +417,22 @@ const handleSendKeyChange = (value) => {
 
 const handleFriendListDensityChange = (value) => {
     settingsStore.setFriendListDensity(value)
+}
+
+const handleNavFlashIntensityChange = (value) => {
+    settingsStore.setNavFlashIntensity(value)
+}
+
+const handleCacheRetentionDaysChange = (value) => {
+    settingsStore.setCacheRetentionDays(value)
+}
+
+const handleShowModeUnreadBadgeChange = (value) => {
+    settingsStore.setShowModeUnreadBadge(value)
+}
+
+const handleShowTabUnreadBadgeChange = (value) => {
+    settingsStore.setShowTabUnreadBadge(value)
 }
 
 const saveServerSettings = () => {
@@ -540,16 +601,61 @@ const handleCheckUpdate = async () => {
                 max-width: 600px;
 
                 h3 {
-                    margin: 0 0 24px;
+                    margin: 0 0 20px;
                     color: var(--text-primary);
+                    font-size: 18px;
+                    font-weight: 600;
                 }
 
                 .el-form-item {
-                    margin-bottom: 24px;
+                    margin-bottom: 18px;
+                    display: block !important;
 
                     :deep(.el-form-item__label) {
+                        display: block;
                         color: var(--text-primary);
                         font-weight: 500;
+                        margin-bottom: 6px;
+                        padding: 0;
+                        line-height: 1.4;
+                        float: none;
+                        width: auto;
+                    }
+
+                    :deep(.el-form-item__content) {
+                        display: block !important;
+                        width: 100%;
+                        margin-left: 0 !important;
+                    }
+                }
+
+                .badge-settings-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+
+                    .badge-setting-row {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 4px;
+                    }
+
+                    .switch-with-label {
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+
+                        .badge-label {
+                            font-size: 14px;
+                            color: var(--text-primary);
+                            font-weight: 500;
+                        }
+                    }
+
+                    .setting-tip-inline {
+                        font-size: 12px;
+                        color: var(--text-secondary);
+                        padding-left: 44px;
                     }
                 }
 
@@ -578,7 +684,9 @@ const handleCheckUpdate = async () => {
                 .setting-tip {
                     font-size: 12px;
                     color: var(--text-secondary);
-                    margin-top: 8px;
+                    margin-top: 6px;
+                    display: block;
+                    line-height: 1.5;
                 }
 
                 .download-dir-row {
@@ -674,7 +782,7 @@ const handleCheckUpdate = async () => {
                 .switch-with-tip {
                     display: flex;
                     flex-direction: column;
-                    gap: 8px;
+                    gap: 6px;
                 }
             }
         }

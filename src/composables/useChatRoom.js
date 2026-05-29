@@ -1,10 +1,14 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { matchByPinyin } from '../utils/pinyin'
 import { loadUsersAvatars } from './useAvatar'
+import { saveMessagesToCache, loadMessagesFromCache, cleanExpiredCache, removeConversationCache, isMessageSeen, markMessagesSeen, clearSeenCache } from './messageCache'
 
 export const chatTotalUnread = ref(0)
-export const sharedUserUnread = ref({})
-export const sharedGroupUnread = ref({})
+// 内网和公网未读完全独立存储
+export const publicUserUnread = ref({})
+export const publicGroupUnread = ref({})
+export const lanUserUnread = ref({})
+export const lanGroupUnread = ref({})
 // 每个会话的最后一条消息信息（用于排序）
 export const sharedLastMsgMap = ref({})
 
@@ -16,17 +20,21 @@ export function refreshTotalUnread() {
     }
     const username = JSON.parse(user).username
     let total = 0
-    for (const [key, count] of Object.entries(sharedUserUnread.value)) {
-        if (localStorage.getItem(`userDND_${username}_${key}`) !== '1') {
-            total += typeof count === 'number' ? count : 0
+    // 汇总四个独立存储（排除免打扰）
+    for (const store of [publicUserUnread.value, lanUserUnread.value]) {
+        for (const [key, count] of Object.entries(store)) {
+            if (localStorage.getItem(`userDND_${username}_${key}`) !== '1') {
+                total += typeof count === 'number' ? count : 0
+            }
         }
     }
-    for (const [key, count] of Object.entries(sharedGroupUnread.value)) {
-        if (localStorage.getItem(`groupDND_${username}_${key}`) !== '1') {
-            total += typeof count === 'number' ? count : 0
+    for (const store of [publicGroupUnread.value, lanGroupUnread.value]) {
+        for (const [key, count] of Object.entries(store)) {
+            if (localStorage.getItem(`groupDND_${username}_${key}`) !== '1') {
+                total += typeof count === 'number' ? count : 0
+            }
         }
     }
-    console.log('[NAV] refreshTotalUnread: sharedUserUnread =', JSON.stringify(sharedUserUnread.value), 'sharedGroupUnread =', JSON.stringify(sharedGroupUnread.value), 'total =', total)
     chatTotalUnread.value = total
 }
 
@@ -81,11 +89,33 @@ export function useChatRoom() {
   const deletedGroupIds = ref([])
   const showRecommended = ref(true)
   const enablePinyinSearch = ref(false)
+  const cacheRetentionDays = ref(30)  // 缓存消息保留天数，默认30天
   const searchResults = ref([])
   const publicGroupsList = ref([])
-  const groupUnread = sharedGroupUnread
-  const userUnread = sharedUserUnread
-  const pendingMessages = ref([])
+
+  // 内网和公网未读各自独立的本地副本（composable 内操作，最后同步到模块级 ref）
+  const _pubUserUnread = ref({ ...publicUserUnread.value })
+  const _lanUserUnread = ref({ ...lanUserUnread.value })
+  const _pubGroupUnread = ref({ ...publicGroupUnread.value })
+  const _lanGroupUnread = ref({ ...lanGroupUnread.value })
+
+  // 根据当前 chatMode 自动路由到正确的存储
+  const groupUnread = computed({
+    get: () => chatMode.value === 'lan' ? _lanGroupUnread.value : _pubGroupUnread.value,
+    set: (val) => chatMode.value === 'lan' ? _lanGroupUnread.value = val : _pubGroupUnread.value = val
+  })
+  const userUnread = computed({
+    get: () => chatMode.value === 'lan' ? _lanUserUnread.value : _pubUserUnread.value,
+    set: (val) => chatMode.value === 'lan' ? _lanUserUnread.value = val : _pubUserUnread.value = val
+  })
+
+  // 同步本地副本到模块级 ref，供 refreshTotalUnread 汇总
+  function syncToGlobalUnread() {
+    publicUserUnread.value = { ..._pubUserUnread.value }
+    publicGroupUnread.value = { ..._pubGroupUnread.value }
+    lanUserUnread.value = { ..._lanUserUnread.value }
+    lanGroupUnread.value = { ..._lanGroupUnread.value }
+  }
   const readPoints = ref({})
   const SEND_TIMEOUT = 10000
 
@@ -183,6 +213,13 @@ export function useChatRoom() {
 
   const onImageLoad = () => {}
 
+  // 从消息数组中提取非空 ID 并批量标记为已读
+  function markLoadedAsSeen(messages) {
+    if (!messages?.length) return
+    const ids = messages.map(m => m.id).filter(id => id != null && !String(id).startsWith('pending_'))
+    if (ids.length) markMessagesSeen(currentUsername.value, ids)
+  }
+
   // 搜索用户（调用服务端 API）
   watch(searchQuery, async (query) => {
     if (!query.trim() || !window.electronAPI) {
@@ -253,6 +290,7 @@ export function useChatRoom() {
       }
       // 消息加载完毕、readPoint 更新后，再清零未读（此时用户已看到消息）
       userUnread.value = { ...userUnread.value, [user.username]: 0 }
+      syncToGlobalUnread()
       refreshTotalUnread()
       updateTaskbarBadge()
     }
@@ -260,8 +298,19 @@ export function useChatRoom() {
 
   const loadChatMessages = async (append = false) => {
     if (!selectedUser.value || !window.electronAPI) return
+    const target = selectedUser.value.username
+
+    // 先尝试从缓存加载（仅首次加载，非 append 模式）
+    if (!append) {
+      const cached = loadMessagesFromCache(currentUsername.value, 'pub_user', target)
+      if (cached) {
+        chatMessages.value = cached.map(normalizeMessage)
+        loadUsersAvatars(cached.map(m => m.from))
+      }
+    }
+
     const result = await window.electronAPI.getChatMessages(
-      currentUsername.value, selectedUser.value.username
+      currentUsername.value, target
     )
     if (result.success) {
       const newMessages = (result.messages || []).map(normalizeMessage)
@@ -273,16 +322,30 @@ export function useChatRoom() {
         chatMessages.value = newMessages
       }
       loadUsersAvatars(newMessages.map(m => m.from))
-      // 更新最后消息
-      updateLastMsgFromMessages(newMessages, selectedUser.value.username)
+      updateLastMsgFromMessages(newMessages, target)
+      // 消息已读，缓存到本地
+      saveMessagesToCache(currentUsername.value, 'pub_user', target, newMessages)
+      // 标记消息 ID 为已读（去重依据）
+      markLoadedAsSeen(newMessages)
     }
   }
 
   const loadLanChatMessages = async (append = false) => {
     if (!selectedUser.value || !lanSettings.value.serverIP) return
+    const target = selectedUser.value.username
+
+    // 缓存优先
+    if (!append) {
+      const cached = loadMessagesFromCache(currentUsername.value, 'lan_user', target)
+      if (cached) {
+        chatMessages.value = cached.map(normalizeMessage)
+        loadUsersAvatars(cached.map(m => m.from))
+      }
+    }
+
     try {
       const response = await fetch(
-        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/messages?from=${encodeURIComponent(currentUsername.value)}&to=${encodeURIComponent(selectedUser.value.username)}`,
+        `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/messages?from=${encodeURIComponent(currentUsername.value)}&to=${encodeURIComponent(target)}`,
         { method: 'GET' }
       )
       const data = await response.json()
@@ -296,7 +359,9 @@ export function useChatRoom() {
           chatMessages.value = newMessages
         }
         loadUsersAvatars(newMessages.map(m => m.from))
-        updateLastMsgFromMessages(newMessages, selectedUser.value.username)
+        updateLastMsgFromMessages(newMessages, target)
+        saveMessagesToCache(currentUsername.value, 'lan_user', target, newMessages)
+        markLoadedAsSeen(newMessages)
       }
     } catch (error) {
       console.error('[Chat] load LAN msgs failed:', error)
@@ -573,6 +638,7 @@ export function useChatRoom() {
       saveReadPoints(username, readPoints.value)
     }
     groupUnread.value = { ...groupUnread.value, [groupId]: 0 }
+    syncToGlobalUnread()
     refreshTotalUnread()
     if (window.electronAPI) {
         window.electronAPI.markGroupRead(username, groupId, lastId || null).catch(() => {})
@@ -589,6 +655,7 @@ export function useChatRoom() {
       saveReadPoints(username, readPoints.value)
     }
     userUnread.value = { ...userUnread.value, [targetUsername]: 0 }
+    syncToGlobalUnread()
     refreshTotalUnread()
     if (window.electronAPI) {
         window.electronAPI.markChatRead(username, targetUsername, lastId || null).catch(() => {})
@@ -599,11 +666,16 @@ export function useChatRoom() {
     const username = currentUsername.value
     if (!username) return 0
     let total = 0
-    for (const [key, count] of Object.entries(userUnread.value)) {
-      if (!getUserDND(key) && typeof count === 'number') total += count
+    // 汇总所有四个独立存储（内网+公网）
+    for (const store of [_pubUserUnread.value, _lanUserUnread.value]) {
+      for (const [key, count] of Object.entries(store)) {
+        if (!getUserDND(key) && typeof count === 'number') total += count
+      }
     }
-    for (const [key, count] of Object.entries(groupUnread.value)) {
-      if (!getGroupDND(key) && typeof count === 'number') total += count
+    for (const store of [_pubGroupUnread.value, _lanGroupUnread.value]) {
+      for (const [key, count] of Object.entries(store)) {
+        if (!getGroupDND(key) && typeof count === 'number') total += count
+      }
     }
     return total
   }
@@ -625,6 +697,7 @@ export function useChatRoom() {
       }
       // 消息加载完后再清零
       groupUnread.value = { ...groupUnread.value, [group.id]: 0 }
+      syncToGlobalUnread()
       refreshTotalUnread()
       updateTaskbarBadge()
     }
@@ -637,6 +710,17 @@ export function useChatRoom() {
       deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
       localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
     }
+    const cacheType = chatMode.value === 'lan' ? 'lan_group' : 'pub_group'
+
+    // 缓存优先
+    if (!append) {
+      const cached = loadMessagesFromCache(currentUsername.value, cacheType, String(groupId))
+      if (cached) {
+        chatMessages.value = cached.map(normalizeMessage)
+        loadUsersAvatars(cached.map(m => m.from))
+      }
+    }
+
     let data
     if (chatMode.value === 'lan') {
       if (!lanSettings.value.serverIP) return
@@ -662,6 +746,8 @@ export function useChatRoom() {
       }
       loadUsersAvatars(newMessages.map(m => m.from))
       updateGroupLastMsgFromMessages(newMessages, selectedGroup.value.id)
+      saveMessagesToCache(currentUsername.value, cacheType, String(groupId), newMessages)
+      markLoadedAsSeen(newMessages)
     }
   }
 
@@ -838,6 +924,9 @@ export function useChatRoom() {
         deletedGroupIds.value.push(groupId)
         localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
       }
+      // 清除该群聊的本地缓存
+      const ct = chatMode.value === 'lan' ? 'lan_group' : 'pub_group'
+      removeConversationCache(currentUsername.value, ct, String(groupId))
       selectedGroup.value = null
       chatMessages.value = []
       if (chatMode.value === 'lan') loadLanGroupsList()
@@ -889,6 +978,8 @@ export function useChatRoom() {
   }
 
   const handleChatModeChange = async (mode) => {
+    // 同步当前模式未读到全局存储，确保导航栏角标不会丢失数据
+    syncToGlobalUnread()
     chatMessages.value = []
     selectedUser.value = null
     selectedGroup.value = null
@@ -1001,6 +1092,7 @@ export function useChatRoom() {
     } catch (e) {
       console.error('[Chat] pollUnreadCounts error:', e.message || e)
     }
+    syncToGlobalUnread()
     refreshTotalUnread()
     updateTaskbarBadge()
   }
@@ -1098,12 +1190,20 @@ export function useChatRoom() {
     const sender = data.conversation?.target || data.message?.sender || data.message?.from
     if (!sender) return
 
+    // 基于消息唯一 ID 去重：已缓存过的消息不触发任何提醒
+    const msgId = data.message?.id
+    if (msgId && isMessageSeen(username, msgId)) return
+
     // 如果正在查看该用户的聊天，不增加未读
     if (selectedUser.value && selectedUser.value.username === sender) return
 
-    // 增加未读计数
-    const current = userUnread.value[sender] || 0
-    userUnread.value = { ...userUnread.value, [sender]: current + 1 }
+    // WebSocket 消息总是公网来源，写入公网存储
+    const current = _pubUserUnread.value[sender] || 0
+    _pubUserUnread.value = { ..._pubUserUnread.value, [sender]: current + 1 }
+    // 如果当前在公网模式，同步到 userUnread（供界面显示）
+    if (chatMode.value === 'public') {
+      userUnread.value = { ...userUnread.value, [sender]: (_pubUserUnread.value[sender] || 0) }
+    }
 
     // 更新最后消息
     const msg = data.message || {}
@@ -1112,6 +1212,7 @@ export function useChatRoom() {
       ['user:' + sender]: { message: msg.message || '', time: msg.timestamp || Date.now(), from: sender }
     }
 
+    syncToGlobalUnread()
     refreshTotalUnread()
     updateTaskbarBadge()
 
@@ -1127,6 +1228,10 @@ export function useChatRoom() {
     const groupId = data.conversation?.target || data.message?.groupId
     if (!groupId) return
 
+    // 基于消息唯一 ID 去重：已缓存过的消息不触发任何提醒
+    const msgId = data.message?.id
+    if (msgId && isMessageSeen(username, msgId)) return
+
     // 如果正在查看该群聊，不增加未读
     if (selectedGroup.value && String(selectedGroup.value.id) === String(groupId)) return
 
@@ -1134,8 +1239,12 @@ export function useChatRoom() {
     const msgFrom = data.message?.from || data.message?.sender
     if (msgFrom === username) return
 
-    const current = groupUnread.value[groupId] || 0
-    groupUnread.value = { ...groupUnread.value, [groupId]: current + 1 }
+    // WebSocket 消息总是公网来源，写入公网存储
+    const current = _pubGroupUnread.value[groupId] || 0
+    _pubGroupUnread.value = { ..._pubGroupUnread.value, [groupId]: current + 1 }
+    if (chatMode.value === 'public') {
+      groupUnread.value = { ...groupUnread.value, [groupId]: (_pubGroupUnread.value[groupId] || 0) }
+    }
 
     // 更新最后消息
     const msg = data.message || {}
@@ -1144,6 +1253,7 @@ export function useChatRoom() {
       ['group:' + groupId]: { message: msg.message || '', time: msg.timestamp || Date.now(), from: msgFrom }
     }
 
+    syncToGlobalUnread()
     refreshTotalUnread()
     updateTaskbarBadge()
   }
@@ -1205,14 +1315,28 @@ export function useChatRoom() {
   // 调试：监听 userUnread 的所有变化
   onMounted(() => {
     reloadLanSettings()
+    // 加载缓存保留天数设置
+    const savedCacheDays = localStorage.getItem('cacheRetentionDays')
+    if (savedCacheDays) {
+      cacheRetentionDays.value = parseInt(savedCacheDays) || 30
+    }
+    // 启动时清理过期缓存
+    cleanExpiredCache(currentUsername.value, cacheRetentionDays.value)
+
+    // 监听缓存保留天数变化，立即清理
+    watch(cacheRetentionDays, (newDays) => {
+      localStorage.setItem('cacheRetentionDays', String(newDays))
+      cleanExpiredCache(currentUsername.value, newDays)
+    })
+
     // 恢复用户偏好设置（群聊隐藏、DND等）
     const savedDeletedGroups = localStorage.getItem('deletedGroupIds')
     if (savedDeletedGroups) {
       deletedGroupIds.value = JSON.parse(savedDeletedGroups)
     }
-    // 公网好友/聊天数据不从本地缓存恢复，每次启动从服务端重新获取
-    // readPoints / lastMsgMap 在登录时已被 App.vue 清理
-    readPoints.value = {}
+    // 从 localStorage 恢复已读状态，防止重登后已读消息被重置为未读
+    const savedReadPoints = loadReadPoints(currentUsername.value)
+    readPoints.value = Object.keys(savedReadPoints).length > 0 ? savedReadPoints : {}
     loadFriendsList()
     loadAllUsers()
     loadFriendRequests()
@@ -1225,6 +1349,7 @@ export function useChatRoom() {
 
   onUnmounted(() => {
     // 公网聊天数据不再持久化到本地，退出时仅断开连接和停止轮询
+    // 注意：不清除 seen cache，下次登录仍可使用
     teardownWebSocket()
     stopMessagePolling()
     stopUnreadPolling()
@@ -1252,6 +1377,10 @@ export function useChatRoom() {
     createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
     loadPublicGroupsList, groupUnread, getGroupDND, clearGroupUnread,
     userUnread, getUserDND, clearUserUnread, getTotalUnread,
-    sharedLastMsgMap
+    sharedLastMsgMap,
+    // 暴露独立的内网/公网未读存储（供 ChatRoom.vue 模式角标使用）
+    _pubUserUnread, _lanUserUnread, _pubGroupUnread, _lanGroupUnread,
+    // 缓存保留天数
+    cacheRetentionDays
   }
 }

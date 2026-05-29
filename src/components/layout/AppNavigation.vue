@@ -2,30 +2,18 @@
   <nav class="app-navigation">
     <!-- 左侧导航按钮 -->
     <div class="nav-left">
-      <template v-for="item in navItems" :key="item.key">
-        <el-badge
-          v-if="item.key === 'chat'"
-          :value="totalUnread"
-          :hidden="totalUnread === 0 || currentView === 'chat'"
-          :max="99"
-        >
-          <el-button
-            :class="['nav-btn', { active: currentView === item.key }]"
-            @click="handleNavigate(item.key)"
-          >
-            <el-icon><component :is="item.icon" /></el-icon>
-            <span>{{ item.label }}</span>
-          </el-button>
-        </el-badge>
-        <el-button
-          v-else
-          :class="['nav-btn', { active: currentView === item.key }]"
-          @click="handleNavigate(item.key)"
-        >
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
-        </el-button>
-      </template>
+      <el-button
+        v-for="item in navItems"
+        :key="item.key"
+        :class="['nav-btn', {
+          active: currentView === item.key,
+          'has-unread-flash': item.key === 'chat' && flashClass && currentView !== 'chat'
+        }]"
+        @click="handleNavigate(item.key)"
+      >
+        <el-icon><component :is="item.icon" /></el-icon>
+        <span>{{ item.label }}</span>
+      </el-button>
     </div>
 
     <!-- 右侧用户头像按钮 -->
@@ -43,6 +31,7 @@
 import { computed, ref, onMounted, watch } from 'vue'
 import { ChatDotRound, Files, Setting, MagicStick, User } from '@element-plus/icons-vue'
 import { useI18n } from '../../composables/useI18n'
+import { useSettingsStore } from '../../stores/settings'
 import { getUserAvatar, getAvatarUrl } from '../../composables/useAvatar'
 import { chatTotalUnread, refreshTotalUnread } from '../../composables/useChatRoom'
 
@@ -59,8 +48,15 @@ const props = defineProps({
 
 const emit = defineEmits(['navigate', 'toggle-sidebar'])
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
 
-const totalUnread = ref(0)
+const hasUnread = ref(false)
+
+// 根据设置中的闪烁程度返回对应的 CSS 类名
+const flashClass = computed(() => {
+  if (!hasUnread.value) return ''
+  return 'flash-' + settingsStore.navFlashIntensity
+})
 
 const navItems = computed(() => [
   { key: 'ai', icon: 'MagicStick', label: t('navigation.ai') },
@@ -88,10 +84,8 @@ const userInitial = computed(() => {
 
 onMounted(() => {
   refreshTotalUnread()
-  // 同步共享的响应式 ref，零延迟
   watch(chatTotalUnread, (val) => {
-    console.log('[NAV] chatTotalUnread changed:', val, 'currentView:', props.currentView)
-    totalUnread.value = val
+    hasUnread.value = val > 0
   }, { immediate: true })
 })
 </script>
@@ -135,26 +129,56 @@ onMounted(() => {
   font-size: 14px;
   cursor: pointer;
   transition: all 0.3s ease;
-  
+
   &:hover {
     background: rgba(52, 152, 219, 0.1);
     color: var(--accent-color);
   }
-  
+
   &.active {
     background: var(--accent-color);
     color: white;
   }
 }
 
+// 未读闪烁动画
+@keyframes navFlashLow {
+  0%, 100% { color: var(--text-secondary); }
+  50% { color: var(--accent-color); }
+}
+
+@keyframes navFlashMedium {
+  0%, 68% { color: var(--text-secondary); }
+  34% { color: var(--accent-color); }
+}
+
+@keyframes navFlashHigh {
+  0%, 52% { color: var(--text-secondary); }
+  26% { color: var(--accent-color); }
+}
+
+.nav-btn.has-unread-flash {
+  &.flash-low {
+    animation: navFlashLow 3s ease-in-out infinite;
+  }
+
+  &.flash-medium {
+    animation: navFlashMedium 1.8s ease-in-out infinite;
+  }
+
+  &.flash-high {
+    animation: navFlashHigh 1s ease-in-out infinite;
+  }
+}
+
 .user-avatar {
   cursor: pointer;
   transition: transform 0.2s ease;
-  
+
   &:hover {
     transform: scale(1.05);
   }
-  
+
   &:active {
     transform: scale(0.95);
   }

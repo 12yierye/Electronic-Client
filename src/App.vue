@@ -61,6 +61,7 @@
 import { ref, computed, onMounted, provide } from 'vue'
 import { useSettingsStore } from './stores/settings'
 import { useI18n } from './composables/useI18n'
+import { clearSeenCache } from './composables/messageCache'
 import AppNavigation from './components/layout/AppNavigation.vue'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import AIInputFooter from './components/common/AIInputFooter.vue'
@@ -80,19 +81,18 @@ const isLoggedIn = ref(false)
 const loginRef = ref(null)
 
 // 清除公网好友/聊天相关缓存（不影响 LAN 数据和用户偏好设置）
-// 确保每次进入应用时从服务端获取最新好友列表和消息状态
+// 确保每次进入应用时从服务端获取最新好友列表
+// readPoints 已读状态跨会话持久化，不再清除
 const clearChatRelatedCache = () => {
   const keysToRemove = []
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)
     if (!key) continue
-    // 仅清除纯公网聊天数据缓存：
-    // chat_readPoints_*  已读消息追踪（每次启动从服务端重新计算）
-    // chat_lastMsgMap_*  最后消息时间映射（每次启动从服务端重新拉取）
+    // 仅清除最后消息时间映射缓存（每次启动从服务端重新拉取）
+    // chat_readPoints_* 不再清除 — 已读状态需要跨会话保持，防止重登后已读消息被重置为未读
     // 注意：不删除 userDND_* / groupDND_* / groupNickname_* / deletedGroupIds
     //       这些是用户偏好设置，LAN 和公网共用，不应被清除
     if (
-      key.startsWith('chat_readPoints_') ||
       key.startsWith('chat_lastMsgMap_')
     ) {
       keysToRemove.push(key)
@@ -133,6 +133,9 @@ const handleNavigate = (view) => {
 
 // 处理退出登录
 const handleLogout = () => {
+  // 清除当前用户的已读消息 ID 缓存
+  const username = userInfo.value?.username
+  if (username) clearSeenCache(username)
   if (window.electronAPI) {
     window.electronAPI.logout()
   }
