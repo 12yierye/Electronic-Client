@@ -1166,16 +1166,14 @@ export function useChatRoom() {
   // 调试：监听 userUnread 的所有变化
   onMounted(() => {
     reloadLanSettings()
+    // 恢复用户偏好设置（群聊隐藏、DND等）
     const savedDeletedGroups = localStorage.getItem('deletedGroupIds')
     if (savedDeletedGroups) {
       deletedGroupIds.value = JSON.parse(savedDeletedGroups)
     }
-    readPoints.value = loadReadPoints(currentUsername.value)
-    // 加载上次保存的最后消息时间
-    try {
-      const saved = localStorage.getItem('chat_lastMsgMap_' + currentUsername.value)
-      if (saved) sharedLastMsgMap.value = JSON.parse(saved)
-    } catch (_) {}
+    // 公网好友/聊天数据不从本地缓存恢复，每次启动从服务端重新获取
+    // readPoints / lastMsgMap 在登录时已被 App.vue 清理
+    readPoints.value = {}
     loadFriendsList()
     loadAllUsers()
     loadFriendRequests()
@@ -1187,8 +1185,7 @@ export function useChatRoom() {
   })
 
   onUnmounted(() => {
-    // 保存最后消息时间
-    localStorage.setItem('chat_lastMsgMap_' + currentUsername.value, JSON.stringify(sharedLastMsgMap.value))
+    // 公网聊天数据不再持久化到本地，退出时仅断开连接和停止轮询
     teardownWebSocket()
     stopMessagePolling()
     stopUnreadPolling()

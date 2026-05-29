@@ -79,8 +79,35 @@ const userInfo = ref(null)
 const isLoggedIn = ref(false)
 const loginRef = ref(null)
 
+// 清除公网好友/聊天相关缓存（不影响 LAN 数据和用户偏好设置）
+// 确保每次进入应用时从服务端获取最新好友列表和消息状态
+const clearChatRelatedCache = () => {
+  const keysToRemove = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (!key) continue
+    // 仅清除纯公网聊天数据缓存：
+    // chat_readPoints_*  已读消息追踪（每次启动从服务端重新计算）
+    // chat_lastMsgMap_*  最后消息时间映射（每次启动从服务端重新拉取）
+    // 注意：不删除 userDND_* / groupDND_* / groupNickname_* / deletedGroupIds
+    //       这些是用户偏好设置，LAN 和公网共用，不应被清除
+    if (
+      key.startsWith('chat_readPoints_') ||
+      key.startsWith('chat_lastMsgMap_')
+    ) {
+      keysToRemove.push(key)
+    }
+  }
+  keysToRemove.forEach(key => localStorage.removeItem(key))
+  if (keysToRemove.length > 0) {
+    console.log('[App] cleared chat cache:', keysToRemove.length, 'keys')
+  }
+}
+
 // 登录成功处理
 const handleLoginSuccess = (user) => {
+  // 进入应用前先清理好友/聊天相关缓存，确保从服务端获取最新数据
+  clearChatRelatedCache()
   userInfo.value = user
   isLoggedIn.value = true
 }

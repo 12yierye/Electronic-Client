@@ -6,7 +6,7 @@ import { DOC_SERVER, setMainWindow } from './config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-const isDev = true
+const isDev = false
 
 Menu.setApplicationMenu(null)
 
