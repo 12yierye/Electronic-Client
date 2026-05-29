@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
         build: {
           outDir: 'dist-electron',
           rollupOptions: {
-            external: ['electron']
+            external: ['electron', 'axios', 'ws']
           }
         }
       }
@@ -76,7 +76,22 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      emptyOutDir: true
+      emptyOutDir: true,
+      chunkSizeWarningLimit: 1000,
+      target: 'esnext',
+      minify: 'esbuild',
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('marked')) return 'marked'
+            }
+          }
+        }
+      }
+    },
+    esbuild: {
+      drop: mode === 'electron' ? ['console', 'debugger'] : []
     }
   }
 })

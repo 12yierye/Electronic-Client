@@ -119,7 +119,7 @@ function getCurrentUsername() {
   return ''
 }
 
-const userAvatar = ref(getUserAvatar(getCurrentUsername()))
+const userAvatar = computed(() => getUserAvatar(getCurrentUsername()))
 const aiAvatar = ref('')
 
 // 当前是否有 AI 消息正在流式输出

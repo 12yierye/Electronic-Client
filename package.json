@@ -65,6 +65,7 @@
     ],
     "extraMetadata": {
       "main": "dist-electron/index.js"
-    }
+    },
+    "icon": "public/main256.ico"
   }
 }

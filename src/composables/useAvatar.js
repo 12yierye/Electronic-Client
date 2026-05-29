@@ -2,6 +2,7 @@ import { ref } from 'vue'
 
 const cache = ref(new Map())
 const pendingFetches = new Set()
+const avatarVersion = ref(Date.now())
 
 function getServerBaseUrl() {
   try {
@@ -17,14 +18,18 @@ function getServerBaseUrl() {
 }
 
 export function getAvatarUrl(url) {
+  // 读取 avatarVersion 建立 Vue 响应式依赖，版本变化时自动重新计算
+  const version = avatarVersion.value
   if (!url) return ''
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url
-  if (url.startsWith('/')) return `${getServerBaseUrl()}${url}`
+  if (url.startsWith('/')) return `${getServerBaseUrl()}${url}?v=${version}`
   return url
 }
 
 export function getUserAvatar(username, serverAvatarUrl) {
   if (!username) return ''
+  // 读取版本号建立 Vue 响应式依赖，确保版本变化时模板自动重新求值
+  const _version = avatarVersion.value
   const map = cache.value
   if (map.has(username)) return map.get(username)
 
@@ -81,4 +86,5 @@ export function loadUsersAvatars(usernames) {
 export function clearAvatarCache() {
   cache.value = new Map()
   pendingFetches.clear()
+  avatarVersion.value = Date.now()
 }

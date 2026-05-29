@@ -32,7 +32,7 @@ export function createWindow() {
     minWidth: 850,
     minHeight: 500,
     // frame: false,
-    icon: join(__dirname, '../res/index/Electronic Client.ico'),
+    icon: join(__dirname, '../public/main48.ico'),
     webPreferences: {
       preload: preloadPath,
       nodeIntegration: false,
