@@ -2,7 +2,7 @@
   <div class="chat-room-view">
     <el-container>
       <!-- 左侧好友列表 -->
-      <el-aside width="280px">
+      <el-aside width="280px" :class="['chat-aside', settingsStore.friendListDensity]">
         <div class="chat-tabs">
           <!-- 聊天模式切换 -->
           <div class="mode-switch-row">
@@ -303,7 +303,8 @@
               :placeholder="t('chatRoom.enterMessage')"
               :disabled="!selectedUser && !selectedGroup"
               :autosize="{ minRows: 1, maxRows: 5 }"
-              @keydown.enter.exact="handleSendMessage"
+              @keydown.enter.exact="onEnterKey"
+              @keydown.ctrl.enter="onCtrlEnterKey"
             />
             <el-button 
               type="primary" 
@@ -384,10 +385,12 @@ import { computed, ref, watch, nextTick, onDeactivated } from 'vue'
 import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus, Document } from '@element-plus/icons-vue'
 import { useChatRoom, sharedLastMsgMap } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
+import { useSettingsStore } from '../../stores/settings'
 import { getUserAvatar } from '../../composables/useAvatar'
 import GroupMemberPanel from './GroupMemberPanel.vue'
 
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
 
 const showChatSettingsPanel = ref(false)
 const showUsernameInPanel = ref(true)
@@ -430,16 +433,44 @@ const chatSettingsTitle = computed(() => {
   return ''
 })
 
+// 发送消息快捷键处理
+const onEnterKey = (event) => {
+  if (settingsStore.sendKey === 'Enter') {
+    handleSendMessage(event)
+  }
+  // Ctrl+Enter 模式下 Enter 换行保持默认行为
+}
+
+const onCtrlEnterKey = (event) => {
+  if (settingsStore.sendKey === 'Ctrl+Enter') {
+    handleSendMessage(event)
+  }
+}
+
 const hasNonDNDFriendUnread = computed(() => {
+  // 根据当前模式过滤：公网模式只看公网好友，内网模式只看内网用户
+  const modeUserSet = new Set()
+  if (chatMode.value === 'public') {
+    friendsList.value.forEach(f => modeUserSet.add(f.username))
+  } else {
+    lanFriendsList.value.forEach(f => modeUserSet.add(f.username))
+  }
   for (const [key, count] of Object.entries(userUnread.value)) {
-    if (count > 0 && !getUserDND(key)) return true
+    if (count > 0 && !getUserDND(key) && modeUserSet.has(key)) return true
   }
   return false
 })
 
 const hasNonDNDGroupUnread = computed(() => {
+  // 根据当前模式过滤：只看当前模式的群未读
+  const modeGroupSet = new Set()
+  if (chatMode.value === 'public') {
+    filteredPublicGroupsList.value.forEach(g => modeGroupSet.add(String(g.id)))
+  } else {
+    filteredLanGroupsList.value.forEach(g => modeGroupSet.add(String(g.id)))
+  }
   for (const [key, count] of Object.entries(groupUnread.value)) {
-    if (count > 0 && !getGroupDND(key)) return true
+    if (count > 0 && !getGroupDND(key) && modeGroupSet.has(String(key))) return true
   }
   return false
 })
@@ -596,10 +627,30 @@ onDeactivated(() => {
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+
+    &.compact {
+      .user-item, .request-item {
+        padding: 6px 12px;
+        gap: 8px;
+
+        :deep(.el-avatar) {
+          width: 32px !important;
+          height: 32px !important;
+          font-size: 14px;
+        }
+      }
+    }
+
+    &.relaxed {
+      .user-item, .request-item {
+        padding: 12px;
+        gap: 12px;
+      }
+    }
   }
   
   .chat-tabs {
-      padding: 15px;
+      padding: 12px;
       border-bottom: 1px solid var(--border-color);
 
       .mode-switch-row {
@@ -615,7 +666,7 @@ onDeactivated(() => {
   }
   
   .search-box {
-      padding: 10px 15px;
+      padding: 8px 12px;
 
       .search-row {
           display: flex;
@@ -635,7 +686,7 @@ onDeactivated(() => {
   .user-list {
     flex: 1;
     overflow-y: auto;
-    padding: 10px;
+    padding: 0;
 
     .category-header {
       font-size: 11px;
@@ -643,8 +694,8 @@ onDeactivated(() => {
       color: var(--text-secondary);
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      padding: 8px 4px 4px;
-      margin-bottom: 4px;
+      padding: 8px 12px 4px;
+      margin-bottom: 0;
     }
     
     .user-item, .request-item {
@@ -652,16 +703,25 @@ onDeactivated(() => {
       align-items: center;
       gap: 12px;
       padding: 12px;
-      border-radius: 8px;
+      border-radius: 0;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.15s;
+      margin: 0;
+      border-bottom: 1px solid var(--border-color);
+      
+      &:last-child {
+        border-bottom: none;
+      }
       
       &:hover {
-        background: rgba(52, 152, 219, 0.1);
+        background: rgba(52, 152, 219, 0.08);
       }
       
       &.active {
-        background: rgba(52, 152, 219, 0.2);
+        background: rgba(52, 152, 219, 0.15);
+        color: var(--accent-color);
+        border-left: 3px solid var(--accent-color);
+        padding-left: 9px;
       }
 
       .el-badge {

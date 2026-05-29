@@ -133,7 +133,14 @@ const messages = {
       alreadyLatest: '已是最新版本',
       updateFound: '发现新版本',
       updateFailed: '检查更新失败，请检查网络连接',
-      noReleases: '仓库暂无发布版本'
+      noReleases: '仓库暂无发布版本',
+      chatTitle: '聊天设置',
+      sendKey: '发送消息快捷键',
+      sendKeyTip: 'Enter：按回车直接发送，Ctrl+Enter 换行。Ctrl+Enter：按回车换行，Ctrl+Enter 发送',
+      friendListDensity: '好友列表样式',
+      friendListDensityTip: '紧凑模式列表项间距更小、头像更小，适合显示更多好友',
+      compact: '紧凑',
+      relaxed: '放松'
     },
     aiChat: {
       personalAssistant: '您的个人AI助手',
@@ -345,7 +352,14 @@ const messages = {
       alreadyLatest: 'Already up to date',
       updateFound: 'New version found',
       updateFailed: 'Failed to check for updates, please check your network',
-      noReleases: 'No releases found in repository'
+      noReleases: 'No releases found in repository',
+      chatTitle: 'Chat Settings',
+      sendKey: 'Send Message Shortcut',
+      sendKeyTip: 'Enter: Press Enter to send, Ctrl+Enter for new line. Ctrl+Enter: Press Enter for new line, Ctrl+Enter to send',
+      friendListDensity: 'Friend List Style',
+      friendListDensityTip: 'Compact mode has smaller spacing and avatars, suitable for showing more friends',
+      compact: 'Compact',
+      relaxed: 'Relaxed'
     },
     aiChat: {
       personalAssistant: 'Your personal AI assistant',
@@ -557,7 +571,14 @@ const messages = {
       alreadyLatest: '最新バージョンです',
       updateFound: '新しいバージョンが見つかりました',
       updateFailed: '更新の確認に失敗しました。ネットワークを確認してください',
-      noReleases: 'リポジトリにリリースがありません'
+      noReleases: 'リポジトリにリリースがありません',
+      chatTitle: 'チャット設定',
+      sendKey: '送信ショートカット',
+      sendKeyTip: 'Enter：Enterで送信、Ctrl+Enterで改行。Ctrl+Enter：Enterで改行、Ctrl+Enterで送信',
+      friendListDensity: '友達リストのスタイル',
+      friendListDensityTip: 'コンパクトモードは間隔が小さく、より多くの友達を表示できます',
+      compact: 'コンパクト',
+      relaxed: 'リラックス'
     },
     aiChat: {
       personalAssistant: 'あなたの個人AIアシスタント',

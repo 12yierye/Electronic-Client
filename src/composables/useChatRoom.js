@@ -784,7 +784,9 @@ export function useChatRoom() {
     }
   }
 
-  const handleSendMessage = () => {
+  const handleSendMessage = (event) => {
+    // 阻止 Enter 默认换行行为
+    if (event) event.preventDefault()
     const msg = inputMessage.value.trim()
     if (!msg) return
     if (selectedGroup.value) sendGroupMessage(msg, 'text')
@@ -793,18 +795,55 @@ export function useChatRoom() {
     inputMessage.value = ''
   }
 
-  const handleDeleteGroup = () => {
+  const handleDeleteGroup = async () => {
     if (!selectedGroup.value) return
     const groupId = selectedGroup.value.id
-    if (!deletedGroupIds.value.includes(groupId)) {
-      deletedGroupIds.value.push(groupId)
-      localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
+    // 调用服务端 API 真正退出群聊
+    let left = false
+    if (chatMode.value === 'lan') {
+      if (!lanSettings.value.serverIP) {
+        ElMessage.error('请先配置内网服务器地址')
+        return
+      }
+      try {
+        const response = await fetch(
+          `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/groups/leave`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groupId, username: currentUsername.value })
+          }
+        )
+        const data = await response.json()
+        if (data.success) left = true
+        else ElMessage.error(data.message || '退出失败')
+      } catch (error) {
+        console.error('[Chat] leave group failed:', error)
+        ElMessage.error('退出群聊失败')
+        return
+      }
+    } else if (window.electronAPI?.leaveGroup) {
+      try {
+        const result = await window.electronAPI.leaveGroup(groupId, currentUsername.value)
+        if (result.success) left = true
+        else ElMessage.error(result.message || '退出失败')
+      } catch (error) {
+        console.error('[Chat] leave group failed:', error)
+        ElMessage.error('退出群聊失败')
+        return
+      }
     }
-    selectedGroup.value = null
-    chatMessages.value = []
-    if (chatMode.value === 'lan') loadLanGroupsList()
-    else loadPublicGroupsList()
-    ElMessage.success('群聊已隐藏')
+    if (left) {
+      if (!deletedGroupIds.value.includes(groupId)) {
+        deletedGroupIds.value.push(groupId)
+        localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
+      }
+      selectedGroup.value = null
+      chatMessages.value = []
+      if (chatMode.value === 'lan') loadLanGroupsList()
+      else loadPublicGroupsList()
+      ElMessage.success('已退出群聊')
+    }
   }
 
   const handleDisbandGroup = async () => {

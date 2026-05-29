@@ -145,6 +145,11 @@ export function registerUserIpc() {
         catch (error) { return { success: false, message: error.message } }
     })
 
+    ipcMain.handle('leave-group', async (event, groupId, username) => {
+        try { return (await axios.post(`${getAPIBase()}/api/groups/leave`, { groupId, username })).data }
+        catch (error) { return { success: false, message: error.message } }
+    })
+
     ipcMain.handle('get-unread-counts', async (event, username, readPoints) => {
         try { 
             const res = (await axios.post(`${getAPIBase()}/chat/unread-counts`, { username, readPoints })).data

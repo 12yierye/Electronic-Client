@@ -72,6 +72,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getGroupMessages: (groupId) => ipcRenderer.invoke('get-group-messages', groupId),
   sendGroupMessage: (groupId, from, message, type) => ipcRenderer.invoke('send-group-message', groupId, from, message, type),
   joinGroup: (groupId, username) => ipcRenderer.invoke('join-group', groupId, username),
+  leaveGroup: (groupId, username) => ipcRenderer.invoke('leave-group', groupId, username),
 
   // 未读消息
   getUnreadCounts: (username, readPoints) => ipcRenderer.invoke('get-unread-counts', username, readPoints),

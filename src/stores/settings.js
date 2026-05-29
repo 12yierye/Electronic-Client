@@ -5,6 +5,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const theme = ref('dark')   // 用户偏好: 'dark' | 'light' | 'auto'
   const language = ref('zh-CN')
   const useSystemBrowser = ref(false)  // 是否使用系统默认浏览器打开链接
+  const sendKey = ref('Enter')        // 发送消息快捷键: 'Enter' | 'Ctrl+Enter'
+  const friendListDensity = ref('compact')  // 好友列表密度: 'compact' | 'relaxed'
 
   // 系统主题监听
   let systemThemeMedia = null
@@ -28,6 +30,8 @@ export const useSettingsStore = defineStore('settings', () => {
       theme.value = settings.theme || 'dark'
       language.value = settings.language || 'zh-CN'
       useSystemBrowser.value = settings.useSystemBrowser || false
+      sendKey.value = settings.sendKey || 'Enter'
+      friendListDensity.value = settings.friendListDensity || 'compact'
     }
     applyTheme()
   }
@@ -37,7 +41,9 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem('appSettings', JSON.stringify({
       theme: theme.value,
       language: language.value,
-      useSystemBrowser: useSystemBrowser.value
+      useSystemBrowser: useSystemBrowser.value,
+      sendKey: sendKey.value,
+      friendListDensity: friendListDensity.value
     }))
   }
 
@@ -82,16 +88,30 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSettings()
   }
 
+  const setSendKey = (value) => {
+    sendKey.value = value
+    saveSettings()
+  }
+
+  const setFriendListDensity = (value) => {
+    friendListDensity.value = value
+    saveSettings()
+  }
+
   return {
     theme,
     language,
     useSystemBrowser,
+    sendKey,
+    friendListDensity,
     effectiveTheme,
     loadSettings,
     saveSettings,
     applyTheme,
     toggleTheme,
     toggleLanguage,
-    toggleUseSystemBrowser
+    toggleUseSystemBrowser,
+    setSendKey,
+    setFriendListDensity
   }
 })

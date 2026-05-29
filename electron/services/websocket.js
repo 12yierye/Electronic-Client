@@ -79,7 +79,7 @@ function handleWsMessage(msg) {
       mw.webContents.send('ws:new_message', msg)
       // 如果窗口未聚焦，发送系统通知
       if (!mw.isFocused()) {
-        showNotification(msg.conversation.target, msg.message.message)
+        showNotification(msg.conversation?.target || '新消息', msg.message?.message || '')
       }
       // 更新任务栏角标
       updateBadge()
@@ -88,9 +88,11 @@ function handleWsMessage(msg) {
     case 'new_group_message': {
       mw.webContents.send('ws:new_group_message', msg)
       if (!mw.isFocused()) {
+        const groupName = msg.conversation?.groupName || msg.message?.groupName || '群聊'
+        const sender = msg.message?.from || '群成员'
         showNotification(
-          `${msg.conversation.groupName || '群聊'} - ${msg.message.from}`,
-          msg.message.message
+          `[${groupName}] ${sender}`,
+          msg.message?.message || ''
         )
       }
       updateBadge()

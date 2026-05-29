@@ -68,6 +68,25 @@
           </el-form-item>
         </div>
 
+        <!-- 聊天设置 -->
+        <div v-else-if="activeNav === 'chat'" class="settings-section">
+          <h3>{{ t('settings.chatTitle') }}</h3>
+          <el-form-item :label="t('settings.sendKey') + '：'">
+            <el-radio-group v-model="sendKey" @change="handleSendKeyChange">
+              <el-radio-button value="Enter">Enter</el-radio-button>
+              <el-radio-button value="Ctrl+Enter">Ctrl + Enter</el-radio-button>
+            </el-radio-group>
+            <div class="setting-tip">{{ t('settings.sendKeyTip') }}</div>
+          </el-form-item>
+          <el-form-item :label="t('settings.friendListDensity') + '：'">
+            <el-radio-group v-model="friendListDensity" @change="handleFriendListDensityChange">
+              <el-radio-button value="compact">{{ t('settings.compact') }}</el-radio-button>
+              <el-radio-button value="relaxed">{{ t('settings.relaxed') }}</el-radio-button>
+            </el-radio-group>
+            <div class="setting-tip">{{ t('settings.friendListDensityTip') }}</div>
+          </el-form-item>
+        </div>
+
         <!-- AI 模型 -->
         <div v-else-if="activeNav === 'ai'" class="settings-section">
           <h3>{{ t('settings.aiModelTitle') }}</h3>
@@ -212,6 +231,7 @@ const activeNav = ref('profile')
 const navItems = [
     { key: 'profile', label: '用户资料', icon: User },
     { key: 'appearance', label: '外观', icon: Setting },
+    { key: 'chat', label: '聊天设置', icon: Message },
     { key: 'ai', label: 'AI 模型', icon: MagicStick },
     { key: 'server', label: '服务端', icon: Link },
     { key: 'friendSearch', label: '好友搜索', icon: Search },
@@ -227,6 +247,8 @@ const serverPort = ref('3000')
 const testingServer = ref(false)
 const enablePinyinSearch = ref(false)
 const useSystemBrowser = ref(false)
+const sendKey = ref('Enter')
+const friendListDensity = ref('compact')
 const checkingUpdate = ref(false)
 const updateMessage = ref('')
 const updateMessageType = ref('')
@@ -298,6 +320,8 @@ onMounted(() => {
     theme.value = settingsStore.theme
     language.value = settingsStore.language || 'zh-CN'
     useSystemBrowser.value = settingsStore.useSystemBrowser
+    sendKey.value = settingsStore.sendKey || 'Enter'
+    friendListDensity.value = settingsStore.friendListDensity || 'compact'
 
     const aiSettings = localStorage.getItem(AI_SETTINGS_KEY)
     if (aiSettings) {
@@ -340,6 +364,14 @@ const handleLanguageChange = (value) => {
 
 const handleUseSystemBrowserChange = (value) => {
     settingsStore.toggleUseSystemBrowser(value)
+}
+
+const handleSendKeyChange = (value) => {
+    settingsStore.setSendKey(value)
+}
+
+const handleFriendListDensityChange = (value) => {
+    settingsStore.setFriendListDensity(value)
 }
 
 const saveServerSettings = () => {
