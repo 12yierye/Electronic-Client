@@ -2,7 +2,10 @@ import { app, ipcMain, dialog } from 'electron'
 import { join, parse } from 'node:path'
 import axios from 'axios'
 import fs from 'fs'
+import crypto from 'crypto'
 import { getAPIBase, getDownloadDir, setDownloadDir } from '../config.js'
+
+const CHUNK_SIZE = 2 * 1024 * 1024
 
 function getNextAvailableName(dir, name) {
     const parsed = parse(name)
@@ -174,5 +177,99 @@ export function registerFileIpc() {
         const name = parse(filePath).base
         const ext = parse(filePath).ext.toLowerCase()
         return { success: true, data, name, ext }
+    })
+
+    ipcMain.handle('file:uploadChunked', async (event, { filePath, fileName, fileSize, fileData }) => {
+        try {
+            let fileBuffer
+            if (filePath) {
+                fileBuffer = fs.readFileSync(filePath)
+            } else if (fileData) {
+                fileBuffer = Buffer.from(fileData)
+            } else {
+                return { success: false, message: '未提供文件数据' }
+            }
+
+            const md5 = crypto.createHash('md5').update(fileBuffer).digest('hex')
+            const totalChunks = Math.ceil(fileBuffer.length / CHUNK_SIZE)
+
+            const uploadedRes = await axios.get(`${getAPIBase()}/api/file/chunks?md5=${md5}`)
+            const uploadedIndexes = uploadedRes.data?.chunks || []
+
+            for (let i = 0; i < totalChunks; i++) {
+                if (uploadedIndexes.includes(i)) {
+                    try {
+                        event.sender.send('file:uploadProgress', { fileName, progress: Math.round(((i + 1) / totalChunks) * 100) })
+                    } catch (_) {}
+                    continue
+                }
+
+                const chunk = fileBuffer.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+                const chunkData = Buffer.from(chunk).toString('base64')
+
+                await axios.post(`${getAPIBase()}/api/file/chunk`, {
+                    md5, index: i, totalChunks, fileName, chunk: chunkData
+                })
+
+                try {
+                    event.sender.send('file:uploadProgress', { fileName, progress: Math.round(((i + 1) / totalChunks) * 100) })
+                } catch (_) {}
+            }
+
+            await axios.post(`${getAPIBase()}/api/file/merge`, { md5, fileName, totalChunks })
+            return { success: true, md5 }
+        } catch (error) {
+            return { success: false, message: error.message }
+        }
+    })
+
+    ipcMain.handle('file:downloadVerified', async (event, { fileId, fileName, expectedMd5 }) => {
+        const downloadsDir = getDownloadDir()
+        const tempPath = join(downloadsDir, fileName + '.part')
+        const finalPath = join(downloadsDir, fileName)
+        const MAX_RETRIES = 3
+
+        try {
+            if (!fs.existsSync(downloadsDir)) {
+                fs.mkdirSync(downloadsDir, { recursive: true })
+            }
+
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                const response = await axios({
+                    method: 'GET',
+                    url: `${getAPIBase()}/api/file/download/${encodeURIComponent(fileId || fileName)}`,
+                    responseType: 'arraybuffer',
+                    onDownloadProgress: (progressEvent) => {
+                        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+                        try {
+                            event.sender.send('download-progress', { filename: fileName, percentCompleted })
+                        } catch (_) {}
+                    }
+                })
+
+                const downloadedBuf = Buffer.from(response.data)
+                const downloadedMD5 = crypto.createHash('md5').update(downloadedBuf).digest('hex')
+                const serverMd5 = expectedMd5
+
+                if (serverMd5 && downloadedMD5 !== serverMd5) {
+                    if (attempt < MAX_RETRIES) {
+                        try {
+                            event.sender.send('file:downloadRetry', { fileName, attempt, maxRetries: MAX_RETRIES })
+                        } catch (_) {}
+                        continue
+                    }
+                    return { success: false, message: `文件校验失败（已重试${MAX_RETRIES}次）` }
+                }
+
+                fs.writeFileSync(finalPath, downloadedBuf)
+
+                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath)
+
+                return { success: true, path: finalPath, message: `文件下载成功：${fileName}` }
+            }
+        } catch (error) {
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath)
+            return { success: false, message: error.message }
+        }
     })
 }

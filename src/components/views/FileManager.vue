@@ -60,7 +60,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column :label="t('files.actions')" width="120" fixed="right">
+        <el-table-column :label="t('files.actions')" width="180" fixed="right">
           <template #default="{ row }">
             <template v-if="row.uploader === currentUsername">
               <el-button
@@ -73,20 +73,38 @@
               </el-button>
             </template>
             <template v-else>
-              <el-button
-                size="small"
-                type="primary"
-                @click="handleDownload(row)"
-                :loading="downloadingFiles.includes(row.name + row.uploader)"
-              >
-                <template v-if="downloadProgress[row.name + row.uploader] !== undefined">
-                  {{ downloadProgress[row.name + row.uploader] }}%
-                </template>
-                <template v-else>
-                  <el-icon><Download /></el-icon>
-                  {{ t('files.download') }}
-                </template>
-              </el-button>
+              <div class="download-cell">
+                <el-button
+                  size="small"
+                  type="primary"
+                  @click="handleDownload(row)"
+                  :loading="downloadingFiles.includes(row.name + row.uploader)"
+                  :disabled="downloadingFiles.includes(row.name + row.uploader)"
+                >
+                  <template v-if="downloadProgress[row.name + row.uploader] !== undefined">
+                    {{ downloadProgress[row.name + row.uploader] }}%
+                  </template>
+                  <template v-else-if="downloadRetrying[row.name + row.uploader]">
+                    <el-icon class="retry-spin"><Refresh /></el-icon>
+                    {{ t('files.retrying') }}
+                  </template>
+                  <template v-else-if="downloadFailed[row.name + row.uploader]">
+                    <el-icon><WarningFilled /></el-icon>
+                    {{ t('files.retry') }}
+                  </template>
+                  <template v-else>
+                    <el-icon><Download /></el-icon>
+                    {{ t('files.download') }}
+                  </template>
+                </el-button>
+                <el-progress
+                  v-if="downloadProgress[row.name + row.uploader] !== undefined"
+                  :percentage="downloadProgress[row.name + row.uploader]"
+                  :stroke-width="4"
+                  :show-text="false"
+                  class="download-progress-bar"
+                />
+              </div>
             </template>
           </template>
         </el-table-column>
@@ -97,7 +115,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { UploadFilled, Document, Download, Delete } from '@element-plus/icons-vue'
+import { UploadFilled, Document, Download, Delete, WarningFilled, Refresh } from '@element-plus/icons-vue'
 import { useI18n } from '../../composables/useI18n'
 
 const { t } = useI18n()
@@ -107,6 +125,9 @@ const allFiles = ref([])
 const uploadFileList = ref([])
 const downloadingFiles = ref([])
 const downloadProgress = ref({})
+const uploadProgress = ref({})
+const downloadRetrying = ref({})
+const downloadFailed = ref({})
 const currentUsername = ref('')
 let refreshTimer = null
 
@@ -146,20 +167,43 @@ const handleFileChange = async (file, uploadFiles) => {
 
   for (const f of uploadFiles) {
     if (window.electronAPI && f.raw) {
-      try {
-        const result = await window.electronAPI.uploadFile(
-          currentUsername.value,
-          f.name,
-          await f.raw.arrayBuffer()
-        )
-        if (result.success) {
-          ElMessage.success(t('files.uploadSuccess', { name: f.name }))
-        } else {
-          ElMessage.error(result.message)
+      uploadProgress.value[f.name] = 0
+
+      if (window.electronAPI.uploadFileChunked) {
+        try {
+          const fileBuffer = await f.raw.arrayBuffer()
+          const result = await window.electronAPI.uploadFileChunked({
+            filePath: null,
+            fileName: f.name,
+            fileSize: fileBuffer.byteLength,
+            fileData: fileBuffer
+          })
+          if (result.success) {
+            ElMessage.success(t('files.uploadSuccess', { name: f.name }))
+          } else {
+            ElMessage.error(result.message)
+          }
+        } catch (error) {
+          ElMessage.error(t('files.uploadFailed', { error: error.message }))
         }
-      } catch (error) {
-        ElMessage.error(t('files.uploadFailed', { error: error.message }))
+      } else {
+        try {
+          const result = await window.electronAPI.uploadFile(
+            currentUsername.value,
+            f.name,
+            await f.raw.arrayBuffer()
+          )
+          if (result.success) {
+            ElMessage.success(t('files.uploadSuccess', { name: f.name }))
+          } else {
+            ElMessage.error(result.message)
+          }
+        } catch (error) {
+          ElMessage.error(t('files.uploadFailed', { error: error.message }))
+        }
       }
+
+      delete uploadProgress.value[f.name]
     }
   }
 
@@ -168,7 +212,7 @@ const handleFileChange = async (file, uploadFiles) => {
 }
 
 const handleDownload = async (file) => {
-  if (file.uploader === currentUsername) {
+  if (file.uploader === currentUsername.value) {
     ElMessage.warning(t('files.cannotDownloadSelf'))
     return
   }
@@ -177,6 +221,7 @@ const handleDownload = async (file) => {
   const downloadKey = file.name + file.uploader
   downloadingFiles.value.push(downloadKey)
   downloadProgress.value[downloadKey] = 0
+  downloadFailed.value[downloadKey] = false
 
   if (window.electronAPI && window.electronAPI.onDownloadProgress) {
     window.electronAPI.onDownloadProgress((data) => {
@@ -186,18 +231,36 @@ const handleDownload = async (file) => {
     })
   }
 
+  if (window.electronAPI && window.electronAPI.onFileDownloadRetry) {
+    window.electronAPI.onFileDownloadRetry((data) => {
+      if (data.fileName === file.name) {
+        downloadRetrying.value[downloadKey] = true
+      }
+    })
+  }
+
   try {
-    const result = await window.electronAPI.downloadFile(file.uploader, file.name)
+    const result = window.electronAPI.downloadFileVerified
+      ? await window.electronAPI.downloadFileVerified({
+          fileId: file.id || file.name,
+          fileName: file.name,
+          expectedMd5: file.md5
+        })
+      : await window.electronAPI.downloadFile(file.uploader, file.name)
+
     if (result.success) {
       ElMessage.success(t('files.downloadSuccess'))
     } else {
+      downloadFailed.value[downloadKey] = true
       ElMessage.error(result.message)
     }
   } catch (error) {
+    downloadFailed.value[downloadKey] = true
     ElMessage.error(t('files.downloadFailed', { error: error.message }))
   } finally {
     downloadingFiles.value = downloadingFiles.value.filter(f => f !== downloadKey)
     delete downloadProgress.value[downloadKey]
+    delete downloadRetrying.value[downloadKey]
   }
 }
 
@@ -296,6 +359,22 @@ const formatDate = (timestamp) => {
     .is-self {
       color: var(--accent-color);
       font-weight: 500;
+    }
+
+    .download-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: flex-start;
+
+      .download-progress-bar {
+        width: 100%;
+        max-width: 140px;
+      }
+
+      .retry-spin {
+        animation: spin 0.8s linear infinite;
+      }
     }
   }
 }

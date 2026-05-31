@@ -8,6 +8,8 @@ import { registerFileIpc } from './ipc/file.js'
 import { registerAiIpc } from './ipc/ai.js'
 import { registerTaskIpc } from './ipc/task.js'
 import { registerExternalIpc } from './ipc/external.js'
+import { registerOrgIpc } from './ipc/org.js'
+import { registerBroadcastIpc } from './ipc/broadcast.js'
 import { clearAllScheduledTasks, saveScheduledTasks, restoreScheduledTasks } from './services/scheduledTasks.js'
 
 app.setPath('userData', join(app.getPath('appData'), 'Electronic'))
@@ -51,6 +53,8 @@ registerFileIpc()
 registerAiIpc()
 registerTaskIpc()
 registerExternalIpc()
+registerOrgIpc()
+registerBroadcastIpc()
 // console.log('[Main] IPC handlers registered')
 
 app.setUserTasks([

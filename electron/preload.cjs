@@ -21,6 +21,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDownloadProgress: (callback) => {
     downloadProgressCallback = callback
   },
+  // 上传进度监听
+  onFileUploadProgress: (callback) => {
+    ipcRenderer.on('file:uploadProgress', (event, data) => callback(data))
+  },
+  removeFileUploadProgressListener: () => {
+    ipcRenderer.removeAllListeners('file:uploadProgress')
+  },
+  // 下载重试监听
+  onFileDownloadRetry: (callback) => {
+    ipcRenderer.on('file:downloadRetry', (event, data) => callback(data))
+  },
+  removeFileDownloadRetryListener: () => {
+    ipcRenderer.removeAllListeners('file:downloadRetry')
+  },
+  // 增强文件操作
+  uploadFileChunked: (data) => ipcRenderer.invoke('file:uploadChunked', data),
+  downloadFileVerified: (data) => ipcRenderer.invoke('file:downloadVerified', data),
   // 登录相关
   login: (username, password) => ipcRenderer.invoke('login', username, password),
   register: (userData) => ipcRenderer.invoke('register', userData),
@@ -98,11 +115,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onWsUpdateBadge: (callback) => {
     ipcRenderer.on('ws:update_badge', () => callback())
   },
+  onWsNewBroadcast: (callback) => {
+    ipcRenderer.on('ws:broadcast_new', (event, data) => callback(data))
+  },
   removeWsListeners: () => {
     ipcRenderer.removeAllListeners('ws:new_message')
     ipcRenderer.removeAllListeners('ws:new_group_message')
     ipcRenderer.removeAllListeners('ws:online_status')
     ipcRenderer.removeAllListeners('ws:update_badge')
+    ipcRenderer.removeAllListeners('ws:broadcast_new')
   },
 
   // 本地 AI 聊天
@@ -163,7 +184,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setApiBaseUrl: (url) => ipcRenderer.invoke('set-api-base', url),
 
   // 打开外部链接（优先系统默认浏览器，失败则回退到 Electron 窗口）
-  openExternal: (url) => ipcRenderer.invoke('open-external', url)
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+
+  // 组织架构
+  org: {
+    getTree: () => ipcRenderer.invoke('org:getTree'),
+    addNode: (data) => ipcRenderer.invoke('org:addNode', data),
+    removeNode: (nodeId) => ipcRenderer.invoke('org:removeNode', nodeId),
+    manageMembers: (data) => ipcRenderer.invoke('org:manageMembers', data),
+    getNodeMembers: (nodeId) => ipcRenderer.invoke('org:getNodeMembers', nodeId),
+  },
+
+  // 广播通知
+  broadcast: {
+    send: (data) => ipcRenderer.invoke('broadcast:send', data),
+    list: (username) => ipcRenderer.invoke('broadcast:list', username),
+    receipts: (broadcastId) => ipcRenderer.invoke('broadcast:receipts', broadcastId),
+    markRead: (data) => ipcRenderer.invoke('broadcast:markRead', data),
+  }
 })
 
 console.log('[Preload] ready')

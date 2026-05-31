@@ -197,6 +197,30 @@
         </div>
 
         <!-- 关于 -->
+        <div v-else-if="activeNav === 'privacy'" class="settings-section">
+          <h3>隐私与加密</h3>
+          <el-form-item label="端到端加密：">
+            <el-radio-group v-model="e2eEncryption" @change="handleE2EChange">
+              <el-radio-button value="off">
+                <el-icon><Lock /></el-icon>
+                关闭
+              </el-radio-button>
+              <el-radio-button value="lan">
+                <el-icon><Lock /></el-icon>
+                仅内网对话
+              </el-radio-button>
+              <el-radio-button value="all">
+                <el-icon><Lock /></el-icon>
+                所有对话
+              </el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <p class="setting-tip">端到端加密后，消息内容仅收发双方可以解读，服务端无法查看明文。开启加密后新建的对话生效，已有对话不会自动加密。</p>
+          <el-form-item label="加密强度：">
+            <el-tag type="success">AES-256-GCM</el-tag>
+          </el-form-item>
+        </div>
+
         <div v-else-if="activeNav === 'about'" class="settings-section">
           <h3>{{ t('settings.about') }}</h3>
           <div class="about-info-list">
@@ -250,7 +274,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { Moon, Sunny, Monitor, FolderOpened, User, Setting, MagicStick, Link, Search, Folder, InfoFilled, Message, RefreshRight } from '@element-plus/icons-vue'
+import { Moon, Sunny, Monitor, FolderOpened, User, Setting, MagicStick, Link, Search, Folder, InfoFilled, Message, RefreshRight, Lock } from '@element-plus/icons-vue'
 import { useSettingsStore } from '../../stores/settings'
 import { useI18n } from '../../composables/useI18n'
 import { languages } from '../../utils/i18n'
@@ -271,6 +295,7 @@ const navItems = [
     { key: 'ai', label: 'AI 模型', icon: MagicStick },
     { key: 'server', label: '服务端', icon: Link },
     { key: 'friendSearch', label: '好友搜索', icon: Search },
+    { key: 'privacy', label: '隐私加密', icon: Lock },
     { key: 'download', label: '下载目录', icon: Folder },
     { key: 'checkUpdate', label: '检查更新', icon: RefreshRight },
     { key: 'about', label: '关于', icon: InfoFilled }
@@ -284,6 +309,7 @@ const testingServer = ref(false)
 const enablePinyinSearch = ref(false)
 const useSystemBrowser = ref(false)
 const sendKey = ref('Enter')
+const e2eEncryption = ref('off')
 const friendListDensity = ref('compact')
 const navFlashIntensity = ref('medium')
 const cacheRetentionDays = ref(30)
@@ -390,13 +416,16 @@ onMounted(() => {
         if (window.electronAPI?.setDownloadDir) {
             window.electronAPI.setDownloadDir(savedDir)
         }
-    } else if (window.electronAPI?.getDownloadDir) {
+    } else     if (window.electronAPI?.getDownloadDir) {
         window.electronAPI.getDownloadDir().then((result) => {
             if (result.success) {
                 downloadDir.value = result.dir
             }
         })
     }
+
+    const e2e = localStorage.getItem('e2eEncryption')
+    if (e2e) e2eEncryption.value = e2e
 })
 
 const handleThemeChange = (value) => {
@@ -413,6 +442,10 @@ const handleUseSystemBrowserChange = (value) => {
 
 const handleSendKeyChange = (value) => {
     settingsStore.setSendKey(value)
+}
+
+const handleE2EChange = (value) => {
+  localStorage.setItem('e2eEncryption', value)
 }
 
 const handleFriendListDensityChange = (value) => {

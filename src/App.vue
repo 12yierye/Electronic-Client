@@ -70,6 +70,7 @@ import AIChat from './components/views/AIChat.vue'
 import ChatRoom from './components/views/ChatRoom.vue'
 import FileManager from './components/views/FileManager.vue'
 import Settings from './components/views/Settings.vue'
+import BroadcastCenter from './components/views/BroadcastCenter.vue'
 
 const settingsStore = useSettingsStore()
 const { elementLocale } = useI18n()
@@ -120,6 +121,7 @@ provide('theme', theme)
 const componentMap = {
   ai: AIChat,
   chat: ChatRoom,
+  broadcast: BroadcastCenter,
   files: FileManager,
   settings: Settings
 }

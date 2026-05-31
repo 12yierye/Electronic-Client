@@ -1,11 +1,66 @@
-import { Notification } from 'electron'
+import { Notification, app } from 'electron'
 import { getAPIBase, getMainWindow } from '../config.js'
+import { join } from 'node:path'
+import fs from 'fs'
 import WebSocket from 'ws'
 
 let ws = null
 let reconnectTimer = null
 let currentUsername = null
 const RECONNECT_DELAY = 3000
+
+const OFFLINE_QUEUE_FILE = join(app.getPath('userData'), 'offline-queue.json')
+let offlineQueue = []
+let queueLoaded = false
+
+function loadOfflineQueue() {
+  if (queueLoaded) return
+  try {
+    if (fs.existsSync(OFFLINE_QUEUE_FILE)) {
+      const raw = fs.readFileSync(OFFLINE_QUEUE_FILE, 'utf-8')
+      offlineQueue = JSON.parse(raw)
+    }
+  } catch {}
+  queueLoaded = true
+}
+
+function persistOfflineQueue() {
+  try {
+    fs.writeFileSync(OFFLINE_QUEUE_FILE, JSON.stringify(offlineQueue), 'utf-8')
+  } catch (e) {
+    console.error('[WS] Failed to persist offline queue:', e.message)
+  }
+}
+
+function enqueueOfflineMessage(messageData) {
+  offlineQueue.push({ ...messageData, queuedAt: Date.now() })
+  persistOfflineQueue()
+}
+
+async function flushOfflineQueue() {
+  if (offlineQueue.length === 0) return
+  const mw = getMainWindow()
+  const queue = [...offlineQueue]
+  offlineQueue = []
+  persistOfflineQueue()
+
+  if (mw && !mw.isDestroyed()) {
+    mw.webContents.send('ws:flush_queue', { count: queue.length })
+  }
+}
+
+export function sendMessageWithQueue(sendFn, messageData) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    enqueueOfflineMessage(messageData)
+    const mw = getMainWindow()
+    if (mw && !mw.isDestroyed()) {
+      mw.webContents.send('ws:message_queued', { target: messageData.receiver, tempId: messageData._tempId })
+    }
+    return { success: true, queued: true }
+  }
+  sendFn(messageData)
+  return { success: true, queued: false }
+}
 
 export function connectWebSocket(username) {
   if (!username) return
@@ -21,8 +76,9 @@ export function connectWebSocket(username) {
 
     ws.on('open', () => {
       console.log('[WS] Connected')
-      // 认证
+      loadOfflineQueue()
       ws.send(JSON.stringify({ type: 'auth', username }))
+      flushOfflineQueue()
     })
 
     ws.on('message', (data) => {
@@ -100,6 +156,14 @@ function handleWsMessage(msg) {
     }
     case 'online_status': {
       mw.webContents.send('ws:online_status', msg)
+      break
+    }
+    case 'broadcast:new': {
+      mw.webContents.send('ws:broadcast_new', msg.broadcast || msg)
+      if (!mw.isFocused()) {
+        showNotification('广播通知', msg.broadcast?.title || '')
+      }
+      updateBadge()
       break
     }
   }

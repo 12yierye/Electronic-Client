@@ -154,3 +154,56 @@ export function clearSeenCache(username) {
   if (!username) return
   localStorage.removeItem(seenKey(username))
 }
+
+// ====== 消息发送状态追踪 ======
+const DELIVERY_KEY_PREFIX = 'msg_delivery_'
+
+function deliveryKey(username) {
+  return DELIVERY_KEY_PREFIX + username
+}
+
+function getDeliveryMap(username) {
+  if (!username) return {}
+  try {
+    const raw = localStorage.getItem(deliveryKey(username))
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveDeliveryMap(username, map) {
+  if (!username) return
+  try {
+    localStorage.setItem(deliveryKey(username), JSON.stringify(map))
+  } catch {}
+}
+
+/**
+ * 设置消息发送状态
+ * @param {'sending'|'sent'|'delivered'|'read'|'failed'} status
+ */
+export function setMessageDeliveryStatus(username, messageId, status) {
+  if (!username || !messageId) return
+  const map = getDeliveryMap(username)
+  map[String(messageId)] = { status, updatedAt: Date.now() }
+  if (Object.keys(map).length > 1000) {
+    const entries = Object.entries(map).sort((a, b) => b[1].updatedAt - a[1].updatedAt).slice(0, 500)
+    const trimmed = {}
+    entries.forEach(([k, v]) => { trimmed[k] = v })
+    saveDeliveryMap(username, trimmed)
+  } else {
+    saveDeliveryMap(username, map)
+  }
+}
+
+export function getMessageDeliveryStatus(username, messageId) {
+  if (!username || !messageId) return 'unknown'
+  const map = getDeliveryMap(username)
+  return map[String(messageId)]?.status || 'unknown'
+}
+
+export function clearDeliveryCache(username) {
+  if (!username) return
+  localStorage.removeItem(deliveryKey(username))
+}

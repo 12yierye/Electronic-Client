@@ -18,19 +18,21 @@
 
           <div class="tab-row">
             <el-radio-group v-model="activeTab" size="small">
-              <!-- 公网模式显示：好友、群聊、添加好友、申请 -->
+              <!-- 公网模式显示：好友、群聊、架构、添加好友、申请 -->
               <template v-if="chatMode === 'public'">
                 <el-radio-button value="friends" :class="{ 'has-unread': showTabUnread && hasNonDNDFriendUnread }">{{ t('chatRoom.friends') }}</el-radio-button>
                 <el-radio-button value="groups" :class="{ 'has-unread': showTabUnread && hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
+                <el-radio-button value="org">{{ t('org.title') }}</el-radio-button>
                 <el-radio-button value="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
                 <el-radio-button value="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
                   {{ t('chatRoom.requests') }}
                 </el-radio-button>
               </template>
-              <!-- 内网模式显示：用户、群聊 -->
+              <!-- 内网模式显示：用户、群聊、架构 -->
               <template v-else>
                 <el-radio-button value="users" :class="{ 'has-unread': showTabUnread && hasNonDNDFriendUnread }">{{ t('chatRoom.users') }}</el-radio-button>
                 <el-radio-button value="groups" :class="{ 'has-unread': showTabUnread && hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
+                <el-radio-button value="org">{{ t('org.title') }}</el-radio-button>
               </template>
             </el-radio-group>
           </div>
@@ -181,6 +183,14 @@
             <el-empty v-if="filteredUsers.length === 0 && (showRecommended || searchQuery)" :description="t('chatRoom.noUsersFound')" />
           </template>
           
+          <!-- 公网/内网：组织架构 -->
+          <template v-else-if="activeTab === 'org'">
+            <OrgTree
+              @node-select="handleOrgNodeSelect"
+              @select-members="handleOrgMembersSelect"
+            />
+          </template>
+
           <!-- 公网：好友申请 -->
           <template v-else-if="chatMode === 'public' && activeTab === 'requests'">
             <div 
@@ -228,51 +238,69 @@
           <div class="chat-messages" ref="chatMessagesRef">
             <template v-if="selectedUser || selectedGroup">
               <div
-                v-for="msg in chatMessages"
+                v-for="(msg, idx) in chatMessagesWithBubbles"
                 :key="msg.id"
-                :class="['chat-message', msg.from === currentUsername ? 'sent' : 'received']"
               >
-                <!-- 接收方头像（左侧） -->
-                <el-avatar v-if="msg.from !== currentUsername" :size="36" :src="getUserAvatar(msg.from)" class="msg-avatar msg-avatar-left">
-                  {{ msg.from.charAt(0).toUpperCase() }}
-                </el-avatar>
-
-                <div class="msg-body">
-                  <!-- 群聊显示发送者 -->
-                  <div v-if="selectedGroup && msg.from !== currentUsername" class="message-sender">
-                    {{ msg.from }}
-                  </div>
-
-                  <!-- 图片消息 -->
-                  <div v-if="isImageMessage(msg.message)" class="message-content image-message">
-                    <img :src="msg.message" :alt="t('chatRoom.image')" @load="onImageLoad" />
-                  </div>
-                  <!-- 文档消息 -->
-                  <div v-else-if="isDocumentMessage(msg)" class="message-content document-message">
-                    <div class="doc-card">
-                      <span class="doc-icon">&#128196;</span>
-                      <div class="doc-info">
-                        <span class="doc-name">{{ parseDocumentInfo(msg.message)?.name || t('chatRoom.unknownDocument') }}</span>
-                        <span class="doc-ext">{{ parseDocumentInfo(msg.message)?.ext || '' }}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- 文本消息 -->
-                  <div v-else class="message-content">{{ msg.message }}</div>
-
-                  <div class="message-time">
-                    {{ formatMessageTime(msg.timestamp) }}
-                    <!-- 发送中 -->
-                    <el-icon v-if="msg._pending" class="msg-status sending"><Loading /></el-icon>
-                    <!-- 发送失败 -->
-                    <el-icon v-if="msg._failed" class="msg-status failed" @click="retryMessage(msg)"><WarningFilled /></el-icon>
-                  </div>
+                <!-- 时间分隔 -->
+                <div v-if="msg._showTime" class="message-time-separator">
+                  <span>{{ formatMessageTime(msg.timestamp) }}</span>
                 </div>
 
-                <!-- 自己的头像（右侧） -->
-                <el-avatar v-if="msg.from === currentUsername" :size="36" :src="getUserAvatar(currentUsername)" class="msg-avatar msg-avatar-right">
-                  {{ currentUsername.charAt(0).toUpperCase() }}
-                </el-avatar>
+                <div
+                  :class="['chat-message', msg.from === currentUsername ? 'sent' : 'received']"
+                  @contextmenu="handleMsgContextMenu($event, msg)"
+                >
+                  <el-avatar v-if="msg.from !== currentUsername" :size="36" :src="getUserAvatar(msg.from)" class="msg-avatar msg-avatar-left">
+                    {{ msg.from.charAt(0).toUpperCase() }}
+                  </el-avatar>
+
+                  <div class="msg-body">
+                    <div v-if="selectedGroup && msg.from !== currentUsername" class="message-sender">
+                      {{ msg.from }}
+                    </div>
+
+                    <div v-if="msg._quote" class="quote-block" @click="scrollToQuoted(msg._quote)">
+                      <span class="quote-label">{{ msg._quote.from === currentUsername ? t('chatRoom.you') : msg._quote.from }}</span>
+                      <span class="quote-content">{{ truncateText(msg._quote.message, 50) }}</span>
+                    </div>
+
+                    <!-- 图片消息 -->
+                    <div v-if="isImageMessage(msg.message)" class="message-content image-message">
+                      <img :src="msg.message" :alt="t('chatRoom.image')" @load="onImageLoad" />
+                    </div>
+                    <!-- 文档消息 -->
+                    <div v-else-if="isDocumentMessage(msg)" class="message-content document-message">
+                      <div class="doc-card">
+                        <span class="doc-icon">&#128196;</span>
+                        <div class="doc-info">
+                          <span class="doc-name">{{ parseDocumentInfo(msg.message)?.name || t('chatRoom.unknownDocument') }}</span>
+                          <span class="doc-ext">{{ parseDocumentInfo(msg.message)?.ext || '' }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- 文本消息 -->
+                    <div v-else class="message-content">{{ msg.message }}</div>
+                  </div>
+
+                  <el-avatar v-if="msg.from === currentUsername" :size="36" :src="getUserAvatar(currentUsername)" class="msg-avatar msg-avatar-right">
+                    {{ currentUsername.charAt(0).toUpperCase() }}
+                  </el-avatar>
+                </div>
+
+                <!-- 自己消息的状态 -->
+                <div v-if="msg.from === currentUsername" class="message-status-row">
+                  <span v-if="msg._pending" class="msg-status sending">
+                    <el-icon class="spin"><Loading /></el-icon> {{ t('chatRoom.sending') }}
+                  </span>
+                  <span v-else-if="msg._failed" class="msg-status-error" @click="retryMessage(msg)">
+                    <el-icon><WarningFilled /></el-icon> {{ t('chatRoom.sendFailed') }}
+                  </span>
+                  <span v-else class="msg-status-sent">
+                    <span v-if="msg._deliveryStatus === 'sent'" class="unread">&#10003;</span>
+                    <span v-else-if="msg._deliveryStatus === 'delivered'" class="delivered">&#10003;&#10003;</span>
+                    <span v-else class="read">&#10003;&#10003;</span>
+                  </span>
+                </div>
               </div>
               <el-empty v-if="chatMessages.length === 0" :description="t('chatRoom.noChatHistory')" />
             </template>
@@ -280,6 +308,11 @@
           </div>
           
           <div class="chat-input">
+            <div v-if="quotingMessage && (selectedUser || selectedGroup)" class="quote-preview-bar">
+              <span class="quote-preview-label">{{ t('chatRoom.replyingTo') }} {{ quotingMessage.from }}:</span>
+              <span class="quote-preview-content">{{ truncateText(quotingMessage.message, 40) }}</span>
+              <el-icon class="quote-preview-close" @click="quotingMessage = null"><Close /></el-icon>
+            </div>
             <el-popover
               v-if="selectedUser || selectedGroup"
               v-model:visible="uploadMenuVisible"
@@ -386,12 +419,14 @@
 
 <script setup>
 import { computed, ref, watch, nextTick, onDeactivated } from 'vue'
-import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus, Document } from '@element-plus/icons-vue'
+import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus, Document, Close } from '@element-plus/icons-vue'
 import { useChatRoom, sharedLastMsgMap } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
 import { useSettingsStore } from '../../stores/settings'
 import { getUserAvatar } from '../../composables/useAvatar'
 import GroupMemberPanel from './GroupMemberPanel.vue'
+import OrgTree from '../common/OrgTree.vue'
+import { useOrgStore } from '@/stores/org'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -589,6 +624,56 @@ watch([selectedUser, selectedGroup], () => {
     scrollToBottom()
   }
 })
+
+const quotingMessage = ref(null)
+
+function truncateText(text, maxLen) {
+  if (!text) return ''
+  return text.length > maxLen ? text.slice(0, maxLen) + '...' : text
+}
+
+function showTimeSep(currentMsg, prevMsg) {
+  if (!prevMsg) return true
+  const cur = new Date(currentMsg.timestamp || 0).getTime()
+  const prev = new Date(prevMsg.timestamp || 0).getTime()
+  return (cur - prev) > 5 * 60 * 1000
+}
+
+const chatMessagesWithBubbles = computed(() => {
+  const msgs = chatMessages.value || []
+  return msgs.map((msg, idx) => ({
+    ...msg,
+    _showTime: showTimeSep(msg, msgs[idx - 1]),
+    _deliveryStatus: msg._deliveryStatus || 'sent',
+    _quote: msg._quote || null
+  }))
+})
+
+function handleMsgContextMenu(event, msg) {
+  event.preventDefault()
+  if (msg.from === currentUsername.value) {
+    quotingMessage.value = msg
+  }
+}
+
+function scrollToQuoted(quote) {
+  if (!quote) return
+}
+
+// 组织架构事件处理
+const orgStore = useOrgStore()
+
+function handleOrgNodeSelect(node) {
+  // 点击组织架构节点时不做选中用户操作，仅展开/高亮
+}
+
+function handleOrgMembersSelect(memberUsernames) {
+  // 可以触发搜索或筛选联系人列表
+  if (memberUsernames.length > 0) {
+    searchQuery.value = ''
+    activeTab.value = 'add'
+  }
+}
 
 // KeepAlive 停用时清除选中会话，确保未读轮询正常计数
 onDeactivated(() => {
@@ -830,20 +915,16 @@ onDeactivated(() => {
         display: flex;
         align-items: flex-start;
         gap: 8px;
-        margin-bottom: 15px;
+        margin-bottom: 12px;
         max-width: 80%;
 
         .msg-avatar {
           flex-shrink: 0;
           font-size: 14px;
-          margin-top: 2px;
+          margin-top: 4px;
 
-          &.msg-avatar-left {
-            order: 0;
-          }
-          &.msg-avatar-right {
-            order: 2;
-          }
+          &.msg-avatar-left { order: 0; }
+          &.msg-avatar-right { order: 2; }
         }
 
         .msg-body {
@@ -857,43 +938,66 @@ onDeactivated(() => {
         &.sent {
           margin-left: auto;
           
-          .msg-body {
-            align-items: flex-end;
-          }
+          .msg-body { align-items: flex-end; }
 
           .message-content {
-            background: var(--accent-color);
-            color: white;
-            border-bottom-right-radius: 4px;
+            background: #95ec69;
+            color: #000;
+            border-radius: 4px;
+            border-top-right-radius: 0;
           }
         }
         
         &.received {
-          .msg-body {
-            align-items: flex-start;
-          }
+          .msg-body { align-items: flex-start; }
 
           .message-content {
             background: var(--bg-secondary);
             color: var(--text-primary);
-            border-bottom-left-radius: 4px;
+            border-radius: 4px;
+            border-top-left-radius: 0;
+          }
+        }
+
+        .quote-block {
+          background: rgba(0, 0, 0, 0.06);
+          border-left: 3px solid var(--accent-color);
+          padding: 4px 8px;
+          border-radius: 4px;
+          margin-bottom: 4px;
+          cursor: pointer;
+          max-width: 300px;
+
+          .quote-label {
+            font-size: 11px;
+            color: var(--accent-color);
+            font-weight: 500;
+          }
+          .quote-content {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-left: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
         }
         
         .message-content {
-          padding: 10px 15px;
-          border-radius: 18px;
+          padding: 10px 14px;
           word-break: break-word;
-          min-width: 60px;
+          min-width: 40px;
+          line-height: 1.6;
+          font-size: 14px;
           
           &.image-message {
             padding: 5px;
             background: transparent;
             
             img {
-              max-width: 200px;
-              max-height: 200px;
-              border-radius: 12px;
+              max-width: 240px;
+              max-height: 240px;
+              border-radius: 8px;
               cursor: pointer;
               transition: transform 0.2s;
               
@@ -906,37 +1010,58 @@ onDeactivated(() => {
         
         .message-sender {
           font-size: 12px;
-          color: var(--text-secondary);
+          color: var(--accent-color);
           margin-bottom: 3px;
           padding: 0 4px;
+          font-weight: 500;
         }
-        
-        .message-time {
+      }
+
+      .message-time-separator {
+        text-align: center;
+        margin: 16px 0;
+
+        span {
           font-size: 11px;
           color: var(--text-secondary);
-          margin-top: 5px;
-          display: flex;
+          background: var(--bg-secondary);
+          padding: 3px 12px;
+          border-radius: 10px;
+        }
+      }
+
+      .message-status-row {
+        text-align: right;
+        padding-right: 50px;
+        margin-top: -6px;
+        margin-bottom: 6px;
+        font-size: 12px;
+
+        .msg-status {
+          color: var(--text-secondary);
+          display: inline-flex;
           align-items: center;
-          gap: 4px;
+          gap: 3px;
 
-          .msg-status {
-            font-size: 14px;
+          &.spin { animation: spin 0.8s linear infinite; }
+        }
 
-            &.sending {
-              color: var(--accent-color);
-              animation: spin 0.8s linear infinite;
-            }
+        .msg-status-error {
+          color: #f56c6c;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
 
-            &.failed {
-              color: #f56c6c;
-              cursor: pointer;
-              transition: transform 0.15s;
+          &:hover { text-decoration: underline; }
+        }
 
-              &:hover {
-                transform: scale(1.3);
-              }
-            }
-          }
+        .msg-status-sent {
+          color: var(--text-secondary);
+
+          .unread { color: #b2b2b2; }
+          .delivered { color: #b2b2b2; }
+          .read { color: #07c160; }
         }
       }
     }
@@ -952,6 +1077,41 @@ onDeactivated(() => {
       display: flex;
       align-items: center;
       gap: 10px;
+      flex-wrap: wrap;
+
+      .quote-preview-bar {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        background: rgba(var(--accent-rgb, 52, 152, 219), 0.08);
+        border-left: 3px solid var(--accent-color);
+        border-radius: 4px;
+        font-size: 13px;
+
+        .quote-preview-label {
+          color: var(--accent-color);
+          font-weight: 500;
+          white-space: nowrap;
+        }
+
+        .quote-preview-content {
+          color: var(--text-secondary);
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .quote-preview-close {
+          cursor: pointer;
+          color: var(--text-secondary);
+          flex-shrink: 0;
+
+          &:hover { color: var(--text-primary); }
+        }
+      }
 
       .image-uploader {
         display: inline-block;

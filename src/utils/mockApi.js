@@ -263,10 +263,54 @@ export const mockElectronAPI = {
 
   removeAIChatStreamListener: () => {},
 
+  // ===== 组织架构桩 =====
+
+  org: {
+    getTree: async () => ({
+      id: 'root', name: 'Mock School', type: 'school',
+      children: [
+        { id: 'g1', name: 'Grade 1', type: 'grade', children: [
+          { id: 'c1', name: 'Class 1', type: 'class', members: [] },
+          { id: 'c2', name: 'Class 2', type: 'class', members: [] }
+        ]},
+        { id: 'g2', name: 'Grade 2', type: 'grade', children: [
+          { id: 'c3', name: 'Class 1', type: 'class', members: [] }
+        ]}
+      ]
+    }),
+    addNode: async () => ({ success: false, message: '浏览器环境不支持此操作' }),
+    removeNode: async () => ({ success: false, message: '浏览器环境不支持此操作' }),
+    manageMembers: async () => ({ success: false, message: '浏览器环境不支持此操作' }),
+    getNodeMembers: async () => ({ success: false, message: '浏览器环境不支持此操作' }),
+  },
+
+  // ===== 广播通知桩 =====
+
+  broadcast: {
+    send: async () => ({ success: false, message: '浏览器环境不支持广播功能' }),
+    list: async () => ({ success: true, broadcasts: [] }),
+    receipts: async () => ({ success: false }),
+    markRead: async () => ({ success: true }),
+  },
+
+  // ===== 增强文件操作桩 =====
+
+  uploadFileChunked: async () => ({ success: false, message: '浏览器环境不支持分片上传' }),
+  downloadFileVerified: async () => ({ success: false, message: '浏览器环境不支持校验下载' }),
+  onFileUploadProgress: () => {},
+  removeFileUploadProgressListener: () => {},
+  onFileDownloadRetry: () => {},
+  removeFileDownloadRetryListener: () => {},
+
+  // ===== WebSocket 广播事件桩 =====
+  onWsNewBroadcast: () => {},
+
   // ===== 下载进度桩 =====
 
-  onDownloadProgress: () => {}
+  onDownloadProgress: () => {},
 }
+
+// 等待 DOM 就绪后注入
 
 // 在浏览器环境中注入 mock API
 if (typeof window !== 'undefined' && !window.electronAPI) {
