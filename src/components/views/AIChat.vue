@@ -30,7 +30,6 @@
           <el-radio-button value="local">本地</el-radio-button>
           <el-radio-button value="cloud">云端</el-radio-button>
         </el-radio-group>
-        <el-switch v-model="aiStore.planningMode" size="small" active-text="规划" />
         <el-select
           v-if="aiMode === 'cloud' && hasCloudConfig"
           :model-value="cloudModelName"
@@ -91,20 +90,6 @@
               </div>
             </div>
             
-            <!-- 追问问题气泡 -->
-            <div v-if="msg.type === 'question'" class="question-block">
-              <div class="question-text">{{ msg.question }}</div>
-              <div class="question-options">
-                <el-button v-for="opt in msg.options" :key="opt" :type="opt === '直接执行' ? 'success' : 'default'" size="small" :disabled="msg.answered" @click="handlePickOption(msg.id, opt)">
-                  {{ opt }}
-                </el-button>
-              </div>
-              <div v-if="msg.options.includes('其它') && !msg.answered" class="question-custom">
-                <el-input v-model="customAnswer" size="small" placeholder="输入自定义答案" @keydown.enter="handlePickOption(msg.id, customAnswer)" style="width:160px" />
-                <el-button size="small" @click="handlePickOption(msg.id, customAnswer)">确定</el-button>
-              </div>
-            </div>
-
             <!-- PPT 课件卡片（嵌入当前消息） -->
             <div v-if="msg.pptxCard" class="pptx-card" @click="openPPTX(msg.pptxCard.filePath)">
               <div class="pptx-card-icon">
@@ -171,7 +156,6 @@ const emit = defineEmits(['navigate'])
 const aiMode = ref(aiStore.aiMode)
 const cloudModelName = ref(aiStore.cloudModel)
 const localModelLabel = ref(aiStore.currentModel || '本地模型')
-const customAnswer = ref('')
 
 // 同步 store 变化到本地 ref
 watch(() => aiStore.aiMode, v => { aiMode.value = v })
@@ -234,16 +218,6 @@ function onCloudModelChange(model) {
 function goToSettings() {
   localStorage.setItem('settingsActiveNav', 'ai')
   emit('navigate', 'settings')
-}
-
-function handlePickOption(msgId, option) {
-  if (!option || !option.trim()) return
-  customAnswer.value = ''
-  aiStore.addUserChoice(msgId, option.trim())
-}
-
-function handleDirectExecute(msgId) {
-  aiStore.addUserChoice(msgId, '直接执行')
 }
 
 async function openPPTX(filePath) {
@@ -968,29 +942,5 @@ onUnmounted(() => {
 
 .conv-item:hover .conv-actions {
   opacity: 1;
-}
-
-.question-block {
-  margin: 12px 0 8px;
-
-  .question-text {
-    font-size: 14px;
-    color: var(--text-primary);
-    margin-bottom: 10px;
-    font-weight: 500;
-  }
-
-  .question-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .question-custom {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-    align-items: center;
-  }
 }
 </style>

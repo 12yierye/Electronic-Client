@@ -209,7 +209,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // AI Agent
   agentRun: (data) => ipcRenderer.invoke('agent:run', data),
-  agentPlan: (data) => ipcRenderer.invoke('agent:plan', data),
   agentCancel: () => ipcRenderer.invoke('agent:cancel'),
   agentStatus: () => ipcRenderer.invoke('agent:status'),
   onAgentProgress: (callback) => {
