@@ -31,7 +31,7 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Promotion, Loading, Close } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
@@ -76,7 +76,8 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
     window.electronAPI.removeAgentListeners()
   }
 
-  aiStore.startStreamingMessage()
+  const isPlanning = aiStore.planningMode
+  if (!isPlanning) aiStore.startStreamingMessage()
   const mode = currentMode || localStorage.getItem('aiMode') || 'local'
 
   if (window.electronAPI.onAgentProgress) {
@@ -93,6 +94,10 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
       if (data.type === 'content') aiStore.appendStreamingContent(data.content)
       else if (data.type === 'reasoning') aiStore.appendReasoningContent(data.content)
       else if (data.type === 'pptx_card') aiStore.addPPTXCard(data)
+      else if (data.type === 'question') {
+        aiStore.addQuestionBubble(data.question, data.options)
+        isSending.value = false
+      }
     })
   }
 
@@ -104,12 +109,12 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
     }
     const history = aiStore.getConversationHistory ? aiStore.getConversationHistory(aiStore.contextTokens) : []
     const pptCards = (aiStore.messages || []).filter(m => m.pptxCard).map(m => m.pptxCard)
-    const result = await window.electronAPI.agentRun({ message, aiMode: mode, cloudConfig, history, pptCards })
-    if (result.reply && result.reply !== '已完成所有操作。') {
+    const result = await window.electronAPI.agentRun({ message, aiMode: mode, cloudConfig, history, pptCards, planningMode: isPlanning })
+    if (result.reply && result.reply !== '已完成所有操作。' && !result.question) {
       aiStore.appendStreamingContent(result.reply)
     }
     if (result.cancelled) aiStore.appendStreamingContent('\n[已中断]')
-    aiStore.endStreamingMessage()
+    if (!isPlanning) aiStore.endStreamingMessage()
     aiStore.persistCurrentConversation()
   } catch (error) {
     aiStore.endStreamingMessage()
@@ -211,9 +216,21 @@ onUnmounted(() => {
   if (window.electronAPI.removeAIChatStreamListener) {
     window.electronAPI.removeAIChatStreamListener()
   }
+  window.removeEventListener('planning-send', handlePlanningSend)
 })
 
 const handleNewLine = () => {}
+
+function handlePlanningSend(e) {
+  const { message, currentUsername, currentMode } = e.detail
+  if (!message || isSending.value) return
+  isSending.value = true
+  handleAgentSend(message, currentUsername, currentMode)
+}
+
+onMounted(() => {
+  window.addEventListener('planning-send', handlePlanningSend)
+})
 </script>
 
 <style lang="scss" scoped>

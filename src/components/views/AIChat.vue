@@ -26,6 +26,7 @@
         </el-dropdown>
       </div>
       <div class="ai-header-controls">
+        <el-switch v-model="planningMode" size="small" active-text="规划" @change="onPlanningToggle" />
         <el-radio-group :model-value="aiMode" size="small" @change="onModeChange">
           <el-radio-button value="local">本地</el-radio-button>
           <el-radio-button value="cloud">云端</el-radio-button>
@@ -73,6 +74,23 @@
             {{ msg.role === 'user' ? 'U' : 'AI' }}
           </el-avatar>
           <div class="message-content">
+            <!-- 规划问题气泡 -->
+            <div v-if="msg.type === 'question'" class="question-block">
+              <div class="question-text">{{ msg.question }}</div>
+              <div class="question-options">
+                <el-button v-for="opt in msg.options" :key="opt"
+                  size="small" :disabled="msg.answered"
+                  @click="handlePickOption(msg, opt)">{{ opt }}</el-button>
+                <el-button size="small" type="success"
+                  :disabled="msg.answered"
+                  @click="handleDirectExecute(msg)">直接执行</el-button>
+              </div>
+              <el-input v-if="customForQuestion === msg.id" v-model="customAnswer"
+                placeholder="输入自定义内容" size="small"
+                style="margin-top:6px;max-width:300px"
+                @keydown.enter="handlePickOption(msg, customAnswer)" />
+            </div>
+
             <!-- 思考内容（仅AI消息） -->
             <div v-if="msg.thinking" class="thinking-section">
               <div 
@@ -156,6 +174,9 @@ const emit = defineEmits(['navigate'])
 const aiMode = ref(aiStore.aiMode)
 const cloudModelName = ref(aiStore.cloudModel)
 const localModelLabel = ref(aiStore.currentModel || '本地模型')
+const planningMode = ref(aiStore.planningMode)
+const customForQuestion = ref('')
+const customAnswer = ref('')
 
 // 同步 store 变化到本地 ref
 watch(() => aiStore.aiMode, v => { aiMode.value = v })
@@ -231,6 +252,37 @@ function newConversation() {
   aiStore.newConversation()
   autoScroll.value = true
   showScrollButton.value = false
+}
+
+function onPlanningToggle(val) {
+  aiStore.setPlanningMode(val)
+  if (!val && window.electronAPI?.agentCancelPlanning) {
+    window.electronAPI.agentCancelPlanning()
+  }
+}
+
+function handlePickOption(msg, option) {
+  if (!option || option === '其他' || option === '其它') {
+    customForQuestion.value = msg.id
+    return
+  }
+  aiStore.addUserChoice(msg.id, option)
+  customForQuestion.value = ''
+  customAnswer.value = ''
+  handleAgentResend(option)
+}
+
+function handleDirectExecute(msg) {
+  aiStore.addUserChoice(msg.id, '直接执行')
+  handleAgentResend('请根据已确认的信息直接执行任务')
+}
+
+function handleAgentResend(message) {
+  const inputMsg = message
+  const currentUsername = localStorage.getItem('userInfo') ? JSON.parse(localStorage.getItem('userInfo')).username : ''
+  const currentMode = localStorage.getItem('aiMode') || aiStore.aiMode || 'local'
+  // Trigger send via a custom event or direct call
+  window.dispatchEvent(new CustomEvent('planning-send', { detail: { message: inputMsg, currentUsername, currentMode } }))
 }
 
 function getThinkingLabel(msg) {
@@ -892,6 +944,28 @@ onUnmounted(() => {
 .scroll-btn-fade-leave-to {
   opacity: 0;
   transform: translateY(10px);
+}
+
+// 规划问题气泡
+.question-block {
+  background: rgba(74, 158, 255, 0.06);
+  border: 1px solid rgba(74, 158, 255, 0.2);
+  border-radius: 12px;
+  padding: 14px;
+  margin: 8px 0;
+
+  .question-text {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+  }
+
+  .question-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
 }
 </style>
 

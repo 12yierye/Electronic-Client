@@ -53,12 +53,18 @@ export const useAIStore = defineStore('ai', () => {
   const cloudModel = ref(localStorage.getItem('cloudModel') || 'gpt-4o')
   const cloudProvider = ref(localStorage.getItem('cloudProvider') || '')
   const contextTokens = ref(parseInt(localStorage.getItem('aiContextTokens')) || 32000)
+  const planningMode = ref(localStorage.getItem('planningMode') === 'true')
   let currentStreamingMessage = null
   let messageIdCounter = 0
 
   const setContextTokens = (val) => {
     contextTokens.value = val
     localStorage.setItem('aiContextTokens', val)
+  }
+
+  const setPlanningMode = (val) => {
+    planningMode.value = val
+    localStorage.setItem('planningMode', val)
   }
 
   const setAiMode = (mode) => {
@@ -142,6 +148,32 @@ export const useAIStore = defineStore('ai', () => {
         message: data.message
       }
     }
+  }
+
+  // 添加规划问题气泡
+  const addQuestionBubble = (question, options) => {
+    messages.value.push({
+      id: generateMessageId(),
+      role: 'ai',
+      type: 'question',
+      question,
+      options,
+      answered: false,
+      timestamp: new Date().toISOString()
+    })
+  }
+
+  // 添加用户选择回答
+  const addUserChoice = (questionId, answer) => {
+    const q = messages.value.find(m => m.id === questionId)
+    if (q) q.answered = true
+    messages.value.push({
+      id: generateMessageId(),
+      role: 'user',
+      type: 'choice',
+      content: answer,
+      timestamp: new Date().toISOString()
+    })
   }
 
   // 开始流式输出 - 创建新的 AI 消息占位
@@ -342,14 +374,18 @@ export const useAIStore = defineStore('ai', () => {
     cloudModel,
     cloudProvider,
     contextTokens,
+    planningMode,
     fetchCurrentModel,
     setAiMode,
     setCloudModel,
     setCloudProvider,
     setContextTokens,
+    setPlanningMode,
     addUserMessage,
     addAIMessage,
     addPPTXCard,
+    addQuestionBubble,
+    addUserChoice,
     startStreamingMessage,
     updateStreamingMessage,
     appendStreamingContent,
