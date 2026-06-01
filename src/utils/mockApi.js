@@ -305,6 +305,23 @@ export const mockElectronAPI = {
   // ===== WebSocket 广播事件桩 =====
   onWsNewBroadcast: () => {},
 
+  // ===== AI Agent 桩 =====
+  agentRun: async (data) => ({ success: false, message: '浏览器环境不支持 Agent' }),
+  agentCancel: async () => ({ success: true }),
+  agentStatus: async () => ({ running: false }),
+  onAgentProgress: () => {},
+  onAgentChunk: () => {},
+  removeAgentListeners: () => {},
+
+  // ===== 云端 API 桩 =====
+  setCloudApiBase: () => {},
+  setCloudApiKey: () => {},
+  setCloudModel: () => {},
+  setCloudProvider: () => {},
+  getCloudConfig: async () => ({ success: true, base: '', hasKey: false, model: '', provider: '' }),
+  openFilePath: async () => ({ success: false, error: '浏览器环境不支持' }),
+  testCloudApi: async () => ({ success: false, message: '浏览器环境不支持此测试' }),
+
   // ===== 下载进度桩 =====
 
   onDownloadProgress: () => {},

@@ -1,17 +1,61 @@
 <template>
   <div :class="['ai-chat-view', { 'has-messages': messages.length > 0 }]" ref="chatViewRef" @scroll="onScroll">
+    <!-- 常驻头栏 -->
+    <div class="ai-header-bar">
+      <div class="ai-header-left">
+        <el-dropdown trigger="click" @command="handleConvCmd">
+          <span class="ai-header-title" style="cursor:pointer">
+            {{ activeConvName }} <el-icon><ArrowDown /></el-icon>
+          </span>
+          <template #dropdown>
+            <el-dropdown-menu class="conv-dropdown">
+              <div class="conv-list">
+                <div v-for="conv in aiStore.conversations" :key="conv.id" class="conv-item" :class="{ active: conv.id === aiStore.activeConversationId }" @click="switchConv(conv.id)">
+                  <span class="conv-name">{{ conv.name || '新对话' }}</span>
+                  <span class="conv-actions" @click.stop>
+                    <el-button :icon="EditPen" size="small" text @click="renameConv(conv)" />
+                    <el-button v-if="aiStore.conversations.length > 1" :icon="Delete" size="small" text @click="deleteConv(conv.id)" />
+                  </span>
+                </div>
+              </div>
+              <el-dropdown-item command="new">
+                <el-icon><Plus /></el-icon> 新建对话
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
+      <div class="ai-header-controls">
+        <el-radio-group :model-value="aiMode" size="small" @change="onModeChange">
+          <el-radio-button value="local">本地</el-radio-button>
+          <el-radio-button value="cloud">云端</el-radio-button>
+        </el-radio-group>
+        <el-select
+          v-if="aiMode === 'cloud' && hasCloudConfig"
+          :model-value="cloudModelName"
+          size="small"
+          style="width:190px"
+          @change="onCloudModelChange"
+          placeholder="选择模型"
+        >
+          <el-option v-for="m in cloudModelList" :key="m.id" :label="m.name" :value="m.id" />
+        </el-select>
+        <el-tag v-else-if="aiMode === 'cloud'" size="small" type="warning" effect="plain" @click="goToSettings" style="cursor:pointer">
+          请先配置API
+        </el-tag>
+        <el-tag v-else size="small" type="info" effect="plain">
+          {{ localModelLabel }}
+        </el-tag>
+        <el-button :icon="Setting" circle size="small" @click="goToSettings" title="设置" />
+      </div>
+    </div>
+
     <!-- 欢迎/问候语 -->
     <div v-if="messages.length === 0" class="welcome-section">
       <el-icon class="ai-icon" :size="60"><MagicStick /></el-icon>
       <h2>Electronic</h2>
       <p class="intro">{{ t('aiChat.personalAssistant') }}</p>
       <p class="greeting">{{ greeting }}</p>
-      <p v-if="aiStore.currentModel" class="current-model">
-        <el-tag type="info" effect="plain">
-          <el-icon class="model-icon"><Monitor /></el-icon>
-          {{ aiStore.currentModel }}
-        </el-tag>
-      </p>
     </div>
     
     <!-- 消息列表 -->
@@ -39,24 +83,29 @@
                   <ArrowDown v-if="msg.showThinking" />
                   <ArrowRight v-else />
                 </el-icon>
-                <span>思考中...</span>
+                <span>{{ getThinkingLabel(msg) }}</span>
               </div>
               <div v-if="msg.showThinking" class="thinking-content">
                 <pre>{{ msg.thinking }}</pre>
               </div>
             </div>
             
+            <!-- PPT 课件卡片（嵌入当前消息） -->
+            <div v-if="msg.pptxCard" class="pptx-card" @click="openPPTX(msg.pptxCard.filePath)">
+              <div class="pptx-card-icon">
+                <el-icon :size="48"><Document /></el-icon>
+              </div>
+              <div class="pptx-card-info">
+                <div class="pptx-card-name">{{ msg.pptxCard.fileName || '课件.pptx' }}</div>
+                <div class="pptx-card-meta" v-if="msg.pptxCard.slideCount">{{ msg.pptxCard.slideCount }} 页</div>
+                <div class="pptx-card-desc">{{ msg.pptxCard.message }}</div>
+                <div class="pptx-card-click">点击打开文件</div>
+              </div>
+            </div>
+
             <!-- 消息内容 - 支持Markdown -->
-            <div class="message-bubble" :class="{ 'is-html': msg.htmlContent, 'is-streaming': msg.isStreaming }">
-              <!-- 流式输出中但还没有任何内容时，显示动态加载点 -->
-              <template v-if="msg.isStreaming && !msg.content && !msg.thinking">
-                <div class="thinking-dots">
-                  <span class="dot">●</span>
-                  <span class="dot">●</span>
-                  <span class="dot">●</span>
-                </div>
-              </template>
-              <template v-else-if="msg.htmlContent">
+            <div v-if="msg.content || msg.htmlContent" class="message-bubble" :class="{ 'is-html': msg.htmlContent, 'is-streaming': msg.isStreaming }">
+              <template v-if="msg.htmlContent">
                 <div class="markdown-content" v-html="msg.htmlContent"></div>
               </template>
               <template v-else>
@@ -93,14 +142,56 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { MagicStick, ArrowDown, ArrowRight, Monitor } from '@element-plus/icons-vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, onActivated } from 'vue'
+import { MagicStick, ArrowDown, ArrowRight, Setting, Document, Plus, EditPen, Delete } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
 import { getUserAvatar } from '../../composables/useAvatar'
 
 const aiStore = useAIStore()
 const { t } = useI18n()
+
+const emit = defineEmits(['navigate'])
+
+const aiMode = ref(aiStore.aiMode)
+const cloudModelName = ref(aiStore.cloudModel)
+const localModelLabel = ref(aiStore.currentModel || '本地模型')
+
+// 同步 store 变化到本地 ref
+watch(() => aiStore.aiMode, v => { aiMode.value = v })
+watch(() => aiStore.cloudModel, v => { cloudModelName.value = v })
+watch(() => aiStore.currentModel, v => { localModelLabel.value = v || '本地模型' })
+
+const CLOUD_PROVIDERS = [
+  { id: 'deepseek', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', thinking: 'none', contextLimit: 1000000 }, { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', thinking: 'always', contextLimit: 1000000 }] },
+  { id: 'openai', models: [{ id: 'gpt-4o', name: 'GPT-4o', thinking: 'none' }, { id: 'gpt-4o-mini', name: 'GPT-4o Mini', thinking: 'none' }, { id: 'o3-mini', name: 'o3-mini', thinking: 'optional' }, { id: 'o1', name: 'o1', thinking: 'always' }] },
+  { id: 'qwen', models: [{ id: 'qwen-plus', name: 'Qwen Plus', thinking: 'none' }, { id: 'qwen-max', name: 'Qwen Max', thinking: 'optional' }, { id: 'qwen-turbo', name: 'Qwen Turbo', thinking: 'none' }, { id: 'qwen-long', name: 'Qwen Long', thinking: 'none' }] },
+  { id: 'zhipu', models: [{ id: 'glm-4-flash', name: 'GLM-4 Flash', thinking: 'none' }, { id: 'glm-4', name: 'GLM-4', thinking: 'optional' }, { id: 'glm-4-plus', name: 'GLM-4 Plus', thinking: 'optional' }] },
+  { id: 'moonshot', models: [{ id: 'moonshot-v1-8k', name: 'Moonshot v1 8K', thinking: 'none' }, { id: 'moonshot-v1-32k', name: 'Moonshot v1 32K', thinking: 'none' }, { id: 'moonshot-v1-128k', name: 'Moonshot v1 128K', thinking: 'none' }] },
+  { id: 'custom', models: [] }
+]
+
+function readCloudConfig() {
+  try {
+    const raw = localStorage.getItem('cloudApiSettings')
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return {}
+}
+
+const hasCloudConfig = computed(() => {
+  void aiMode.value
+  void cloudModelName.value
+  const cfg = readCloudConfig()
+  return !!(cfg.base && cfg.model)
+})
+
+const cloudModelList = computed(() => {
+  const cfg = readCloudConfig()
+  const providerId = cfg.provider || aiStore.cloudProvider
+  const p = CLOUD_PROVIDERS.find(p => p.id === providerId)
+  return p ? p.models : [{ id: 'gpt-4o', name: 'GPT-4o' }, { id: 'gpt-4o-mini', name: 'GPT-4o Mini' }]
+})
 
 const chatViewRef = ref(null)
 const showError = ref(false)
@@ -110,6 +201,81 @@ const SCROLL_THRESHOLD = 200             // 距底部超过此值显示跳转按
 
 const messages = computed(() => aiStore.messages)
 const greeting = computed(() => aiStore.getGreeting())
+
+function onModeChange(mode) {
+  aiMode.value = mode
+  aiStore.setAiMode(mode)
+}
+
+function onCloudModelChange(model) {
+  cloudModelName.value = model
+  aiStore.setCloudModel(model)
+  const cfg = readCloudConfig()
+  cfg.model = model
+  try { localStorage.setItem('cloudApiSettings', JSON.stringify(cfg)) } catch {}
+}
+
+function goToSettings() {
+  localStorage.setItem('settingsActiveNav', 'ai')
+  emit('navigate', 'settings')
+}
+
+async function openPPTX(filePath) {
+  if (!filePath) return
+  if (window.electronAPI?.openFilePath) {
+    await window.electronAPI.openFilePath(filePath)
+  }
+}
+
+function newConversation() {
+  aiStore.newConversation()
+  autoScroll.value = true
+  showScrollButton.value = false
+}
+
+function getThinkingLabel(msg) {
+  if (!msg.thinking) return '思考中...'
+  if (msg.thinking.includes('正在生成')) return '正在制作课件...'
+  if (msg.thinking.includes('正在设计')) return '正在设计课件...'
+  if (msg.thinking.includes('正在保存')) return '正在保存课件...'
+  if (msg.thinking.includes('generate_pptx')) return '正在制作课件...'
+  if (msg.thinking.includes('send_message')) return '正在发送...'
+  if (msg.thinking.includes('send_broadcast')) return '正在广播...'
+  const lines = msg.thinking.trim().split('\n')
+  const last = lines[lines.length - 1].trim()
+  if (last.length > 3 && last.length < 40) return last
+  return '思考中...'
+}
+
+function switchConv(id) {
+  aiStore.switchConversation(id)
+  autoScroll.value = true
+}
+
+function deleteConv(id) {
+  aiStore.deleteConversation(id)
+}
+
+function renameConv(conv) {
+  ElMessageBox.prompt('请输入新名称', '重命名对话', {
+    inputValue: conv.name,
+    confirmButtonText: '确定',
+    cancelButtonText: '取消'
+  }).then(({ value }) => {
+    if (value && value.trim()) {
+      aiStore.renameConversation(conv.id, value.trim())
+    }
+  }).catch(() => {})
+}
+
+function handleConvCmd(cmd) {
+  if (cmd === 'new') newConversation()
+}
+
+const activeConvName = computed(() => {
+  const conv = aiStore.conversations.find(c => c.id === aiStore.activeConversationId)
+  return conv ? (conv.name || '新对话') : 'AI 助手'
+})
 
 function getCurrentUsername() {
   try {
@@ -201,7 +367,14 @@ watch(isAIStreaming, (streaming) => {
 
 onMounted(() => {
   scrollToBottom()
-  aiStore.fetchCurrentModel()
+  if (aiMode.value === 'local') {
+    aiStore.fetchCurrentModel()
+  }
+})
+
+onActivated(() => {
+  autoScroll.value = true
+  scrollToBottom()
 })
 
 onUnmounted(() => {
@@ -213,12 +386,46 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 .ai-chat-view {
   height: calc(100vh - 60px);
-  padding: 20px 30px 100px;
+  padding: 0 30px 100px;
   overflow-y: hidden;
   position: relative;
 
   &.has-messages {
     overflow-y: auto;
+  }
+
+  .ai-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 8px;
+    position: sticky;
+    top: 0;
+    background: var(--bg-primary);
+    z-index: 10;
+
+    .ai-header-left {
+      display: flex;
+      align-items: center;
+
+      .el-dropdown {
+        .ai-header-title:hover { color: var(--accent-color); }
+      }
+    }
+
+    .ai-header-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .ai-header-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
   }
   
   .welcome-section {
@@ -251,24 +458,8 @@ onUnmounted(() => {
       color: var(--accent-color);
       font-weight: 500;
     }
-
-    .current-model {
-      margin-top: 12px;
-
-      .el-tag {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 14px;
-        padding: 8px 16px;
-
-        .model-icon {
-          font-size: 16px;
-        }
-      }
-    }
   }
-  
+
   .messages-container {
     max-width: 900px;
     margin: 0 auto;
@@ -328,10 +519,8 @@ onUnmounted(() => {
           }
           
           .thinking-content {
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            padding: 12px;
-            margin-top: 4px;
+            padding: 8px 0;
+            margin-top: 2px;
             
             pre {
               margin: 0;
@@ -576,6 +765,62 @@ onUnmounted(() => {
     }
   }
   
+  .pptx-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 8px 0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      border-color: var(--accent-color);
+      background: rgba(74, 158, 255, 0.06);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .pptx-card-icon {
+      flex-shrink: 0;
+      color: #d24726;
+      opacity: 0.9;
+    }
+
+    .pptx-card-info {
+      flex: 1;
+      min-width: 0;
+
+      .pptx-card-name {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 2px;
+      }
+
+      .pptx-card-meta {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+      }
+
+      .pptx-card-desc {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+      }
+
+      .pptx-card-click {
+        font-size: 12px;
+        color: var(--accent-color);
+        font-weight: 500;
+      }
+    }
+  }
+
   .error-alert {
     position: fixed;
     top: 80px;
@@ -586,10 +831,9 @@ onUnmounted(() => {
 
   // 跳到底部按钮
   .scroll-to-bottom-btn {
-    position: sticky;
-    bottom: 90px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
+    bottom: 100px;
+    right: 24px;
     width: 40px;
     height: 40px;
     border-radius: 50%;
@@ -602,10 +846,9 @@ onUnmounted(() => {
     z-index: 50;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
     transition: transform 0.2s, box-shadow 0.2s;
-    margin: 0 auto;
 
     &:hover {
-      transform: translateX(-50%) scale(1.1);
+      transform: scale(1.1);
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
     }
 
@@ -649,5 +892,55 @@ onUnmounted(() => {
 .scroll-btn-fade-leave-to {
   opacity: 0;
   transform: translateY(10px);
+}
+</style>
+
+<style>
+.conv-dropdown {
+  max-height: 320px;
+  overflow: hidden;
+  min-width: 260px;
+}
+
+.conv-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.conv-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+.conv-item:hover {
+  background: var(--hover-bg);
+}
+
+.conv-item.active {
+  background: rgba(74, 158, 255, 0.12);
+}
+
+.conv-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.conv-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.conv-item:hover .conv-actions {
+  opacity: 1;
 }
 </style>

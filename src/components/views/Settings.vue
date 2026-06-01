@@ -126,21 +126,55 @@
         <!-- AI 模型 -->
         <div v-else-if="activeNav === 'ai'" class="settings-section">
           <h3>{{ t('settings.aiModelTitle') }}</h3>
-          <el-form-item :label="t('settings.aiServerIP') + '：'">
-            <el-input
-              v-model="aiServerIP"
-              :placeholder="t('settings.aiServerIPPlaceholder')"
-              @blur="saveAiApiSettings"
-            />
+          <el-form-item :label="t('settings.aiMode') + '：'">
+            <el-radio-group v-model="aiSettingsMode" @change="saveAiMode">
+              <el-radio-button value="local">{{ t('settings.aiModeLocal') }}</el-radio-button>
+              <el-radio-button value="cloud">{{ t('settings.aiModeCloud') }}</el-radio-button>
+            </el-radio-group>
           </el-form-item>
-          <el-form-item :label="t('settings.aiServerPort') + '：'">
-            <el-input
-              v-model="aiServerPort"
-              :placeholder="t('settings.aiServerPortPlaceholder')"
-              @blur="saveAiApiSettings"
-            />
+          <el-form-item label="上下文长度：">
+            <el-slider v-model="contextTokens" :min="1000" :max="maxContextLimit" :step="1000" show-input @change="saveContextTokens" />
+            <div class="setting-tip">对话上下文最大 token 数。当前模型上限 {{ maxContextLimit.toLocaleString() }}。越大则 AI 能记住越多历史。</div>
+          </el-form-item>
+          <el-divider />
+
+          <!-- 本地模型 -->
+          <div v-show="aiSettingsMode === 'local'">
+            <h4>{{ t('settings.localModel') }}</h4>
+            <el-form-item :label="t('settings.aiServerIP') + '：'">
+              <el-input v-model="aiServerIP" :placeholder="t('settings.aiServerIPPlaceholder')" @blur="saveAiApiSettings" />
+            </el-form-item>
+            <el-form-item :label="t('settings.aiServerPort') + '：'">
+              <el-input v-model="aiServerPort" :placeholder="t('settings.aiServerPortPlaceholder')" @blur="saveAiApiSettings" />
+            </el-form-item>
             <div class="setting-tip">{{ t('settings.aiServerTip') }}</div>
-          </el-form-item>
+          </div>
+
+          <!-- 云端 API -->
+          <div v-show="aiSettingsMode === 'cloud'">
+            <h4>{{ t('settings.cloudModel') }}</h4>
+            <el-form-item :label="t('settings.cloudProvider') + '：'">
+              <el-select v-model="cloudProviderId" placeholder="选择提供商" @change="handleProviderChange" style="width:100%">
+                <el-option v-for="p in providerList" :key="p.id" :label="p.name" :value="p.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('settings.cloudModelName') + '：'">
+              <el-select v-if="cloudProviderId !== 'custom'" v-model="cloudModel" placeholder="选择模型" style="width:100%">
+                <el-option v-for="m in currentProviderModels" :key="m.id" :label="m.name" :value="m.id" />
+              </el-select>
+              <el-input v-else v-model="cloudModel" placeholder="输入模型标识符" />
+            </el-form-item>
+            <el-form-item v-if="cloudProviderId === 'custom'" :label="t('settings.cloudApiBase') + '：'">
+              <el-input v-model="cloudApiBase" placeholder="https://api.openai.com/v1" />
+            </el-form-item>
+            <el-form-item :label="t('settings.cloudApiKey') + '：'">
+              <el-input v-model="cloudApiKey" type="password" placeholder="sk-..." show-password />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="saveCloudApiSettings">{{ t('common.save') }}</el-button>
+            </el-form-item>
+            <div class="setting-tip">支持所有 OpenAI 兼容接口（DeepSeek、通义千问、智谱等）。选择提供商后自动填充地址和模型列表。</div>
+          </div>
         </div>
 
         <!-- 服务端 -->
@@ -193,6 +227,43 @@
               <el-button @click="handleSelectDir" :icon="FolderOpened" />
             </div>
             <div class="setting-tip">{{ t('settings.downloadDirTip') }}</div>
+          </el-form-item>
+        </div>
+
+        <!-- 课件模板 -->
+        <div v-else-if="activeNav === 'templates'" class="settings-section">
+          <h3>课件模板</h3>
+          <el-form-item label="当前模板：">
+            <el-select v-model="activeTemplate" @change="applyTemplate" style="width:100%">
+              <el-option v-for="t in templateList" :key="t.id" :label="t.name" :value="t.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button @click="showAddTemplate = true" :icon="Plus">新建模板</el-button>
+          </el-form-item>
+
+          <el-dialog v-model="showAddTemplate" title="新建模板" width="360px">
+            <el-form label-width="70px">
+              <el-form-item label="名称"><el-input v-model="newTemplateName" /></el-form-item>
+              <el-form-item label="主题色"><el-input v-model="newTemplateColor" placeholder="#4A9EFF" /></el-form-item>
+              <el-form-item label="字体"><el-input v-model="newTemplateFont" placeholder="Microsoft YaHei" /></el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="showAddTemplate = false">取消</el-button>
+              <el-button type="primary" @click="saveTemplate">保存</el-button>
+            </template>
+          </el-dialog>
+        </div>
+
+        <!-- PPT 输出目录 -->
+        <div v-else-if="activeNav === 'pptdir'" class="settings-section">
+          <h3>PPT 课件输出目录</h3>
+          <el-form-item label="输出目录：">
+            <div class="download-dir-row">
+              <el-input v-model="pptDir" placeholder="选择PPT课件的保存路径" @blur="savePPTDir" />
+              <el-button @click="selectPPTDir" :icon="FolderOpened" />
+            </div>
+            <div class="setting-tip">AI 生成的课件（.pptx 文件）将保存到此目录。留空则使用下载目录。</div>
           </el-form-item>
         </div>
 
@@ -273,15 +344,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { Moon, Sunny, Monitor, FolderOpened, User, Setting, MagicStick, Link, Search, Folder, InfoFilled, Message, RefreshRight, Lock } from '@element-plus/icons-vue'
+import { ref, computed, onMounted } from 'vue'
+import { Moon, Sunny, Monitor, FolderOpened, Files, User, Setting, MagicStick, Link, Search, Folder, InfoFilled, Message, RefreshRight, Lock, View, Hide } from '@element-plus/icons-vue'
 import { useSettingsStore } from '../../stores/settings'
+import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
 import { languages } from '../../utils/i18n'
 import UserProfile from './settings/UserProfile.vue'
 import pkg from '../../../package.json'
 
 const settingsStore = useSettingsStore()
+const aiStore = useAIStore()
 const { t, setLocale } = useI18n()
 
 const appVersion = pkg.version
@@ -296,6 +369,8 @@ const navItems = [
     { key: 'server', label: '服务端', icon: Link },
     { key: 'friendSearch', label: '好友搜索', icon: Search },
     { key: 'privacy', label: '隐私加密', icon: Lock },
+    { key: 'pptdir', label: 'PPT 输出', icon: Folder },
+    { key: 'templates', label: '课件模板', icon: Files },
     { key: 'download', label: '下载目录', icon: Folder },
     { key: 'checkUpdate', label: '检查更新', icon: RefreshRight },
     { key: 'about', label: '关于', icon: InfoFilled }
@@ -324,6 +399,50 @@ const AI_SETTINGS_KEY = 'aiApiSettings'
 
 const aiServerIP = ref('127.0.0.1')
 const aiServerPort = ref('1234')
+
+const aiSettingsMode = ref('local')
+
+const cloudProviderId = ref('')
+const cloudApiBase = ref('https://api.openai.com/v1')
+const cloudApiKey = ref('')
+const cloudModel = ref('gpt-4o')
+const keyVisible = ref(false)
+const testingCloud = ref(false)
+const pptDir = ref('')
+const contextTokens = ref(32000)
+const activeTemplate = ref('blue')
+const templateList = ref([])
+const showAddTemplate = ref(false)
+const newTemplateName = ref('')
+const newTemplateColor = ref('')
+const newTemplateFont = ref('Microsoft YaHei')
+
+const maxContextLimit = computed(() => {
+  const p = PROVIDERS.find(p => p.id === cloudProviderId.value)
+  if (p && p.models.length > 0) {
+    const m = cloudModel.value ? p.models.find(m => m.id === cloudModel.value) : p.models[0]
+    if (m?.contextLimit) return m.contextLimit
+  }
+  return 100000
+})
+
+const PROVIDERS = [
+  { id: 'deepseek', name: 'DeepSeek', baseURL: 'https://api.deepseek.com/v1', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', thinking: 'none', contextLimit: 1000000 }, { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', thinking: 'always', contextLimit: 1000000 }] },
+  { id: 'openai', name: 'OpenAI', baseURL: 'https://api.openai.com/v1', models: [{ id: 'gpt-4o', name: 'GPT-4o', thinking: 'none' }, { id: 'gpt-4o-mini', name: 'GPT-4o Mini', thinking: 'none' }, { id: 'o3-mini', name: 'o3-mini', thinking: 'optional' }, { id: 'o1', name: 'o1', thinking: 'always' }] },
+  { id: 'qwen', name: '通义千问', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: [{ id: 'qwen-plus', name: 'Qwen Plus', thinking: 'none' }, { id: 'qwen-max', name: 'Qwen Max', thinking: 'optional' }, { id: 'qwen-turbo', name: 'Qwen Turbo', thinking: 'none' }, { id: 'qwen-long', name: 'Qwen Long', thinking: 'none' }] },
+  { id: 'zhipu', name: '智谱AI', baseURL: 'https://open.bigmodel.cn/api/paas/v4', models: [{ id: 'glm-4-flash', name: 'GLM-4 Flash', thinking: 'none' }, { id: 'glm-4', name: 'GLM-4', thinking: 'optional' }, { id: 'glm-4-plus', name: 'GLM-4 Plus', thinking: 'optional' }] },
+  { id: 'moonshot', name: 'Moonshot', baseURL: 'https://api.moonshot.cn/v1', models: [{ id: 'moonshot-v1-8k', name: 'Moonshot v1 8K', thinking: 'none' }, { id: 'moonshot-v1-32k', name: 'Moonshot v1 32K', thinking: 'none' }, { id: 'moonshot-v1-128k', name: 'Moonshot v1 128K', thinking: 'none' }] },
+  { id: 'custom', name: '自定义', baseURL: '', models: [] }
+]
+
+const providerList = PROVIDERS
+
+const currentProviderModels = computed(() => {
+  const p = PROVIDERS.find(p => p.id === cloudProviderId.value)
+  return p ? p.models : []
+})
+
+const CLOUD_API_KEY = 'cloudApiSettings'
 
 const SERVER_SETTINGS_KEY = 'lanChatSettings'
 function getCurrentUsername() {
@@ -383,6 +502,117 @@ const saveAiApiSettings = () => {
     }
 }
 
+const saveCloudApiSettings = () => {
+    const data = { base: cloudApiBase.value, model: cloudModel.value, provider: cloudProviderId.value, key: cloudApiKey.value }
+    localStorage.setItem(CLOUD_API_KEY, JSON.stringify(data))
+    if (window.electronAPI?.setCloudApiBase) {
+        window.electronAPI.setCloudApiBase(cloudApiBase.value)
+    }
+    if (window.electronAPI?.setCloudApiKey) {
+        window.electronAPI.setCloudApiKey(cloudApiKey.value)
+    }
+    if (window.electronAPI?.setCloudModel) {
+        window.electronAPI.setCloudModel(cloudModel.value)
+    }
+    if (window.electronAPI?.setCloudProvider) {
+        window.electronAPI.setCloudProvider(cloudProviderId.value)
+    }
+}
+
+const handleProviderChange = (providerId) => {
+    const p = PROVIDERS.find(p => p.id === providerId)
+    if (p) {
+        if (p.baseURL) {
+            cloudApiBase.value = p.baseURL
+        }
+        if (p.models.length > 0) {
+            cloudModel.value = p.models[0].id
+        }
+        cloudProviderId.value = providerId
+    }
+}
+
+const saveAiMode = () => {
+    localStorage.setItem('aiMode', aiSettingsMode.value)
+}
+
+const testCloudApi = async () => {
+    if (!cloudApiKey.value) return
+    testingCloud.value = true
+    try {
+        const result = window.electronAPI.testCloudApi
+            ? await window.electronAPI.testCloudApi({ base: cloudApiBase.value, key: cloudApiKey.value, model: cloudModel.value })
+            : { success: false, message: '功能不可用' }
+        if (result.success) {
+            ElMessage.success(result.message)
+        } else {
+            ElMessage.error(result.message)
+        }
+    } catch (e) {
+        ElMessage.error('测试失败：' + e.message)
+    }
+    testingCloud.value = false
+}
+
+const savePPTDir = () => {
+    const dir = pptDir.value.trim()
+    localStorage.setItem('pptDir', dir)
+    if (window.electronAPI?.setPPTDir) {
+        window.electronAPI.setPPTDir(dir || null)
+    }
+}
+
+const selectPPTDir = async () => {
+    if (!window.electronAPI?.selectDirectory) return
+    const result = await window.electronAPI.selectDirectory()
+    if (result.success && result.dir) {
+        pptDir.value = result.dir
+        savePPTDir()
+    }
+}
+
+const saveContextTokens = () => {
+    if (contextTokens.value > maxContextLimit.value) {
+        contextTokens.value = maxContextLimit.value
+    }
+    localStorage.setItem('aiContextTokens', contextTokens.value)
+    if (aiStore) aiStore.setContextTokens(contextTokens.value)
+}
+
+const loadTemplates = () => {
+    try {
+        templateList.value = JSON.parse(localStorage.getItem('ai_templates') || '[]')
+        if (templateList.value.length === 0) {
+            templateList.value = [
+                { id: 'blue', name: '蓝色学术', color: '#4A9EFF', font: 'Microsoft YaHei' },
+                { id: 'academic', name: '简约学术', color: '#2980B9', font: 'SimSun' },
+                { id: 'warm', name: '暖色教学', color: '#E67E22', font: 'Microsoft YaHei' }
+            ]
+            localStorage.setItem('ai_templates', JSON.stringify(templateList.value))
+        }
+        activeTemplate.value = localStorage.getItem('ai_active_template') || 'blue'
+    } catch {}
+}
+
+const applyTemplate = (id) => {
+    localStorage.setItem('ai_active_template', id)
+}
+
+const saveTemplate = () => {
+    if (!newTemplateName.value.trim()) return
+    templateList.value.push({
+        id: 'tpl_' + Date.now(),
+        name: newTemplateName.value.trim(),
+        color: newTemplateColor.value || '#4A9EFF',
+        font: newTemplateFont.value || 'Microsoft YaHei'
+    })
+    localStorage.setItem('ai_templates', JSON.stringify(templateList.value))
+    showAddTemplate.value = false
+    newTemplateName.value = ''
+    newTemplateColor.value = ''
+    newTemplateFont.value = 'Microsoft YaHei'
+}
+
 onMounted(() => {
     theme.value = settingsStore.theme
     language.value = settingsStore.language || 'zh-CN'
@@ -401,6 +631,19 @@ onMounted(() => {
         aiServerPort.value = s.port || '1234'
     }
     saveAiApiSettings()
+
+    const cloudRaw = localStorage.getItem(CLOUD_API_KEY)
+    if (cloudRaw) {
+        const s = JSON.parse(cloudRaw)
+        cloudApiBase.value = s.base || 'https://api.openai.com/v1'
+        cloudModel.value = s.model || 'gpt-4o'
+        cloudProviderId.value = s.provider || ''
+        cloudApiKey.value = s.key || ''
+    }
+    saveCloudApiSettings()
+
+    const savedMode = localStorage.getItem('aiMode')
+    if (savedMode) aiSettingsMode.value = savedMode
 
     const raw = localStorage.getItem(SERVER_SETTINGS_KEY)
     if (raw) {
@@ -426,6 +669,23 @@ onMounted(() => {
 
     const e2e = localStorage.getItem('e2eEncryption')
     if (e2e) e2eEncryption.value = e2e
+
+    const savedPPTDir = localStorage.getItem('pptDir')
+    if (savedPPTDir) pptDir.value = savedPPTDir
+    if (window.electronAPI?.setPPTDir) {
+        window.electronAPI.setPPTDir(savedPPTDir || null)
+    }
+
+    const savedCtx = localStorage.getItem('aiContextTokens')
+    if (savedCtx) contextTokens.value = parseInt(savedCtx) || 32000
+
+    const navPreference = localStorage.getItem('settingsActiveNav')
+    if (navPreference) {
+        activeNav.value = navPreference
+        localStorage.removeItem('settingsActiveNav')
+    }
+
+    loadTemplates()
 })
 
 const handleThemeChange = (value) => {
@@ -720,6 +980,12 @@ const handleCheckUpdate = async () => {
                     margin-top: 6px;
                     display: block;
                     line-height: 1.5;
+                }
+
+                .key-input-row {
+                    display: flex;
+                    gap: 6px;
+                    align-items: center;
                 }
 
                 .download-dir-row {

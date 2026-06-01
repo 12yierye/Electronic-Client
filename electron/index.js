@@ -10,6 +10,8 @@ import { registerTaskIpc } from './ipc/task.js'
 import { registerExternalIpc } from './ipc/external.js'
 import { registerOrgIpc } from './ipc/org.js'
 import { registerBroadcastIpc } from './ipc/broadcast.js'
+import { registerAgentIpc } from './ipc/agent.js'
+import { registerSettingsIpc } from './ipc/settings.js'
 import { clearAllScheduledTasks, saveScheduledTasks, restoreScheduledTasks } from './services/scheduledTasks.js'
 
 app.setPath('userData', join(app.getPath('appData'), 'Electronic'))
@@ -55,6 +57,8 @@ registerTaskIpc()
 registerExternalIpc()
 registerOrgIpc()
 registerBroadcastIpc()
+registerAgentIpc()
+registerSettingsIpc()
 // console.log('[Main] IPC handlers registered')
 
 app.setUserTasks([

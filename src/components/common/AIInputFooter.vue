@@ -6,24 +6,33 @@
       :placeholder="t('aiChat.enterToSend')"
       :rows="1"
       autosize
-      :disabled="aiStore.isLoading"
+      :disabled="isSending"
       @keydown.enter.exact="handleEnterKey"
       @keydown.shift.enter="handleNewLine"
     />
-    <el-button 
-      type="primary" 
-      :icon="isSending ? Loading : Promotion" 
-      @click="handleSend"
-      :disabled="!inputMessage.trim() || aiStore.isLoading"
+    <el-button
+      v-if="isSending"
+      type="danger"
+      :icon="Close"
+      @click="handleCancel"
     >
-      {{ isSending ? t('aiChat.thinking') : t('common.send') }}
+      停止
+    </el-button>
+    <el-button 
+      v-else
+      type="primary" 
+      :icon="Promotion" 
+      @click="handleSend"
+      :disabled="!inputMessage.trim()"
+    >
+      {{ t('common.send') }}
     </el-button>
   </div>
 </template>
 
 <script setup>
 import { ref, onUnmounted } from 'vue'
-import { Promotion, Loading } from '@element-plus/icons-vue'
+import { Promotion, Loading, Close } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
 import { useUserStore } from '../../stores/user'
@@ -47,16 +56,85 @@ const handleSend = async () => {
   if (!message || isSending.value) return
 
   const currentUsername = userStore.userInfo?.username
+  const currentMode = localStorage.getItem('aiMode') || aiStore.aiMode || 'local'
 
   isSending.value = true
   aiStore.addUserMessage(message)
   inputMessage.value = ''
 
+  const isComplex = /(课件|PPT|制作|生成|通知|群发|发到|发给所有|全部).*/.test(message) || message.length > 80
+
+  if ((isComplex || currentMode === 'cloud') && window.electronAPI.agentRun) {
+    await handleAgentSend(message, currentUsername, currentMode)
+  } else {
+    await handleStreamingSend(message, currentUsername)
+  }
+}
+
+const handleAgentSend = async (message, currentUsername, currentMode) => {
+  if (window.electronAPI.removeAgentListeners) {
+    window.electronAPI.removeAgentListeners()
+  }
+
+  aiStore.startStreamingMessage()
+  const mode = currentMode || localStorage.getItem('aiMode') || 'local'
+
+  if (window.electronAPI.onAgentProgress) {
+    window.electronAPI.onAgentProgress((data) => {
+      if (data.type === 'routing') aiStore.appendReasoningContent(`[${data.backend}] `)
+      else if (data.type === 'tool_call') aiStore.appendReasoningContent(`\n→ ${data.tool}...`)
+      else if (data.type === 'tool_result') aiStore.appendReasoningContent(data.success ? ' ✓' : ' ✗')
+      else if (data.type === 'error') aiStore.appendReasoningContent(`\n错误: ${data.message}`)
+    })
+  }
+
+  if (window.electronAPI.onAgentChunk) {
+    window.electronAPI.onAgentChunk((data) => {
+      if (data.type === 'content') aiStore.appendStreamingContent(data.content)
+      else if (data.type === 'reasoning') aiStore.appendReasoningContent(data.content)
+      else if (data.type === 'pptx_card') aiStore.addPPTXCard(data)
+    })
+  }
+
+  try {
+    const cloudRaw = localStorage.getItem('cloudApiSettings')
+    let cloudConfig = {}
+    if (cloudRaw) {
+      try { const c = JSON.parse(cloudRaw); cloudConfig = { base: c.base, key: c.key, model: c.model, provider: c.provider } } catch {}
+    }
+    const history = aiStore.getConversationHistory ? aiStore.getConversationHistory(aiStore.contextTokens) : []
+    const pptCards = (aiStore.messages || []).filter(m => m.pptxCard).map(m => m.pptxCard)
+    const result = await window.electronAPI.agentRun({ message, aiMode: mode, cloudConfig, history, pptCards })
+    if (result.reply && result.reply !== '已完成所有操作。') {
+      aiStore.appendStreamingContent(result.reply)
+    }
+    if (result.cancelled) aiStore.appendStreamingContent('\n[已中断]')
+    aiStore.endStreamingMessage()
+    aiStore.persistCurrentConversation()
+  } catch (error) {
+    aiStore.endStreamingMessage()
+    aiStore.addAIMessage('异常：' + error.message)
+  } finally {
+    isSending.value = false
+    if (window.electronAPI.removeAgentListeners) {
+      window.electronAPI.removeAgentListeners()
+    }
+  }
+}
+
+const handleCancel = async () => {
+  if (window.electronAPI.agentCancel) {
+    await window.electronAPI.agentCancel()
+  }
+  isSending.value = false
+}
+
+const handleStreamingSend = async (message, currentUsername) => {
+  let streamEndedNormally = false
+
   if (window.electronAPI.removeAIChatStreamListener) {
     window.electronAPI.removeAIChatStreamListener()
   }
-
-  let streamEndedNormally = false
 
   if (window.electronAPI.onAIChatStreamChunk) {
     window.electronAPI.onAIChatStreamChunk((data) => {

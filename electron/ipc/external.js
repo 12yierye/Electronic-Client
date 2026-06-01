@@ -10,4 +10,13 @@ export function registerExternalIpc() {
             return { success: false }
         }
     })
+
+    ipcMain.handle('open-file-path', async (event, filePath) => {
+        try {
+            const result = await shell.openPath(filePath)
+            return { success: !result, error: result || '' }
+        } catch (err) {
+            return { success: false, error: err.message }
+        }
+    })
 }

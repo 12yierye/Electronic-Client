@@ -23,16 +23,15 @@
 
           <!-- 主内容区 -->
           <div class="main-content">
-            <transition name="fade" mode="out-in">
-              <keep-alive>
-                <component
-                  :is="currentComponent"
-                  :key="currentView"
-                  @logout="handleLogout"
-                  @exit="handleExit"
-                />
-              </keep-alive>
-            </transition>
+            <keep-alive>
+              <component
+                :is="currentComponent"
+                :key="currentView"
+                @logout="handleLogout"
+                @exit="handleExit"
+                @navigate="handleNavigate"
+              />
+            </keep-alive>
           </div>
 
           <!-- AI 聊天输入框 -->
@@ -71,6 +70,7 @@ import ChatRoom from './components/views/ChatRoom.vue'
 import FileManager from './components/views/FileManager.vue'
 import Settings from './components/views/Settings.vue'
 import BroadcastCenter from './components/views/BroadcastCenter.vue'
+import ContentLibrary from './components/views/ContentLibrary.vue'
 
 const settingsStore = useSettingsStore()
 const { elementLocale } = useI18n()
@@ -122,6 +122,7 @@ const componentMap = {
   ai: AIChat,
   chat: ChatRoom,
   broadcast: BroadcastCenter,
+  library: ContentLibrary,
   files: FileManager,
   settings: Settings
 }

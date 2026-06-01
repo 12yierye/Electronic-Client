@@ -176,6 +176,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDownloadDir: () => ipcRenderer.invoke('get-download-dir'),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   ensureDir: (dir) => ipcRenderer.invoke('ensure-dir', dir),
+  setPPTDir: (dir) => ipcRenderer.invoke('set-ppt-dir', dir),
+  getPPTDir: () => ipcRenderer.invoke('get-ppt-dir'),
+  scanDirectory: (dir) => ipcRenderer.invoke('scan-directory', dir),
 
   // 动态设置 AI API 地址
   setAiApiUrl: (url) => ipcRenderer.invoke('set-ai-api-url', url),
@@ -185,6 +188,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 打开外部链接（优先系统默认浏览器，失败则回退到 Electron 窗口）
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  openFilePath: (filePath) => ipcRenderer.invoke('open-file-path', filePath),
 
   // 组织架构
   org: {
@@ -201,7 +205,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: (username) => ipcRenderer.invoke('broadcast:list', username),
     receipts: (broadcastId) => ipcRenderer.invoke('broadcast:receipts', broadcastId),
     markRead: (data) => ipcRenderer.invoke('broadcast:markRead', data),
-  }
+  },
+
+  // AI Agent
+  agentRun: (data) => ipcRenderer.invoke('agent:run', data),
+  agentCancel: () => ipcRenderer.invoke('agent:cancel'),
+  agentStatus: () => ipcRenderer.invoke('agent:status'),
+  onAgentProgress: (callback) => {
+    ipcRenderer.on('agent:progress', (event, data) => callback(data))
+  },
+  onAgentChunk: (callback) => {
+    ipcRenderer.on('agent:chunk', (event, data) => callback(data))
+  },
+  removeAgentListeners: () => {
+    ipcRenderer.removeAllListeners('agent:progress')
+    ipcRenderer.removeAllListeners('agent:chunk')
+  },
+
+  // 云端 API 配置
+  setCloudApiBase: (url) => ipcRenderer.invoke('set-cloud-api-base', url),
+  setCloudApiKey: (key) => ipcRenderer.invoke('set-cloud-api-key', key),
+  setCloudModel: (model) => ipcRenderer.invoke('set-cloud-model', model),
+  setCloudProvider: (provider) => ipcRenderer.invoke('set-cloud-provider', provider),
+  getCloudConfig: () => ipcRenderer.invoke('get-cloud-config'),
+  testCloudApi: (data) => ipcRenderer.invoke('test-cloud-api', data),
 })
 
 console.log('[Preload] ready')

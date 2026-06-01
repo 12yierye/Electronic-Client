@@ -29,7 +29,7 @@
 
 <script setup>
 import { computed, ref, onMounted, watch } from 'vue'
-import { ChatDotRound, Files, Setting, MagicStick, User, Bell } from '@element-plus/icons-vue'
+import { ChatDotRound, Files, Setting, MagicStick, User, Bell, FolderOpened } from '@element-plus/icons-vue'
 import { useI18n } from '../../composables/useI18n'
 import { useSettingsStore } from '../../stores/settings'
 import { getUserAvatar, getAvatarUrl } from '../../composables/useAvatar'
@@ -62,6 +62,7 @@ const navItems = computed(() => [
   { key: 'ai', icon: 'MagicStick', label: t('navigation.ai') },
   { key: 'chat', icon: 'ChatDotRound', label: t('navigation.chat') },
   { key: 'broadcast', icon: 'Bell', label: t('navigation.broadcast') },
+  { key: 'library', icon: 'FolderOpened', label: '内容库' },
   { key: 'files', icon: 'Files', label: t('navigation.files') },
   { key: 'settings', icon: 'Setting', label: t('navigation.settings') }
 ])

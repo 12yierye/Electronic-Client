@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
         build: {
           outDir: 'dist-electron',
           rollupOptions: {
-            external: ['electron', 'axios', 'ws']
+            external: ['electron', 'axios', 'ws', 'pptxgenjs']
           }
         }
       }

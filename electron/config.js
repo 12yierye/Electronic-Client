@@ -40,6 +40,13 @@ export const setDownloadDir = (dir) => {
     console.log('[Config] Download dir updated:', downloadDir)
 }
 
+let pptDir = null
+export const getPPTDir = () => pptDir || getDownloadDir()
+export const setPPTDir = (dir) => {
+    pptDir = dir
+    console.log('[Config] PPT dir updated:', pptDir)
+}
+
 export let mainWindow = null
 
 export const setMainWindow = (win) => {
@@ -58,4 +65,38 @@ export const getErrorHint = (errorCode) => {
     'ENETUNREACH': '网络不可达'
   }
   return hints[errorCode] || '未知错误'
+}
+
+let cloudApiBase = 'https://api.openai.com/v1'
+let cloudApiKey = ''
+let cloudModel = 'gpt-4o'
+let cloudProvider = ''
+
+export const getCloudAPIBase = () => cloudApiBase
+export const setCloudAPIBase = (url) => {
+  if (url && typeof url === 'string') {
+    cloudApiBase = url.replace(/\/+$/, '')
+    console.log('[Config] Cloud API Base updated:', cloudApiBase)
+  }
+}
+export const getCloudAPIKey = () => cloudApiKey
+export const setCloudAPIKey = (key) => {
+  if (key && typeof key === 'string') {
+    cloudApiKey = key
+    console.log('[Config] Cloud API Key updated')
+  }
+}
+export const getCloudModel = () => cloudModel
+export const setCloudModel = (model) => {
+  if (model && typeof model === 'string') {
+    cloudModel = model
+    console.log('[Config] Cloud Model updated:', cloudModel)
+  }
+}
+export const getCloudProvider = () => cloudProvider
+export const setCloudProvider = (provider) => {
+  if (provider && typeof provider === 'string') {
+    cloudProvider = provider
+    console.log('[Config] Cloud Provider updated:', cloudProvider)
+  }
 }
