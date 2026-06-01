@@ -307,6 +307,7 @@ export const mockElectronAPI = {
 
   // ===== AI Agent 桩 =====
   agentRun: async (data) => ({ success: false, message: '浏览器环境不支持 Agent' }),
+  agentPlan: async () => ({ success: false, message: '不支持' }),
   agentCancel: async () => ({ success: true }),
   agentStatus: async () => ({ running: false }),
   onAgentProgress: () => {},

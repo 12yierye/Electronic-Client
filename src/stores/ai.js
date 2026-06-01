@@ -53,12 +53,45 @@ export const useAIStore = defineStore('ai', () => {
   const cloudModel = ref(localStorage.getItem('cloudModel') || 'gpt-4o')
   const cloudProvider = ref(localStorage.getItem('cloudProvider') || '')
   const contextTokens = ref(parseInt(localStorage.getItem('aiContextTokens')) || 32000)
+  const planningMode = ref(false)
+  const pendingPlanningAnswer = ref(null)
   let currentStreamingMessage = null
   let messageIdCounter = 0
 
   const setContextTokens = (val) => {
     contextTokens.value = val
     localStorage.setItem('aiContextTokens', val)
+  }
+
+  // 添加问题气泡
+  const addQuestionBubble = (question, options, questionId) => {
+    messages.value.push({
+      id: questionId || generateMessageId(),
+      role: 'ai',
+      type: 'question',
+      question,
+      options: [...options, '直接执行'],
+      answered: false,
+      timestamp: new Date().toISOString()
+    })
+  }
+
+  // 用户的选择回答
+  const addUserChoice = (questionId, answer) => {
+    const q = messages.value.find(m => m.id === questionId)
+    if (q) q.answered = true
+    messages.value.push({
+      id: generateMessageId(),
+      role: 'user',
+      type: 'choice',
+      content: answer,
+      timestamp: new Date().toISOString()
+    })
+    if (answer === '直接执行') {
+      pendingPlanningAnswer.value = { confirm: true, answer }
+    } else {
+      pendingPlanningAnswer.value = { questionId, answer }
+    }
   }
 
   const setAiMode = (mode) => {
@@ -342,6 +375,8 @@ export const useAIStore = defineStore('ai', () => {
     cloudModel,
     cloudProvider,
     contextTokens,
+    planningMode,
+    pendingPlanningAnswer,
     fetchCurrentModel,
     setAiMode,
     setCloudModel,
@@ -350,6 +385,8 @@ export const useAIStore = defineStore('ai', () => {
     addUserMessage,
     addAIMessage,
     addPPTXCard,
+    addQuestionBubble,
+    addUserChoice,
     startStreamingMessage,
     updateStreamingMessage,
     appendStreamingContent,

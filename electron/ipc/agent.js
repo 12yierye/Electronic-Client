@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { runAgent } from '../services/agentEngine.js'
+import { runAgent, planningAgent } from '../services/agentEngine.js'
 import { setCloudAPIBase, setCloudAPIKey, setCloudModel, setCloudProvider } from '../config.js'
 
 let agentRunning = false
@@ -54,6 +54,30 @@ export function registerAgentIpc() {
       if (error.name === 'CanceledError' || error.name === 'AbortError') {
         return { success: true, reply: '', cancelled: true }
       }
+      return { success: false, message: error.message }
+    }
+  })
+
+  ipcMain.handle('agent:plan', async (event, { message, aiMode, cloudConfig, history }) => {
+    if (agentRunning) {
+      return { success: false, message: 'Agent 正在运行中' }
+    }
+    if (cloudConfig) {
+      if (cloudConfig.base) setCloudAPIBase(cloudConfig.base)
+      if (cloudConfig.key) setCloudAPIKey(cloudConfig.key)
+      if (cloudConfig.model) setCloudModel(cloudConfig.model)
+      if (cloudConfig.provider) setCloudProvider(cloudConfig.provider)
+    }
+
+    agentRunning = true
+    try {
+      const contextMessages = (history || []).map(m => ({ role: m.role === 'ai' ? 'assistant' : m.role, content: m.content }))
+      const context = [{ aiMode }, ...contextMessages]
+      const plan = await planningAgent(message, context, () => {}, () => {}, null)
+      agentRunning = false
+      return { success: true, plan }
+    } catch (error) {
+      agentRunning = false
       return { success: false, message: error.message }
     }
   })

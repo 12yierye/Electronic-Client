@@ -5,6 +5,54 @@ import { generatePPTX, generatePPTXFromMeta } from './pptxGenerator.js'
 
 const SYSTEM_PROMPT = `You are a helpful AI assistant for a school communication platform called Electronic. Respond in Chinese.`
 
+const PLANNING_PROMPT = `你是一个任务规划助手。用户想完成一个任务，你必须在执行前通过提问来完全理解需求。
+
+规则：
+1. 每次只问一个问题，给出 2-5 个具体选项
+2. options 数组会自动追加"其它"和"直接执行"两个选项，你不需要手动添加
+3. 当你收集到足够信息后，输出 action: "ready"
+4. 以 JSON 格式响应，不要有其他内容
+
+输出格式：
+提问：{"action":"ask","question":"请问是什么科目？","options":["数学","语文","英语"]}
+确认：{"action":"ready","summary":"高二数学课件 12页","plan":["设计课件结构","生成PPTX"]}`
+
+async function planningAgent(message, context, onProgress, onChunk, abortSignal) {
+  const messages = [
+    { role: 'system', content: PLANNING_PROMPT },
+    ...(context?.filter(c => c.role) || []),
+    { role: 'user', content: message }
+  ]
+
+  const ctxItem = context?.find(c => c.aiMode) || {}
+  const aiMode = ctxItem.aiMode || 'local'
+
+  const routing = await route(message, aiMode)
+  if (routing.backend === 'none') return { action: 'ready', summary: routing.error, plan: [] }
+
+  const headers = { 'Content-Type': 'application/json' }
+  if (routing.apiKey) headers['Authorization'] = `Bearer ${routing.apiKey}`
+
+  try {
+    const res = await axios.post(routing.apiUrl, {
+      model: routing.model || 'local',
+      messages,
+      stream: false,
+      response_format: { type: 'json_object' },
+      max_tokens: 500
+    }, { headers, timeout: 30000, signal: abortSignal })
+
+    const raw = res.data?.choices?.[0]?.message?.content || ''
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return { action: 'ready', summary: raw, plan: [] }
+    }
+  } catch (error) {
+    return { action: 'ready', summary: `规划错误：${error.message}`, plan: [] }
+  }
+}
+
 function parseSSEStream(response, abortSignal, onChunk) {
   return new Promise((resolve, reject) => {
     let fullContent = ''
@@ -176,4 +224,4 @@ async function runAgent(message, context, onProgress, onChunk, abortSignal) {
   return finalReply
 }
 
-export { runAgent }
+export { runAgent, planningAgent }

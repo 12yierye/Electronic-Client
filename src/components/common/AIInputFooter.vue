@@ -31,12 +31,11 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { Promotion, Loading, Close } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
 import { useUserStore } from '../../stores/user'
-import { parseScheduledIntent, executeFunctionCall } from '../../composables/useScheduledTask'
 
 const aiStore = useAIStore()
 const userStore = useUserStore()
@@ -44,12 +43,14 @@ const { t } = useI18n()
 const inputMessage = ref('')
 const isSending = ref(false)
 
-const handleEnterKey = (e) => {
-  e.preventDefault()
-  const message = inputMessage.value.trim()
-  if (!message || isSending.value) return
-  handleSend()
-}
+// 监听规划模式的回答
+watch(() => aiStore.pendingPlanningAnswer, (val) => {
+  if (!val) return
+  setTimeout(() => {
+    handlePlanningAnswer(val)
+    aiStore.pendingPlanningAnswer = null
+  }, 100)
+})
 
 const handleSend = async () => {
   const message = inputMessage.value.trim()
@@ -61,6 +62,11 @@ const handleSend = async () => {
   isSending.value = true
   aiStore.addUserMessage(message)
   inputMessage.value = ''
+
+  if (aiStore.planningMode) {
+    await handlePlanningStep(message, currentUsername, currentMode)
+    return
+  }
 
   const isComplex = /(课件|PPT|制作|生成|通知|群发|发到|发给所有|全部).*/.test(message) || message.length > 80
 
@@ -212,6 +218,55 @@ onUnmounted(() => {
     window.electronAPI.removeAIChatStreamListener()
   }
 })
+
+async function handlePlanningStep(message, username, currentMode) {
+  const cloudRaw = localStorage.getItem('cloudApiSettings')
+  let cloudConfig = {}
+  if (cloudRaw) { try { const c = JSON.parse(cloudRaw); cloudConfig = { base: c.base, key: c.key, model: c.model, provider: c.provider } } catch {} }
+  const history = aiStore.getConversationHistory ? aiStore.getConversationHistory(aiStore.contextTokens) : []
+
+  const result = await window.electronAPI.agentPlan({ message, aiMode: currentMode, cloudConfig, history })
+  if (result.success && result.plan) {
+    handlePlanningResult(result.plan)
+  } else {
+    aiStore.addAIMessage('规划失败：' + (result.message || '未知错误'))
+  }
+  isSending.value = false
+}
+
+async function handlePlanningAnswer(val) {
+  if (val.confirm) {
+    // user chose "直接执行" — execute with normal agent
+    isSending.value = true
+    const msg = val.answer
+    const currentMode = localStorage.getItem('aiMode') || 'local'
+    await handleAgentSend(msg, '_planning_', currentMode)
+    return
+  }
+  // user chose a planning answer — continue planning
+  isSending.value = true
+  const currentMode = localStorage.getItem('aiMode') || 'local'
+  await handlePlanningStep(val.answer, '_planning_', currentMode)
+}
+
+function handlePlanningResult(plan) {
+  if (plan.action === 'ask') {
+    const qId = 'q_' + Date.now()
+    aiStore.addQuestionBubble(plan.question, plan.options || [], qId)
+    isSending.value = false
+  } else {
+    // ready to execute
+    const summary = plan.summary || '准备执行'
+    aiStore.addAIMessage(summary)
+    const msg = plan.plan?.join('\n') || plan.summary || ''
+    if (msg) {
+      const mode = localStorage.getItem('aiMode') || 'local'
+      handleAgentSend(msg, '_planning_', mode)
+    } else {
+      isSending.value = false
+    }
+  }
+}
 
 const handleNewLine = () => {}
 </script>
