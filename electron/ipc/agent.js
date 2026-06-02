@@ -1,10 +1,12 @@
+import crypto from 'crypto'
 import { ipcMain } from 'electron'
-import { runAgent, clearPlanningSession } from '../services/agentEngine.js'
+import { runAgent, clearPlanningSession, planningAgent } from '../services/agentEngine.js'
 import { route } from '../services/modelRouter.js'
 import { setCloudAPIBase, setCloudAPIKey, setCloudModel, setCloudProvider } from '../config.js'
 
 let agentRunning = false
 let currentAbortController = null
+let currentSessionId = null
 
 export function registerAgentIpc() {
   ipcMain.handle('agent:run', async (event, { message, aiMode, cloudConfig, history, pptCards, planningMode }) => {
@@ -43,6 +45,8 @@ export function registerAgentIpc() {
 
       let reply
       if (planningMode) {
+        const sessionId = crypto.randomUUID()
+        currentSessionId = sessionId
         const routing = await route(message, aiMode)
         if (routing.backend === 'none') {
           agentRunning = false
@@ -60,7 +64,7 @@ export function registerAgentIpc() {
             ...planResult.messages.filter(m => m.role !== 'system').slice(-20)
           ]
           reply = await runAgent(
-            message, execMessages, progressCallback, chunkCallback, currentAbortController.signal
+            message, execMessages, progressCallback, chunkCallback, currentAbortController.signal, routing
           )
         } else {
           reply = planResult.error || '规划失败'
@@ -73,6 +77,7 @@ export function registerAgentIpc() {
 
       agentRunning = false
       currentAbortController = null
+      currentSessionId = null
       return { success: true, reply, cancelled: false }
     } catch (error) {
       agentRunning = false
@@ -92,7 +97,8 @@ export function registerAgentIpc() {
   })
 
   ipcMain.handle('agent:cancelPlanning', async () => {
-    clearPlanningSession()
+    clearPlanningSession(currentSessionId)
+    currentSessionId = null
     return { success: true }
   })
 

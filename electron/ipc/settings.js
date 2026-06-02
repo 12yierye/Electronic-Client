@@ -76,6 +76,16 @@ export function registerSettingsIpc() {
     }
   })
 
+  ipcMain.handle('delete-ppt-file', async (event, { pptxPath, metaPath }) => {
+    try {
+      if (pptxPath && fs.existsSync(pptxPath)) fs.unlinkSync(pptxPath)
+      if (metaPath && fs.existsSync(metaPath)) fs.unlinkSync(metaPath)
+      return { success: true }
+    } catch (error) {
+      return { success: false, message: error.message }
+    }
+  })
+
   ipcMain.handle('test-cloud-api', async (event, { base, key, model }) => {
     try {
       const pingRes = await axios.get(`${base}/models`, {

@@ -182,6 +182,7 @@ const customAnswer = ref('')
 watch(() => aiStore.aiMode, v => { aiMode.value = v })
 watch(() => aiStore.cloudModel, v => { cloudModelName.value = v })
 watch(() => aiStore.currentModel, v => { localModelLabel.value = v || '本地模型' })
+watch(() => aiStore.planningMode, v => { planningMode.value = v })
 
 const CLOUD_PROVIDERS = [
   { id: 'deepseek', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', thinking: 'none', contextLimit: 1000000 }, { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', thinking: 'always', contextLimit: 1000000 }] },
@@ -286,17 +287,20 @@ function handleAgentResend(message) {
 }
 
 function getThinkingLabel(msg) {
-  if (!msg.thinking) return '思考中...'
-  if (msg.thinking.includes('正在生成')) return '正在制作课件...'
-  if (msg.thinking.includes('正在设计')) return '正在设计课件...'
-  if (msg.thinking.includes('正在保存')) return '正在保存课件...'
-  if (msg.thinking.includes('generate_pptx')) return '正在制作课件...'
-  if (msg.thinking.includes('send_message')) return '正在发送...'
-  if (msg.thinking.includes('send_broadcast')) return '正在广播...'
+  if (!msg.thinking && msg.isStreaming) return '思考中...'
+  if (!msg.thinking) return ''
+  if (msg.isStreaming) {
+    if (msg.thinking.includes('正在生成')) return '正在制作课件...'
+    if (msg.thinking.includes('正在设计')) return '正在设计课件...'
+    if (msg.thinking.includes('正在保存')) return '正在保存课件...'
+    if (msg.thinking.includes('generate_pptx')) return '正在制作课件...'
+    if (msg.thinking.includes('send_message')) return '正在发送...'
+    if (msg.thinking.includes('send_broadcast')) return '正在广播...'
+  }
   const lines = msg.thinking.trim().split('\n')
   const last = lines[lines.length - 1].trim()
-  if (last.length > 3 && last.length < 40) return last
-  return '思考中...'
+  if (msg.isStreaming && last.length > 3 && last.length < 40) return last
+  return msg.isStreaming ? '思考中...' : '思考过程'
 }
 
 function switchConv(id) {
@@ -828,6 +832,7 @@ onUnmounted(() => {
     margin: 8px 0;
     cursor: pointer;
     transition: all 0.2s ease;
+    max-width: 420px;
 
     &:hover {
       border-color: var(--accent-color);

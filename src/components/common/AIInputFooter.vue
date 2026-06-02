@@ -78,10 +78,13 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
 
   aiStore.startStreamingMessage()
   const mode = currentMode || localStorage.getItem('aiMode') || 'local'
+  let routingLogged = false
 
   if (window.electronAPI.onAgentProgress) {
     window.electronAPI.onAgentProgress((data) => {
-      if (data.type === 'routing') aiStore.appendReasoningContent(`[${data.backend}] `)
+      if (data.type === 'routing') {
+        if (!routingLogged) { aiStore.appendReasoningContent(`[${data.backend}] `); routingLogged = true }
+      }
       else if (data.type === 'tool_call') aiStore.appendReasoningContent(`\n→ ${data.tool}...`)
       else if (data.type === 'tool_result') aiStore.appendReasoningContent(data.success ? ' ✓' : ' ✗')
       else if (data.type === 'error') aiStore.appendReasoningContent(`\n错误: ${data.message}`)

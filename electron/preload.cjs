@@ -179,6 +179,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setPPTDir: (dir) => ipcRenderer.invoke('set-ppt-dir', dir),
   getPPTDir: () => ipcRenderer.invoke('get-ppt-dir'),
   scanDirectory: (dir) => ipcRenderer.invoke('scan-directory', dir),
+  deletePPTFile: (paths) => ipcRenderer.invoke('delete-ppt-file', paths),
 
   // 动态设置 AI API 地址
   setAiApiUrl: (url) => ipcRenderer.invoke('set-ai-api-url', url),

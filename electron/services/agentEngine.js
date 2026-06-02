@@ -119,7 +119,7 @@ function parseSSEStream(response, abortSignal, onChunk) {
   })
 }
 
-async function runAgent(message, context, onProgress, onChunk, abortSignal) {
+async function runAgent(message, context, onProgress, onChunk, abortSignal, preRouting) {
   const ctxItem = context?.find(c => c.aiMode) || {}
   const aiMode = ctxItem.aiMode || 'local'
   const messages = [
@@ -129,6 +129,7 @@ async function runAgent(message, context, onProgress, onChunk, abortSignal) {
   ]
   let finalReply = ''
   let cancelled = false
+  let generatedPPTX = false
 
   const agentCtx = {
     username: context?.username || 'user',
@@ -146,7 +147,9 @@ async function runAgent(message, context, onProgress, onChunk, abortSignal) {
   for (let round = 0; round < 10; round++) {
     if (abortSignal?.aborted) { cancelled = true; break }
 
-    const routing = await route(message, aiMode)
+    const routing = (round === 0 && preRouting)
+      ? preRouting
+      : await route(message, aiMode)
     if (routing.backend === 'none') { finalReply = routing.error; break }
 
     onProgress({ type: 'routing', backend: routing.backend, reason: routing.reason, round: round + 1 })
@@ -172,6 +175,13 @@ async function runAgent(message, context, onProgress, onChunk, abortSignal) {
           const tool = defaultRegistry.get(fn.name)
           onProgress({ type: 'tool_call', tool: fn.name, args: fn.arguments, round: round + 1 })
           if (!tool) { messages.push({ role: 'tool', tool_call_id: tc.id || '0', content: JSON.stringify({ error: `Tool: ${fn.name} not found` }) }); continue }
+          if (fn.name === 'generate_pptx') {
+            if (generatedPPTX) {
+              messages.push({ role: 'tool', tool_call_id: tc.id || '0', content: JSON.stringify({ success: false, message: '课件已生成，请勿重复生成' }) })
+              continue
+            }
+            generatedPPTX = true
+          }
           try {
             const args = typeof fn.arguments === 'string' ? JSON.parse(fn.arguments) : fn.arguments
             const result = await tool.handler(args, agentCtx)
@@ -204,9 +214,9 @@ async function runAgent(message, context, onProgress, onChunk, abortSignal) {
   }
 
   if (cancelled) { onProgress({ type: 'done' }); onChunk({ type: 'final', content: finalReply || '', cancelled: true }); return finalReply || '' }
-  if (!finalReply) finalReply = '已完成所有操作。'
+  if (!finalReply) finalReply = generatedPPTX ? '课件已生成，点击上方卡片即可打开。' : '已完成所有操作。'
   onProgress({ type: 'done' })
   return finalReply
 }
 
-export { runAgent, clearPlanningSession }
+export { runAgent, clearPlanningSession, planningAgent }

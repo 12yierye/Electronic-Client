@@ -74,11 +74,18 @@ async function openFile(path) {
 async function deleteFile(file) {
   try {
     await ElMessageBox.confirm(`确定删除 "${file.topic}"？`, '确认', { type: 'warning' })
-    if (window.electronAPI?.deleteFile && file.pptxPath) {
-      await window.electronAPI.deleteFile('_system_', file.pptxPath.split(/[\\/]/).pop())
+    if (window.electronAPI?.deletePPTFile) {
+      const result = await window.electronAPI.deletePPTFile({ pptxPath: file.pptxPath, metaPath: file.metaPath })
+      if (result.success) {
+        ElMessage.success(`"${file.topic}" 已删除`)
+      } else {
+        ElMessage.error(`删除失败: ${result.message}`)
+      }
     }
     await refreshFiles()
-  } catch {}
+  } catch {
+    // 用户取消确认
+  }
 }
 
 function formatDate(ts) {
