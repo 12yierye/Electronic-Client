@@ -64,7 +64,7 @@ const handleSend = async () => {
 
   const isComplex = /(课件|PPT|制作|生成|通知|群发|发到|发给所有|全部).*/.test(message) || message.length > 80
 
-  if ((isComplex || currentMode === 'cloud') && window.electronAPI.agentRun) {
+  if ((isComplex || currentMode === 'cloud' || aiStore.planningMode) && window.electronAPI.agentRun) {
     await handleAgentSend(message, currentUsername, currentMode)
   } else {
     await handleStreamingSend(message, currentUsername)

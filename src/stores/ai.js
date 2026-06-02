@@ -35,7 +35,15 @@ export const useAIStore = defineStore('ai', () => {
   initActiveConversation()
 
   function cloneMessages(arr) {
-    return arr ? JSON.parse(JSON.stringify(arr)) : []
+    try {
+      if (!arr) return []
+      const clean = arr.map(m => ({ id: m.id, role: m.role, type: m.type, content: m.content, thinking: m.thinking, timestamp: m.timestamp, fileName: m.fileName, filePath: m.filePath, slideCount: m.slideCount, pptxCard: m.pptxCard, question: m.question, options: m.options, answered: m.answered }))
+      return JSON.parse(JSON.stringify(clean))
+    } catch { return [] }
+  }
+
+  function safeClone(val) {
+    try { return JSON.parse(JSON.stringify(val)) } catch { return val }
   }
 
   const activeConv = () => conversations.value.find(c => c.id === activeConversationId.value) || conversations.value[0]
@@ -257,7 +265,7 @@ export const useAIStore = defineStore('ai', () => {
   const switchConversation = (id) => {
     // save current conversation
     const conv = activeConv()
-    if (conv) conv.messages = JSON.parse(JSON.stringify(messages.value))
+    if (conv) conv.messages = safeClone(messages.value)
 
     localStorage.setItem('ai_active_conv', id)
     activeConversationId.value = id
@@ -276,7 +284,7 @@ export const useAIStore = defineStore('ai', () => {
   // 新建对话
   const newConversation = () => {
     const conv = activeConv()
-    if (conv) conv.messages = JSON.parse(JSON.stringify(messages.value))
+    if (conv) conv.messages = safeClone(messages.value)
     const newConv = { id: Date.now().toString(), name: '新对话', messages: [], createdAt: Date.now() }
     conversations.value.unshift(newConv)
     saveConversations()
@@ -356,7 +364,7 @@ export const useAIStore = defineStore('ai', () => {
   function persistCurrentConversation() {
     const conv = activeConv()
     if (!conv) return
-    conv.messages = JSON.parse(JSON.stringify(messages.value))
+    conv.messages = safeClone(messages.value)
     if (messages.value.length > 0 && conv.name === '新对话') {
       const firstUser = messages.value.find(m => m.role === 'user')
       if (firstUser) conv.name = firstUser.content.slice(0, 30)
