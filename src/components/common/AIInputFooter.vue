@@ -98,7 +98,7 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
       else if (data.type === 'pptx_card') aiStore.addPPTXCard(data)
       else if (data.type === 'question') {
         aiStore.endStreamingMessage()
-        aiStore.addQuestionBubble(data.question, data.options)
+        aiStore.addQuestionBubble(data.question, data.options, data.multiSelect)
         isSending.value = false
       }
     })
@@ -119,6 +119,7 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
     if (result.cancelled) aiStore.appendStreamingContent('\n[已中断]')
     aiStore.endStreamingMessage()
     aiStore.persistCurrentConversation()
+    aiStore.generateConversationTitle(message)
   } catch (error) {
     aiStore.endStreamingMessage()
     aiStore.addAIMessage('异常：' + error.message)
@@ -134,6 +135,8 @@ const handleCancel = async () => {
   if (window.electronAPI.agentCancel) {
     await window.electronAPI.agentCancel()
   }
+  aiStore.endStreamingMessage()
+  aiStore.persistCurrentConversation()
   isSending.value = false
 }
 
@@ -183,6 +186,8 @@ const handleStreamingSend = async (message, currentUsername) => {
       if (data.done) {
         streamEndedNormally = true
         aiStore.endStreamingMessage()
+        aiStore.persistCurrentConversation()
+        aiStore.generateConversationTitle(message)
         isSending.value = false
         if (window.electronAPI.removeAIChatStreamListener) {
           window.electronAPI.removeAIChatStreamListener()

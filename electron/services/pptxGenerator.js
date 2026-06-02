@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module'
 import axios from 'axios'
-import { getCloudAPIBase, getCloudAPIKey, getCloudModel, getPPTDir } from '../config.js'
+import { getCloudAPIBase, getCloudAPIKey, getCloudModel, getLMStudioAPI, getPPTDir } from '../config.js'
 import { join } from 'node:path'
 import fs from 'fs'
 
@@ -25,14 +25,14 @@ const SLIDE_THEMES = {
 async function callLLMForSlides(topic, detail, slideCount) {
   const apiKey = getCloudAPIKey()
   if (!apiKey) {
-    const res = await axios.post(`${getCloudAPIBase()?.replace('/v1', '') || 'http://127.0.0.1:1234'}/v1/chat/completions`, {
+    const res = await axios.post(`${getLMStudioAPI()}/chat/completions`, {
       model: getCloudModel() || 'local',
       messages: [{
         role: 'system',
         content: 'You are a courseware designer. Output valid JSON only, no markdown fences.'
       }, {
         role: 'user',
-        content: `Create a ${slideCount || 10}-slide courseware outline for: "${topic}". ${detail || ''} Format as JSON: { "title": "...", "theme": "blue", "slides": [{ "type": "title|content|bullets|chart|table|compare|exercise|summary", ... }] }.
+        content: `Create a ${slideCount || 10}-slide courseware outline for: "${topic}". ${detail || ''} Format as JSON: { "title": "...", "theme": "blue", "slides": [{ "type": "title|content|bullets|chart|table|compare|image|exercise|summary", ... }] }.
 Types:
 - title: { type:"title", content:"subtitle" }
 - bullets: { type:"bullets", title:"...", items:["point1","point2"] }
@@ -40,6 +40,7 @@ Types:
 - chart: { type:"chart", title:"...", chartData:{ type:"bar|pie|line", series:[{ name:"Series", labels:["A","B"], values:[1,2] }] } }
 - table: { type:"table", title:"...", headers:["Col1","Col2"], rows:[["a","b"],["c","d"]] }
 - compare: { type:"compare", title:"...", left:{ title:"A", items:["..."] }, right:{ title:"B", items:["..."] } }
+- image: { type:"image", title:"...", description:"what the image should show" }
 - exercise: { type:"exercise", title:"...", items:["question1","question2"] }
 - summary: { type:"summary", title:"...", items:["key point 1","key point 2"] }`
       }],
@@ -49,7 +50,13 @@ Types:
     }, { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, timeout: 60000 })
 
     const raw = res.data?.choices?.[0]?.message?.content
-    return JSON.parse(raw)
+    if (!raw) throw new Error('LLM returned empty response')
+    try {
+      return JSON.parse(raw.replace(/```json\n?/g, '').replace(/```/g, '').trim())
+    } catch (e) {
+      console.error('[PPTX] JSON parse failed:', e.message, 'raw:', raw?.slice(0, 200))
+      throw new Error('LLM returned invalid outline JSON')
+    }
   }
 
   const res = await axios.post(`${getCloudAPIBase()}/chat/completions`, {
@@ -59,8 +66,8 @@ Types:
       content: 'You are a courseware designer. Output valid JSON only, no markdown fences.'
     }, {
       role: 'user',
-      content: `Create a ${slideCount || 10}-slide courseware outline for: "${topic}". ${detail || ''} Format as JSON: { "title": "...", "theme": "blue", "slides": [{ "type": "title|content|bullets|chart|table|compare|exercise|summary", ... }] }.
-Types: title(content:"subtitle"), bullets(items:["point"]), content(content:"text"), chart(chartData:{type:"bar|pie|line",series:[{name,labels,values}]}), table(headers:[],rows:[[]]), compare(left/right:{title,items}), exercise(items:["q"]), summary(items:["key"]).`
+      content: `Create a ${slideCount || 10}-slide courseware outline for: "${topic}". ${detail || ''} Format as JSON: { "title": "...", "theme": "blue", "slides": [{ "type": "title|content|bullets|chart|table|compare|image|exercise|summary", ... }] }.
+Types: title(content:"subtitle"), bullets(items:["point"]), content(content:"text"), chart(chartData:{type:"bar|pie|line",series:[{name,labels,values}]}), table(headers:[],rows:[[]]), compare(left/right:{title,items}), image(title:"...",description:"..."), exercise(items:["q"]), summary(items:["key"]).`
     }],
     temperature: 0.5,
     max_tokens: 3000,
@@ -71,7 +78,13 @@ Types: title(content:"subtitle"), bullets(items:["point"]), content(content:"tex
   })
 
   const raw = res.data?.choices?.[0]?.message?.content
-  return JSON.parse(raw)
+  if (!raw) throw new Error('LLM returned empty response')
+  try {
+    return JSON.parse(raw.replace(/```json\n?/g, '').replace(/```/g, '').trim())
+  } catch (e) {
+    console.error('[PPTX] Cloud JSON parse failed:', e.message, 'raw:', raw?.slice(0, 200))
+    throw new Error('LLM returned invalid outline JSON')
+  }
 }
 
 async function generatePPTX(params, userMessage, onProgress) {
@@ -239,6 +252,31 @@ async function generatePPTX(params, userMessage, onProgress) {
           }
           break
 
+        case 'image':
+          slide.addText(slideData.title || '', {
+            x: 0.5, y: 0.3, w: 12, h: 0.8,
+            fontSize: 28, bold: true, color: theme.accent || '2C3E50', fontFace: theme.font
+          })
+          slide.addShape(pres.ShapeType.rect, {
+            x: 0.5, y: 1.1, w: 12, h: 0.03, fill: { color: theme.accent || '2980B9' }
+          })
+          slide.addShape(pres.ShapeType.rect, {
+            x: 2, y: 1.8, w: 9, h: 5,
+            fill: { color: 'F0F4F8' }, line: { color: theme.accent || '4A9EFF', width: 1.5, dashType: 'dash' },
+            rectRadius: 0.1
+          })
+          slide.addText(`[图片: ${slideData.description || slideData.title || '插图'}]`, {
+            x: 2, y: 3, w: 9, h: 2,
+            fontSize: 16, color: '999999', fontFace: theme.font, align: 'center', valign: 'middle'
+          })
+          if (slideData.description && slideData.description !== slideData.title) {
+            slide.addText(slideData.description, {
+              x: 1, y: 6.5, w: 11, h: 1,
+              fontSize: 12, color: theme.textColor, fontFace: theme.font, align: 'center', valign: 'top'
+            })
+          }
+          break
+
         case 'summary':
           slide.background = { fill: theme.bg }
           slide.addText(slideData.title || '本章小结', {
@@ -304,10 +342,50 @@ async function generatePPTX(params, userMessage, onProgress) {
   }
 }
 
-async function generatePPTXFromMeta(metaPath, onProgress) {
+async function callLLMForEditOutline(currentOutline, instructions) {
+  const apiKey = getCloudAPIKey()
+  const apiUrl = apiKey ? `${getCloudAPIBase()}/chat/completions` : `${getLMStudioAPI()}/chat/completions`
+  const headers = { 'Content-Type': 'application/json' }
+  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+
+  const res = await axios.post(apiUrl, {
+    model: getCloudModel() || 'local',
+    messages: [{
+      role: 'system',
+      content: 'You are a courseware editor. Modify the slide outline per the user\'s instructions. Output valid JSON only, no markdown fences. Preserve slide types: title|content|bullets|chart|table|compare|image|exercise|summary.'
+    }, {
+      role: 'user',
+      content: `Current outline (JSON):\n${JSON.stringify(currentOutline, null, 2)}\n\nEdit instructions: ${instructions}\n\nReturn the FULL modified JSON outline.`
+    }],
+    temperature: 0.4,
+    max_tokens: 3000,
+    response_format: { type: 'json_object' }
+  }, { headers, timeout: 60000 })
+
+  const raw = res.data?.choices?.[0]?.message?.content
+  if (!raw) throw new Error('LLM returned empty response')
   try {
-    const raw = fs.readFileSync(metaPath, 'utf-8')
-    const meta = JSON.parse(raw)
+    return JSON.parse(raw.replace(/```json\n?/g, '').replace(/```/g, '').trim())
+  } catch (e) {
+    console.error('[PPTX] Edit outline parse failed:', e.message, 'raw:', raw?.slice(0, 200))
+    throw new Error('LLM returned invalid modified outline JSON')
+  }
+}
+
+async function generatePPTXFromMeta(metaPath, onProgress, instructions) {
+  try {
+    const rawMeta = fs.readFileSync(metaPath, 'utf-8')
+    let meta = JSON.parse(rawMeta)
+
+    if (instructions && meta.outline) {
+      onProgress({ type: 'pptx_progress', step: 'editing', message: '📝 正在根据指示修改课件...' })
+      try {
+        meta.outline = await callLLMForEditOutline(meta.outline, instructions)
+        meta.topic = meta.outline.title || meta.topic
+      } catch (e) {
+        throw new Error(`修改课件失败：${e.message}`)
+      }
+    }
 
     onProgress({ type: 'pptx_progress', step: 'building', message: '正在重新生成幻灯片...', slideCount: meta.outline?.slides?.length })
 
@@ -368,6 +446,15 @@ function renderSlide(slide, slideData, pres, theme, topic) {
       slide.addText(slideData.title || '练习', { x: 0.5, y: 0.3, w: 12, h: 0.8, fontSize: 28, bold: true, color: theme.accent || '2C3E50', fontFace: theme.font })
       const qs = slideData.items || []
       slide.addText(qs.map((q, i) => ({ text: `${i + 1}. ${typeof q === 'string' ? q : q.text || q}`, options: { fontSize: 16, fontFace: theme.font, color: theme.textColor, breakLine: true, paraSpaceAfter: 12 } })), { x: 1, y: 1.5, w: 11, h: 5.5, valign: 'top' })
+      break
+    case 'image':
+      slide.addText(slideData.title || '', { x: 0.5, y: 0.3, w: 12, h: 0.8, fontSize: 28, bold: true, color: theme.accent || '2C3E50', fontFace: theme.font })
+      slide.addShape(pres.ShapeType.rect, { x: 0.5, y: 1.1, w: 12, h: 0.03, fill: { color: theme.accent || '2980B9' } })
+      slide.addShape(pres.ShapeType.rect, { x: 2, y: 1.8, w: 9, h: 5, fill: { color: 'F0F4F8' }, line: { color: theme.accent || '4A9EFF', width: 1.5, dashType: 'dash' }, rectRadius: 0.1 })
+      slide.addText(`[图片: ${slideData.description || slideData.title || '插图'}]`, { x: 2, y: 3, w: 9, h: 2, fontSize: 16, color: '999999', fontFace: theme.font, align: 'center', valign: 'middle' })
+      if (slideData.description && slideData.description !== slideData.title) {
+        slide.addText(slideData.description, { x: 1, y: 6.5, w: 11, h: 1, fontSize: 12, color: theme.textColor, fontFace: theme.font, align: 'center', valign: 'top' })
+      }
       break
     case 'summary':
       slide.background = { fill: theme.bg }

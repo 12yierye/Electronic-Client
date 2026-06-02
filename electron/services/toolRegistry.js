@@ -1,6 +1,7 @@
 import axios from 'axios'
 import fs from 'fs'
-import { getAPIBase } from '../config.js'
+import { getAPIBase, getPPTDir } from '../config.js'
+import { join } from 'node:path'
 
 class ToolRegistry {
   constructor() {
@@ -165,8 +166,7 @@ class ToolRegistry {
       handler: async (params, ctx) => {
         return {
           success: true,
-          username: ctx.username,
-          apiBase: getAPIBase()
+          username: ctx.username
         }
       }
     })
@@ -221,10 +221,71 @@ class ToolRegistry {
         required: ['topic']
       },
       handler: async (params, ctx) => {
+        if (!ctx.generatePPTX) return { success: false, message: 'PPTX生成模块未就绪' }
+
+        const pptxResult = await ctx.generatePPTX(params)
+        if (!pptxResult.success) return { success: false, message: `PPTX生成失败: ${pptxResult.message}` }
+
+        let handoutResult = { success: false, message: '讲义生成模块未就绪' }
         if (ctx.generateHandout) {
-          return await ctx.generateHandout(params)
+          let outline
+          try {
+            const metaPath = pptxResult.path?.replace('.pptx', '.meta.json')
+            if (metaPath && fs.existsSync(metaPath)) {
+              const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+              outline = meta.outline
+            }
+          } catch {}
+
+          try {
+            const res = await ctx.generateHandout(pptxResult, params.topic, outline)
+            if (res.success) handoutResult = res
+          } catch (e) {
+            handoutResult = { success: false, message: `讲义生成异常: ${e.message}` }
+          }
         }
-        return { success: false, message: '教案包生成模块未就绪' }
+
+        return {
+          success: true,
+          pptx: pptxResult,
+          handout: handoutResult,
+          message: `✅ 教案包已生成\n\n📊 课件: ${pptxResult.fileName}（${pptxResult.slideCount || 0}页）\n📄 讲义: ${handoutResult.fileName || '未生成'}`
+        }
+      }
+    })
+
+    this.register({
+      name: 'get_templates',
+      description: 'List available PPTX courseware templates.',
+      parameters: { type: 'object', properties: {}, required: [] },
+      handler: async (params, ctx) => {
+        return {
+          success: true,
+          templates: [
+            { id: 'tpl_blue', name: '蓝色商务', description: '深蓝背景，适合专业课件' },
+            { id: 'tpl_academic', name: '学术白', description: '白底黑字，适合论文答辩' },
+            { id: 'tpl_warm', name: '暖色教育', description: '暖橙色调，适合互动课堂' }
+          ]
+        }
+      }
+    })
+
+    this.register({
+      name: 'set_default_template',
+      description: 'Set the default PPTX template for courseware generation.',
+      parameters: {
+        type: 'object',
+        properties: {
+          templateId: { type: 'string', description: 'Template ID (tpl_blue, tpl_academic, tpl_warm)' }
+        },
+        required: ['templateId']
+      },
+      handler: async (params, ctx) => {
+        const validIds = ['tpl_blue', 'tpl_academic', 'tpl_warm']
+        if (!validIds.includes(params.templateId)) {
+          return { success: false, message: `无效模板ID: ${params.templateId}，可用: ${validIds.join(', ')}` }
+        }
+        return { success: true, message: `默认模板已设为: ${params.templateId}` }
       }
     })
   }

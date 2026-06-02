@@ -213,6 +213,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   agentCancel: () => ipcRenderer.invoke('agent:cancel'),
   agentCancelPlanning: () => ipcRenderer.invoke('agent:cancelPlanning'),
   agentStatus: () => ipcRenderer.invoke('agent:status'),
+  agentGenerateTitle: (message) => ipcRenderer.invoke('agent:generateTitle', { message }),
   onAgentProgress: (callback) => {
     ipcRenderer.on('agent:progress', (event, data) => callback(data))
   },

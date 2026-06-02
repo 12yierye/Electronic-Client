@@ -159,14 +159,17 @@ export const useAIStore = defineStore('ai', () => {
   }
 
   // 添加规划问题气泡
-  const addQuestionBubble = (question, options) => {
+  const addQuestionBubble = (question, options, multiSelect = false) => {
     messages.value.push({
       id: generateMessageId(),
       role: 'ai',
       type: 'question',
       question,
-      options,
+      options: (options || []).map(o => typeof o === 'string' ? { label: o } : o),
+      multiSelect,
       answered: false,
+      chosen: [],           // multi-select chosen labels
+      customInput: '',       // 其他 input
       timestamp: new Date().toISOString()
     })
   }
@@ -174,12 +177,13 @@ export const useAIStore = defineStore('ai', () => {
   // 添加用户选择回答
   const addUserChoice = (questionId, answer) => {
     const q = messages.value.find(m => m.id === questionId)
-    if (q) q.answered = true
+    if (q) { q.answered = true; q.chosen = Array.isArray(answer) ? answer : [] }
+    const answerText = Array.isArray(answer) ? answer.join('、') : String(answer)
     messages.value.push({
       id: generateMessageId(),
       role: 'user',
       type: 'choice',
-      content: answer,
+      content: answerText,
       timestamp: new Date().toISOString()
     })
   }
@@ -284,11 +288,36 @@ export const useAIStore = defineStore('ai', () => {
   // 新建对话
   const newConversation = () => {
     const conv = activeConv()
+    // 已在空对话中，不执行操作
+    if (conv && (!conv.name || conv.name === '新对话') && (!conv.messages || conv.messages.length === 0)) {
+      return
+    }
+    // 查找已有的空对话，存在则切换到该对话
+    const existing = conversations.value.find(c => (!c.name || c.name === '新对话') && (!c.messages || c.messages.length === 0))
+    if (existing) {
+      if (conv) conv.messages = safeClone(messages.value)
+      switchConversation(existing.id)
+      return
+    }
     if (conv) conv.messages = safeClone(messages.value)
     const newConv = { id: Date.now().toString(), name: '新对话', messages: [], createdAt: Date.now() }
     conversations.value.unshift(newConv)
     saveConversations()
     switchConversation(newConv.id)
+  }
+
+  // 对话自动命名
+  const generateConversationTitle = async (firstMessage) => {
+    if (!firstMessage || !window.electronAPI?.agentGenerateTitle) return
+    const conv = activeConv()
+    if (!conv || conv.name !== '新对话') return
+    try {
+      const { title } = await window.electronAPI.agentGenerateTitle(firstMessage)
+      if (title) {
+        conv.name = title
+        saveConversations()
+      }
+    } catch {}
   }
 
   // 删除对话
@@ -403,6 +432,7 @@ export const useAIStore = defineStore('ai', () => {
     clearMessages,
     switchConversation,
     newConversation,
+    generateConversationTitle,
     deleteConversation,
     renameConversation,
     getConversationHistory,

@@ -2,21 +2,54 @@ import axios from 'axios'
 import { defaultRegistry } from './toolRegistry.js'
 import { route } from './modelRouter.js'
 import { generatePPTX, generatePPTXFromMeta } from './pptxGenerator.js'
+import { generateHandout } from './handoutGenerator.js'
+import fs from 'fs'
 
-const SYSTEM_PROMPT = `You are a helpful AI assistant for a school communication platform called Electronic. Respond in Chinese.`
+const SYSTEM_PROMPT = `You are a helpful AI assistant for "Electronic", a school communication platform. Always respond in Chinese.
+
+You have access to tools (functions) that you can call to help users:
+- **generate_pptx**: Create PowerPoint courseware from a topic. Use when user asks to "制作课件", "生成PPT", "做个课件".
+- **edit_pptx**: Modify an existing PPTX file (change content, add/remove slides, adjust styling). Use when user wants to modify a previously generated courseware.
+- **generate_lesson_package**: Create a complete lesson package (PPTX + handout .docx + exercises). Use when user wants a full teaching package.
+- **send_message**: Send a text message to a specific user. Use when user asks to message or contact someone.
+- **send_broadcast**: Send a notification to organization members. Use when user wants to notify classes/grades.
+- **list_files**: List files on the server.
+- **download_file**: Download a file from another user.
+- **get_org_tree**: View the school organization structure.
+- **get_org_members**: Get members of an organization node.
+- **search_contacts**: Search for users.
+- **get_friends**: Get the user's friend list.
+- **schedule_task**: Schedule a task for a specific time.
+- **get_current_time**: Get current date and time.
+- **get_user_info**: Get current user info.
+
+Guidelines:
+1. For simple greetings or factual questions, respond directly without tools.
+2. When the user requests an action (generate, send, schedule, etc.), call the appropriate tool(s).
+3. You may chain multiple tools — use the result of one tool as input to another.
+4. For content generation (课件/教案), use generate_pptx or generate_lesson_package.
+5. Always confirm tool execution results to the user with a brief summary.`
+
+const TOOLS_AVAILABLE_HINT = `\n[System: You have access to function tools. When you need to perform an action, respond with tool_calls in the OpenAI function-calling format. Use the tools only when user intent requires them.]`
 
 const PLANNING_PROMPT = `你是一个任务规划助手。在执行任务前，你需要通过提问来完全理解用户的需求。
 
 规则：
-1. 每次只问一个问题，给出2-5个具体选项
-2. 以JSON格式响应，不要有其他内容
-3. 当你收集到足够信息后，输出 action: "ready"
+1. 每次只问一个问题，给出2-5个具体选项。可多选时设置 multiSelect: true。
+2. 当问题具有歧义（如多科目、多用途）时使用多选。简单单选（科目、页数）用单选。
+3. 选项可附简要说明字段 desc 帮助用户理解（选填）。
+4. 始终包含"其他"和"跳过"选项，放在末尾。
+5. 以JSON格式响应，不要有其他内容。
+6. 当你收集到足够信息后，输出 action: "ready"，并给出具体可执行计划。
 
-输出格式 — 提问：
-{"action":"ask","question":"请问什么科目？","options":["数学","语文","英语","其他","直接执行"]}
+输出格式 — 提问（单选）：
+{"action":"ask","question":"请问什么科目？","options":[{"label":"数学","desc":"代数与几何"},{"label":"语文","desc":"古诗词"},{"label":"英语","desc":"语法与阅读"},{"label":"其他"},{"label":"跳过"}],"multiSelect":false}
 
-输出格式 — 确认可执行：
-{"action":"ready","summary":"高二数学课件12页","plan":["步骤1","步骤2"]}`
+输出格式 — 提问（多选）：
+{"action":"ask","question":"需要包含哪些内容？","options":[{"label":"知识点","desc":"基础定义"},{"label":"例题","desc":"解题步骤"},{"label":"习题","desc":"课后练习"},{"label":"其他"},{"label":"跳过"}],"multiSelect":true}
+
+输出格式 — 确认可执行（必须指明调用哪个工具及参数）：
+{"action":"ready","summary":"高二数学课件12页","toolCall":"generate_pptx","toolParams":{"topic":"高二数学","detail":"12页课件","slideCount":12}}`
 
 const planningSessions = new Map()
 
@@ -42,7 +75,7 @@ async function planningAgent(sessionId, message, context, routing, onProgress, o
   if (session.rounds > 8) {
     planningSessions.delete(sessionId)
     onChunk({ type: 'reasoning', content: '\n已达到最大追问轮数，开始执行...' })
-    return { action: 'execute', messages: session.messages }
+    return { action: 'execute', messages: session.messages, summary: message, toolCall: null, toolParams: null }
   }
 
   const headers = { 'Content-Type': 'application/json' }
@@ -67,14 +100,21 @@ async function planningAgent(sessionId, message, context, routing, onProgress, o
     console.log('[PlanAgent] parsed action:', parsed.action, 'hasQ:', !!parsed.question, 'opts:', parsed.options?.length)
 
     if (parsed.action === 'ask' && parsed.question && parsed.options?.length) {
+      const normalizedOptions = parsed.options.map(o => typeof o === 'string' ? { label: o } : o)
       session.messages.push({ role: 'assistant', content: JSON.stringify(parsed) })
       planningSessions.set(sessionId, session)
-      onChunk({ type: 'question', question: parsed.question, options: parsed.options })
+      onChunk({ type: 'question', question: parsed.question, options: normalizedOptions, multiSelect: !!parsed.multiSelect })
       return { action: 'ask' }
     }
 
     planningSessions.delete(sessionId)
-    return { action: 'execute', messages: session.messages }
+    return {
+      action: 'execute',
+      messages: session.messages,
+      summary: parsed.summary || message,
+      toolCall: parsed.toolCall || null,
+      toolParams: parsed.toolParams || null
+    }
   } catch (error) {
     if (error.name === 'CanceledError' || error.name === 'AbortError') {
       planningSessions.delete(sessionId)
@@ -119,7 +159,7 @@ function parseSSEStream(response, abortSignal, onChunk) {
   })
 }
 
-async function runAgent(message, context, onProgress, onChunk, abortSignal, preRouting) {
+async function runAgent(message, context, onProgress, onChunk, abortSignal, preRouting, forceTools = false) {
   const ctxItem = context?.find(c => c.aiMode) || {}
   const aiMode = ctxItem.aiMode || 'local'
   const messages = [
@@ -141,7 +181,8 @@ async function runAgent(message, context, onProgress, onChunk, abortSignal, preR
     editPPTX: (params) => generatePPTXFromMeta(params.pptxPath?.replace('.pptx', '.meta.json'), (prog) => {
       if (prog.type === 'pptx_progress') onChunk({ type: 'reasoning', content: prog.message || prog.step })
       onProgress(prog)
-    })
+    }, params.instructions),
+    generateHandout: (pptxResult, topic, outline) => generateHandout(pptxResult, topic, outline)
   }
 
   for (let round = 0; round < 10; round++) {
@@ -157,12 +198,21 @@ async function runAgent(message, context, onProgress, onChunk, abortSignal, preR
     const headers = { 'Content-Type': 'application/json' }
     if (routing.apiKey) headers['Authorization'] = `Bearer ${routing.apiKey}`
 
-    const needsTools = /课件|PPT|ppt|教案|讲义|制作课件|生成课件/.test(message)
+    const needsTools = forceTools || /课件|PPT|ppt|教案|讲义|制作课件|生成课件/.test(message)
+    const canUseTools = forceTools || (needsTools && routing.supportsTools)
     const requestBody = { model: routing.model || 'local', messages, stream: true }
-    if (needsTools && routing.supportsTools) { requestBody.tools = defaultRegistry.getAllTools(); requestBody.stream = false }
+    if (canUseTools) {
+      const toolMessages = [
+        { role: 'system', content: SYSTEM_PROMPT + TOOLS_AVAILABLE_HINT + '\n重要：当前任务已经过规划确认，请立即调用对应工具执行，不要只输出文本。' },
+        ...messages.filter(m => m.role !== 'system')
+      ]
+      requestBody.messages = toolMessages
+      requestBody.tools = defaultRegistry.getAllTools()
+      requestBody.stream = false
+    }
 
     try {
-      if (needsTools && routing.supportsTools) {
+      if (canUseTools) {
         const res = await axios.post(routing.apiUrl, requestBody, { headers, timeout: 60000, signal: abortSignal })
         const choice = res.data?.choices?.[0]
         if (!choice) { finalReply = '模型返回为空'; break }
@@ -196,6 +246,10 @@ async function runAgent(message, context, onProgress, onChunk, abortSignal, preR
             onProgress({ type: 'tool_result', tool: fn.name, success: false, error: err.message })
             messages.push({ role: 'tool', tool_call_id: tc.id || '0', content: JSON.stringify({ error: err.message }) })
           }
+        }
+        if (forceTools) {
+          finalReply = generatedPPTX ? '课件已生成，点击上方卡片即可打开。' : '任务已执行完毕。'
+          break
         }
         continue
       }

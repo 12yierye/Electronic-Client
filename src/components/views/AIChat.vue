@@ -3,14 +3,20 @@
     <!-- 常驻头栏 -->
     <div class="ai-header-bar">
       <div class="ai-header-left">
-        <el-dropdown trigger="click" @command="handleConvCmd">
+        <el-dropdown trigger="click">
           <span class="ai-header-title" style="cursor:pointer">
             {{ activeConvName }} <el-icon><ArrowDown /></el-icon>
           </span>
           <template #dropdown>
             <el-dropdown-menu class="conv-dropdown">
-              <div class="conv-list">
-                <div v-for="conv in aiStore.conversations" :key="conv.id" class="conv-item" :class="{ active: conv.id === aiStore.activeConversationId }" @click="switchConv(conv.id)">
+              <div class="conv-list" v-if="aiStore.conversations.length">
+                <div v-for="conv in aiStore.conversations" :key="conv.id"
+                     class="conv-item" :class="{ active: conv.id === aiStore.activeConversationId }"
+                     @click="switchConv(conv.id)">
+                  <span class="conv-icon">
+                    <el-icon v-if="conv.id === aiStore.activeConversationId"><ChatDotRound /></el-icon>
+                    <el-icon v-else><ChatLineRound /></el-icon>
+                  </span>
                   <span class="conv-name">{{ conv.name || '新对话' }}</span>
                   <span class="conv-actions" @click.stop>
                     <el-button :icon="EditPen" size="small" text @click="renameConv(conv)" />
@@ -18,15 +24,18 @@
                   </span>
                 </div>
               </div>
-              <el-dropdown-item command="new">
-                <el-icon><Plus /></el-icon> 新建对话
-              </el-dropdown-item>
+              <div v-else class="conv-empty">
+                <el-icon :size="28"><ChatLineRound /></el-icon>
+                <span>暂无对话记录</span>
+              </div>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-      </div>
-      <div class="ai-header-controls">
+        <el-button :icon="Plus" text size="small" class="conv-new-btn" @click="handleNewConv" />
+        <span class="header-divider" />
         <el-switch v-model="planningMode" size="small" active-text="规划" @change="onPlanningToggle" />
+      </div>
+      <div class="ai-header-right">
         <el-radio-group :model-value="aiMode" size="small" @change="onModeChange">
           <el-radio-button value="local">本地</el-radio-button>
           <el-radio-button value="cloud">云端</el-radio-button>
@@ -77,18 +86,41 @@
             <!-- 规划问题气泡 -->
             <div v-if="msg.type === 'question'" class="question-block">
               <div class="question-text">{{ msg.question }}</div>
-              <div class="question-options">
-                <el-button v-for="opt in msg.options" :key="opt"
-                  size="small" :disabled="msg.answered"
-                  @click="handlePickOption(msg, opt)">{{ opt }}</el-button>
-                <el-button size="small" type="success"
-                  :disabled="msg.answered"
-                  @click="handleDirectExecute(msg)">直接执行</el-button>
+              <div :class="['question-options', { multiselect: msg.multiSelect }]">
+                <div v-for="opt in msg.options.filter(o => o.label !== '跳过')" :key="opt.label"
+                     :class="['option-card', {
+                       selected: isOptChosen(msg, opt),
+                       other: opt.label === '其他',
+                       answered: msg.answered
+                     }]"
+                     @click="msg.answered ? null : toggleMsgOption(msg, opt)">
+                  <!-- 多选标记 -->
+                  <span v-if="msg.multiSelect" class="option-mark">
+                    <el-icon v-if="isOptChosen(msg, opt)"><CircleCheckFilled /></el-icon>
+                    <span v-else class="mark-empty" />
+                  </span>
+                  <div class="option-body">
+                    <span class="option-label">{{ opt.label }}</span>
+                    <span v-if="opt.desc" class="option-desc">{{ opt.desc }}</span>
+                  </div>
+                  <span v-if="!msg.multiSelect && isOptChosen(msg, opt)" class="option-pick">
+                    <el-icon><Check /></el-icon>
+                  </span>
+                </div>
               </div>
-              <el-input v-if="customForQuestion === msg.id" v-model="customAnswer"
-                placeholder="输入自定义内容" size="small"
-                style="margin-top:6px;max-width:300px"
-                @keydown.enter="handlePickOption(msg, customAnswer)" />
+              <!-- 其他输入 -->
+              <div v-if="showOtherInput(msg)" class="other-input-row">
+                <el-input v-model="msg.customInput" placeholder="输入自定义内容"
+                  size="small" class="other-input"
+                  @keydown.enter="handleQuestionConfirm(msg)" />
+              </div>
+              <!-- 操作按钮 -->
+              <div class="question-actions" v-if="!msg.answered">
+                <el-button size="small" class="skip-btn" text @click="handleSkip(msg)">跳过</el-button>
+                <el-button v-if="needsConfirm(msg)" size="small" type="primary"
+                  class="confirm-btn" :disabled="!canConfirm(msg)"
+                  @click="handleQuestionConfirm(msg)">确定</el-button>
+              </div>
             </div>
 
             <!-- 思考内容（仅AI消息） -->
@@ -161,7 +193,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, onActivated } from 'vue'
-import { MagicStick, ArrowDown, ArrowRight, Setting, Document, Plus, EditPen, Delete } from '@element-plus/icons-vue'
+import { MagicStick, ArrowDown, ArrowRight, Setting, Document, Plus, EditPen, Delete, ChatDotRound, ChatLineRound, CircleCheckFilled, Check } from '@element-plus/icons-vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
 import { getUserAvatar } from '../../composables/useAvatar'
@@ -175,8 +207,95 @@ const aiMode = ref(aiStore.aiMode)
 const cloudModelName = ref(aiStore.cloudModel)
 const localModelLabel = ref(aiStore.currentModel || '本地模型')
 const planningMode = ref(aiStore.planningMode)
-const customForQuestion = ref('')
-const customAnswer = ref('')
+
+// 问题气泡交互 — 状态在 msg 对象自身 (chosen[], customInput)
+function normalizeOptLabel(opt) {
+  return typeof opt === 'string' ? opt : opt.label
+}
+
+function isOptChosen(msg, opt) {
+  const label = normalizeOptLabel(opt)
+  if (label === '其他') return (msg.chosen || []).includes('其他')
+  if (label === '跳过') return false
+  if (msg.multiSelect) return (msg.chosen || []).includes(label)
+  return (msg.chosen || [])[0] === label
+}
+
+function toggleMsgOption(msg, opt) {
+  if (msg.answered) return
+  const label = normalizeOptLabel(opt)
+  if (label === '跳过') return
+  if (label === '其他') {
+    if (msg.multiSelect) {
+      const arr = [...(msg.chosen || [])]
+      const idx = arr.indexOf('其他')
+      if (idx >= 0) { arr.splice(idx, 1); msg.customInput = '' }
+      else { arr.push('其他'); msg.customInput = msg.customInput || '' }
+      msg.chosen = arr
+    } else {
+      if ((msg.chosen || [])[0] === '其他') {
+        msg.chosen = []
+        msg.customInput = ''
+      } else {
+        msg.chosen = ['其他']
+        msg.customInput = msg.customInput || ''
+      }
+    }
+    return
+  }
+  if (msg.multiSelect) {
+    const arr = [...(msg.chosen || [])]
+    const idx = arr.indexOf(label)
+    if (idx >= 0) arr.splice(idx, 1)
+    else arr.push(label)
+    msg.chosen = arr
+    if (!arr.includes('其他')) msg.customInput = ''
+  } else {
+    msg.customInput = ''
+    if ((msg.chosen || [])[0] === label) {
+      msg.chosen = []
+    } else {
+      msg.chosen = [label]
+    }
+  }
+}
+
+function showOtherInput(msg) {
+  if (msg.answered) return false
+  if (msg.multiSelect) return (msg.chosen || []).includes('其他')
+  return (msg.chosen || [])[0] === '其他'
+}
+
+function needsConfirm(msg) {
+  return msg.multiSelect || showOtherInput(msg) || (msg.chosen || []).length > 0
+}
+
+function canConfirm(msg) {
+  if (showOtherInput(msg) && !msg.customInput?.trim()) return false
+  return (msg.chosen || []).length > 0 || !!msg.customInput?.trim()
+}
+
+function handleSkip(msg) {
+  if (msg.answered) return
+  aiStore.addUserChoice(msg.id, '跳过')
+  handleAgentResend('跳过此问题，请直接按已有信息执行')
+}
+
+function handleQuestionConfirm(msg) {
+  if (msg.answered || !canConfirm(msg)) return
+  const chosen = [...(msg.chosen || [])]
+  if (showOtherInput(msg) && msg.customInput?.trim()) {
+    const otherIdx = chosen.indexOf('其他')
+    if (otherIdx >= 0) chosen[otherIdx] = msg.customInput.trim()
+    else chosen.push(msg.customInput.trim())
+  }
+  const finalChosen = chosen.filter(c => c !== '其他')
+  const answer = msg.multiSelect ? finalChosen : (finalChosen[0] || msg.customInput?.trim())
+  if (!answer) return
+  aiStore.addUserChoice(msg.id, answer)
+  const answerText = Array.isArray(answer) ? answer.join('、') : answer
+  handleAgentResend(answerText)
+}
 
 // 同步 store 变化到本地 ref
 watch(() => aiStore.aiMode, v => { aiMode.value = v })
@@ -262,22 +381,6 @@ function onPlanningToggle(val) {
   }
 }
 
-function handlePickOption(msg, option) {
-  if (!option || option === '其他' || option === '其它') {
-    customForQuestion.value = msg.id
-    return
-  }
-  aiStore.addUserChoice(msg.id, option)
-  customForQuestion.value = ''
-  customAnswer.value = ''
-  handleAgentResend(option)
-}
-
-function handleDirectExecute(msg) {
-  aiStore.addUserChoice(msg.id, '直接执行')
-  handleAgentResend('请根据已确认的信息直接执行任务')
-}
-
 function handleAgentResend(message) {
   const inputMsg = message
   const currentUsername = localStorage.getItem('userInfo') ? JSON.parse(localStorage.getItem('userInfo')).username : ''
@@ -324,8 +427,8 @@ function renameConv(conv) {
   }).catch(() => {})
 }
 
-function handleConvCmd(cmd) {
-  if (cmd === 'new') newConversation()
+function handleNewConv() {
+  newConversation()
 }
 
 const activeConvName = computed(() => {
@@ -465,9 +568,36 @@ onUnmounted(() => {
     .ai-header-left {
       display: flex;
       align-items: center;
+      gap: 4px;
 
       .el-dropdown {
         .ai-header-title:hover { color: var(--accent-color); }
+      }
+
+      .conv-new-btn {
+        width: 30px !important;
+        height: 30px !important;
+        min-height: auto !important;
+        padding: 0 !important;
+        border-radius: 50% !important;
+        color: var(--text-secondary, #888);
+        border: none;
+        background: transparent;
+        transition: color 0.15s, background 0.15s;
+
+        .el-icon { margin: 0 !important; }
+      }
+
+      .conv-new-btn:hover {
+        color: var(--accent-color, #4A9EFF);
+        background: var(--hover-bg, rgba(0,0,0,0.04));
+      }
+
+      .header-divider {
+        width: 1px;
+        height: 20px;
+        background: var(--border-color, rgba(0,0,0,0.1));
+        margin: 0 8px;
       }
     }
 
@@ -477,7 +607,7 @@ onUnmounted(() => {
       color: var(--text-primary);
     }
 
-    .ai-header-controls {
+    .ai-header-right {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -953,55 +1083,217 @@ onUnmounted(() => {
 
 // 规划问题气泡
 .question-block {
-  background: rgba(74, 158, 255, 0.06);
-  border: 1px solid rgba(74, 158, 255, 0.2);
-  border-radius: 12px;
-  padding: 14px;
+  background: rgba(74, 158, 255, 0.04);
+  border: 1px solid rgba(74, 158, 255, 0.15);
+  border-radius: 10px;
+  padding: 14px 16px 10px;
   margin: 8px 0;
+  max-width: 420px;
 
   .question-text {
-    font-size: 15px;
-    font-weight: 500;
+    font-size: 14px;
+    font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 10px;
+    margin-bottom: 12px;
+    line-height: 1.5;
   }
 
   .question-options {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .option-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color, rgba(0,0,0,0.06));
+    cursor: pointer;
+    transition: all 0.15s ease;
+    background: var(--bg-primary, #fff);
+
+    &:hover:not(.answered) {
+      border-color: var(--accent-color, #4A9EFF);
+      background: rgba(74, 158, 255, 0.04);
+    }
+
+    &.selected {
+      border-color: var(--accent-color, #4A9EFF);
+      background: rgba(74, 158, 255, 0.08);
+
+      .option-label { color: var(--accent-color, #4A9EFF); font-weight: 500; }
+    }
+
+    &.other {
+      border-style: dashed;
+      opacity: 0.85;
+
+      &:hover { opacity: 1; }
+      &.selected { border-style: solid; opacity: 1; }
+    }
+
+    &.answered {
+      cursor: default;
+      opacity: 0.7;
+    }
+
+    .option-mark {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      color: var(--accent-color, #4A9EFF);
+
+      .mark-empty {
+        width: 18px; height: 18px;
+        border: 1.5px solid var(--text-secondary, #bbb);
+        border-radius: 4px;
+        display: inline-block;
+      }
+    }
+
+    .option-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .option-label {
+      font-size: 13px;
+      color: var(--text-primary);
+      transition: color 0.15s;
+    }
+
+    .option-desc {
+      font-size: 11px;
+      color: var(--text-secondary, #999);
+      line-height: 1.3;
+    }
+
+    .option-pick {
+      flex-shrink: 0;
+      color: var(--accent-color, #4A9EFF);
+    }
+  }
+
+  .other-input-row {
+    margin-top: 8px;
+
+    .other-input {
+      max-width: 300px;
+    }
+  }
+
+  .question-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
     gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color, rgba(0,0,0,0.06));
+
+    .skip-btn {
+      color: var(--text-secondary, #999) !important;
+      font-size: 12px !important;
+      padding: 5px 12px !important;
+      min-height: auto !important;
+      background: transparent !important;
+      border: none !important;
+
+      &:hover {
+        color: var(--text-primary, #333) !important;
+        background: var(--hover-bg, rgba(0,0,0,0.04)) !important;
+        border-radius: 6px;
+      }
+    }
+
+    .confirm-btn {
+      font-size: 12px !important;
+      padding: 5px 16px !important;
+      min-height: auto !important;
+      border-radius: 6px !important;
+    }
   }
 }
 </style>
 
 <style>
 .conv-dropdown {
-  max-height: 320px;
+  max-height: 360px;
   overflow: hidden;
   min-width: 260px;
+  padding: 4px 0 !important;
+}
+
+.conv-dropdown > .el-dropdown-menu__item {
+  margin: 0;
 }
 
 .conv-list {
   max-height: 240px;
   overflow-y: auto;
+  padding: 2px 0;
+}
+
+.conv-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.conv-list::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 2px;
+}
+
+.conv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 12px;
+  color: var(--text-secondary, #999);
+  font-size: 13px;
+  gap: 8px;
+  opacity: 0.7;
 }
 
 .conv-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
+  gap: 10px;
+  padding: 9px 14px;
   cursor: pointer;
   font-size: 13px;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
+  color: var(--text-primary);
+  border-radius: 6px;
+  margin: 1px 6px;
 }
 
 .conv-item:hover {
-  background: var(--hover-bg);
+  background: var(--hover-bg, rgba(0, 0, 0, 0.04));
 }
 
 .conv-item.active {
-  background: rgba(74, 158, 255, 0.12);
+  background: rgba(74, 158, 255, 0.1);
+  color: var(--accent-color, #4A9EFF);
+  font-weight: 500;
+}
+
+.conv-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: inherit;
+  opacity: 0.55;
+}
+
+.conv-item.active .conv-icon {
+  opacity: 1;
 }
 
 .conv-name {
@@ -1009,14 +1301,18 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-primary);
 }
 
 .conv-actions {
   display: flex;
-  gap: 2px;
+  gap: 0;
   opacity: 0;
   transition: opacity 0.15s;
+}
+
+.conv-actions .el-button {
+  padding: 4px !important;
+  min-height: auto !important;
 }
 
 .conv-item:hover .conv-actions {

@@ -121,10 +121,18 @@
               </div>
             </div>
           </el-form-item>
+          <el-divider />
+          <h4>好友搜索</h4>
+          <el-form-item :label="t('settings.enablePinyinSearch') + '：'">
+            <div class="switch-with-tip">
+              <el-switch v-model="enablePinyinSearch" @change="savePinyinSearchSetting" />
+              <div class="setting-tip">{{ t('settings.enablePinyinSearchTip') }}</div>
+            </div>
+          </el-form-item>
         </div>
 
-        <!-- AI 模型 -->
-        <div v-else-if="activeNav === 'ai'" class="settings-section">
+        <!-- AI 与服务器 -->
+        <div v-else-if="activeNav === 'aiServer'" class="settings-section">
           <h3>{{ t('settings.aiModelTitle') }}</h3>
           <el-form-item :label="t('settings.aiMode') + '：'">
             <el-radio-group v-model="aiSettingsMode" @change="saveAiMode">
@@ -175,10 +183,7 @@
             </el-form-item>
             <div class="setting-tip">支持所有 OpenAI 兼容接口（DeepSeek、通义千问、智谱等）。选择提供商后自动填充地址和模型列表。</div>
           </div>
-        </div>
-
-        <!-- 服务端 -->
-        <div v-else-if="activeNav === 'server'" class="settings-section">
+          <el-divider />
           <h3>{{ t('settings.serverTitle') }}</h3>
           <el-form-item :label="t('settings.serverIP') + '：'">
             <el-input
@@ -202,19 +207,17 @@
           </el-form-item>
         </div>
 
-        <!-- 好友搜索 -->
-        <div v-else-if="activeNav === 'friendSearch'" class="settings-section">
-          <h3>{{ t('settings.friendSearchTitle') }}</h3>
-          <el-form-item :label="t('settings.enablePinyinSearch') + '：'">
-            <div class="switch-with-tip">
-              <el-switch v-model="enablePinyinSearch" @change="savePinyinSearchSetting" />
-              <div class="setting-tip">{{ t('settings.enablePinyinSearchTip') }}</div>
+        <!-- 文件管理 -->
+        <div v-else-if="activeNav === 'files'" class="settings-section">
+          <h3>PPT 课件输出目录</h3>
+          <el-form-item label="输出目录：">
+            <div class="download-dir-row">
+              <el-input v-model="pptDir" placeholder="选择PPT课件的保存路径" @blur="savePPTDir" />
+              <el-button @click="selectPPTDir" :icon="FolderOpened" />
             </div>
+            <div class="setting-tip">AI 生成的课件（.pptx 文件）将保存到此目录。留空则使用下载目录。</div>
           </el-form-item>
-        </div>
-
-        <!-- 下载目录 -->
-        <div v-else-if="activeNav === 'download'" class="settings-section">
+          <el-divider />
           <h3>{{ t('settings.downloadTitle') }}</h3>
           <el-form-item :label="t('settings.downloadDir') + '：'">
             <div class="download-dir-row">
@@ -238,9 +241,9 @@
               <el-option v-for="t in templateList" :key="t.id" :label="t.name" :value="t.id" />
             </el-select>
           </el-form-item>
-          <el-form-item>
+          <div class="template-actions">
             <el-button @click="showAddTemplate = true" :icon="Plus">新建模板</el-button>
-          </el-form-item>
+          </div>
 
           <el-dialog v-model="showAddTemplate" title="新建模板" width="360px">
             <el-form label-width="70px">
@@ -255,19 +258,7 @@
           </el-dialog>
         </div>
 
-        <!-- PPT 输出目录 -->
-        <div v-else-if="activeNav === 'pptdir'" class="settings-section">
-          <h3>PPT 课件输出目录</h3>
-          <el-form-item label="输出目录：">
-            <div class="download-dir-row">
-              <el-input v-model="pptDir" placeholder="选择PPT课件的保存路径" @blur="savePPTDir" />
-              <el-button @click="selectPPTDir" :icon="FolderOpened" />
-            </div>
-            <div class="setting-tip">AI 生成的课件（.pptx 文件）将保存到此目录。留空则使用下载目录。</div>
-          </el-form-item>
-        </div>
-
-        <!-- 关于 -->
+        <!-- 隐私与加密 -->
         <div v-else-if="activeNav === 'privacy'" class="settings-section">
           <h3>隐私与加密</h3>
           <el-form-item label="端到端加密：">
@@ -365,13 +356,10 @@ const navItems = [
     { key: 'profile', label: '用户资料', icon: User },
     { key: 'appearance', label: '外观', icon: Setting },
     { key: 'chat', label: '聊天设置', icon: Message },
-    { key: 'ai', label: 'AI 模型', icon: MagicStick },
-    { key: 'server', label: '服务端', icon: Link },
-    { key: 'friendSearch', label: '好友搜索', icon: Search },
-    { key: 'privacy', label: '隐私加密', icon: Lock },
-    { key: 'pptdir', label: 'PPT 输出', icon: Folder },
+    { key: 'aiServer', label: 'AI与服务器', icon: MagicStick },
+    { key: 'files', label: '文件管理', icon: Folder },
     { key: 'templates', label: '课件模板', icon: Files },
-    { key: 'download', label: '下载目录', icon: Folder },
+    { key: 'privacy', label: '隐私加密', icon: Lock },
     { key: 'checkUpdate', label: '检查更新', icon: RefreshRight },
     { key: 'about', label: '关于', icon: InfoFilled }
 ]
@@ -995,6 +983,10 @@ const handleCheckUpdate = async () => {
                     .el-input {
                         flex: 1;
                     }
+                }
+
+                .template-actions {
+                    margin-bottom: 18px;
                 }
 
                 .about-info-list {
