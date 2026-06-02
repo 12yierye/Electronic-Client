@@ -54,7 +54,7 @@ export function registerAgentIpc() {
         if (planResult.action === 'ask') {
           reply = ''
         } else if (planResult.action === 'execute') {
-          // Remove planning system prompt, add normal prompt
+          console.log('[Agent] planning execute, messages:', planResult.messages.length)
           const execMessages = [
             { role: 'system', content: `You are a helpful AI assistant. Now execute the task based on the confirmed plan. Respond in Chinese.` },
             ...planResult.messages.filter(m => m.role !== 'system').slice(-20)

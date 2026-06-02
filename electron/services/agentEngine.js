@@ -57,10 +57,14 @@ async function planningAgent(sessionId, message, context, routing, onProgress, o
     }, { headers, timeout: 60000, signal: abortSignal })
 
     const raw = res.data?.choices?.[0]?.message?.content || ''
+    console.log('[PlanAgent] raw response:', raw?.slice(0, 200))
     let parsed
     try { parsed = JSON.parse(raw.replace(/```json\n?/g, '').replace(/```/g, '').trim()) } catch {
+      console.log('[PlanAgent] JSON parse failed, defaulting to execute')
       parsed = { action: 'ready', summary: message, plan: ['按需求执行'] }
     }
+
+    console.log('[PlanAgent] parsed action:', parsed.action, 'hasQ:', !!parsed.question, 'opts:', parsed.options?.length)
 
     if (parsed.action === 'ask' && parsed.question && parsed.options?.length) {
       session.messages.push({ role: 'assistant', content: JSON.stringify(parsed) })

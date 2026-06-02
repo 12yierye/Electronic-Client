@@ -76,8 +76,7 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
     window.electronAPI.removeAgentListeners()
   }
 
-  const isPlanning = aiStore.planningMode
-  if (!isPlanning) aiStore.startStreamingMessage()
+  aiStore.startStreamingMessage()
   const mode = currentMode || localStorage.getItem('aiMode') || 'local'
 
   if (window.electronAPI.onAgentProgress) {
@@ -95,6 +94,7 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
       else if (data.type === 'reasoning') aiStore.appendReasoningContent(data.content)
       else if (data.type === 'pptx_card') aiStore.addPPTXCard(data)
       else if (data.type === 'question') {
+        aiStore.endStreamingMessage()
         aiStore.addQuestionBubble(data.question, data.options)
         isSending.value = false
       }
@@ -109,12 +109,12 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
     }
     const history = aiStore.getConversationHistory ? aiStore.getConversationHistory(aiStore.contextTokens) : []
     const pptCards = (aiStore.messages || []).filter(m => m.pptxCard).map(m => m.pptxCard)
-    const result = await window.electronAPI.agentRun({ message, aiMode: mode, cloudConfig, history, pptCards, planningMode: isPlanning })
-    if (result.reply && result.reply !== '已完成所有操作。' && !result.question) {
+    const result = await window.electronAPI.agentRun({ message, aiMode: mode, cloudConfig, history, pptCards, planningMode: aiStore.planningMode })
+    if (result.reply && result.reply !== '已完成所有操作。') {
       aiStore.appendStreamingContent(result.reply)
     }
     if (result.cancelled) aiStore.appendStreamingContent('\n[已中断]')
-    if (!isPlanning) aiStore.endStreamingMessage()
+    aiStore.endStreamingMessage()
     aiStore.persistCurrentConversation()
   } catch (error) {
     aiStore.endStreamingMessage()
