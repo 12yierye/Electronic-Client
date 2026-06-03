@@ -1,12 +1,45 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { marked } from 'marked'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
 
-// 配置marked选项 — 全面支持 GFM (GitHub Flavored Markdown)
+// 配置marked选项 — 全面支持 GFM + KaTeX 公式
 marked.use({
-  breaks: true,       // 单个换行转为 <br>
-  gfm: true,           // 表格、任务列表、删除线、自动链接等
+  breaks: true,
+  gfm: true,
   pedantic: false,
+  extensions: [{
+    name: 'inlineMath',
+    level: 'inline',
+    start(src) { return src.indexOf('$') },
+    tokenizer(src) {
+      const match = src.match(/^(\$[^$\n]+?\$)/)
+      if (match) {
+        return { type: 'inlineMath', raw: match[0], formula: match[1].slice(1, -1) }
+      }
+    },
+    renderer(token) {
+      try { return katex.renderToString(token.formula, { displayMode: false, throwOnError: false }) }
+      catch { return `<span>$${token.formula}$</span>` }
+    }
+  }, {
+    name: 'blockMath',
+    level: 'block',
+    start(src) { return src.indexOf('$$') },
+    tokenizer(src) {
+      const match = src.match(/^\$\$([\s\S]+?)\$\$/)
+      if (match) {
+        return { type: 'blockMath', raw: match[0], formula: match[1].trim() }
+      }
+    },
+    renderer(token) {
+      try {
+        const html = katex.renderToString(token.formula, { displayMode: true, throwOnError: false })
+        return `<div class="katex-block" style="text-align:center;margin:12px 0;overflow-x:auto">${html}</div>`
+      } catch { return `<div>$$${token.formula}$$</div>` }
+    }
+  }]
 })
 
 export const useAIStore = defineStore('ai', () => {
@@ -37,7 +70,7 @@ export const useAIStore = defineStore('ai', () => {
   function cloneMessages(arr) {
     try {
       if (!arr) return []
-      const clean = arr.map(m => ({ id: m.id, role: m.role, type: m.type, content: m.content, thinking: m.thinking, timestamp: m.timestamp, fileName: m.fileName, filePath: m.filePath, slideCount: m.slideCount, pptxCard: m.pptxCard, question: m.question, options: m.options, answered: m.answered }))
+      const clean = arr.map(m => ({ id: m.id, role: m.role, type: m.type, content: m.content, thinking: m.thinking, timestamp: m.timestamp, fileName: m.fileName, filePath: m.filePath, slideCount: m.slideCount, pptxCard: m.pptxCard, imageGallery: m.imageGallery, question: m.question, options: m.options, answered: m.answered }))
       return JSON.parse(JSON.stringify(clean))
     } catch { return [] }
   }
@@ -62,6 +95,7 @@ export const useAIStore = defineStore('ai', () => {
   const cloudProvider = ref(localStorage.getItem('cloudProvider') || '')
   const contextTokens = ref(parseInt(localStorage.getItem('aiContextTokens')) || 32000)
   const planningMode = ref(localStorage.getItem('planningMode') === 'true')
+  const enableThinking = ref(localStorage.getItem('enableThinking') === 'true')
   let currentStreamingMessage = null
   let messageIdCounter = 0
 
@@ -73,6 +107,11 @@ export const useAIStore = defineStore('ai', () => {
   const setPlanningMode = (val) => {
     planningMode.value = val
     localStorage.setItem('planningMode', val)
+  }
+
+  const setEnableThinking = (val) => {
+    enableThinking.value = val
+    localStorage.setItem('enableThinking', val)
   }
 
   const setAiMode = (mode) => {
@@ -140,6 +179,17 @@ export const useAIStore = defineStore('ai', () => {
       showThinking: false,
       timestamp: new Date().toISOString()
     })
+  }
+
+  // 添加图片画廊到当前消息
+  const addImageGallery = (data) => {
+    const msg = currentStreamingMessage
+      ? messages.value.find(m => m.id === currentStreamingMessage)
+      : null
+    const target = msg || messages.value[messages.value.length - 1]
+    if (target && target.role === 'ai') {
+      target.imageGallery = { images: data.images, query: data.query }
+    }
   }
 
   // 添加 PPTX 卡片到当前消息（不创建新消息）
@@ -330,7 +380,17 @@ export const useAIStore = defineStore('ai', () => {
         conversations.value.push(newConv)
         saveConversations()
       }
-      switchConversation(conversations.value[0].id)
+      const target = conversations.value[0]
+      activeConversationId.value = target.id
+      currentStreamingMessage = null
+      messageIdCounter = 0
+      messages.value = cloneMessages(target.messages)
+      messages.value.forEach(m => {
+        if (m.content && m.role === 'ai' && m.type !== 'pptx_card') {
+          m.htmlContent = marked(m.content)
+        }
+      })
+      localStorage.setItem('ai_active_conv', target.id)
     }
   }
 
@@ -364,24 +424,30 @@ export const useAIStore = defineStore('ai', () => {
     const hour = new Date().getHours()
     const lang = localStorage.getItem('appSettings')
       ? JSON.parse(localStorage.getItem('appSettings')).language || 'zh-CN'
-      : 'zh-CN'
+      : localStorage.getItem('appLanguage') || 'zh-CN'
     
     const greetings = {
+      'zh-CN': {
+        morning: '早上好！',
+        afternoon: '下午好！',
+        evening: '晚上好！',
+        night: '晚安！'
+      },
       en: {
         morning: 'Good morning!',
         afternoon: 'Good afternoon!',
         evening: 'Good evening!',
         night: 'Good night!'
       },
-      zh: {
-        morning: '早上好！',
-        afternoon: '下午好！',
-        evening: '晚上好！',
-        night: '晚安！'
+      ja: {
+        morning: 'おはようございます！',
+        afternoon: 'こんにちは！',
+        evening: 'こんばんは！',
+        night: 'おやすみなさい！'
       }
     }
     
-    const langGreetings = greetings[lang] || greetings.en
+    const langGreetings = greetings[lang] || greetings['zh-CN']
     
     if (hour >= 6 && hour < 12) return langGreetings.morning
     if (hour >= 12 && hour < 18) return langGreetings.afternoon
@@ -418,6 +484,8 @@ export const useAIStore = defineStore('ai', () => {
     setCloudProvider,
     setContextTokens,
     setPlanningMode,
+    enableThinking,
+    setEnableThinking,
     addUserMessage,
     addAIMessage,
     addPPTXCard,

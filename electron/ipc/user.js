@@ -17,6 +17,16 @@ export function registerUserIpc() {
         return { success: true }
     })
 
+    ipcMain.handle('user:setStatus', async (event, status) => {
+        try {
+            const { sendWsMessage } = await import('../services/websocket.js')
+            sendWsMessage(JSON.stringify({ type: 'status_update', status }))
+        } catch (e) {
+            console.error('[user:setStatus] failed:', e.message)
+        }
+        return { success: true }
+    })
+
     ipcMain.handle('set-badge-count', async (event, count) => {
         setBadgeCount(count)
         return { success: true }

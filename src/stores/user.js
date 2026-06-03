@@ -4,6 +4,15 @@ import { ref, computed } from 'vue'
 export const useUserStore = defineStore('user', () => {
   const userInfo = ref(null)
   const isLoggedIn = computed(() => !!userInfo.value)
+  const myStatus = ref(localStorage.getItem('myUserStatus') || 'online')
+
+  const setMyStatus = (status) => {
+    myStatus.value = status
+    localStorage.setItem('myUserStatus', status)
+    if (window.electronAPI?.setMyStatus) {
+      window.electronAPI.setMyStatus(status).catch(() => {})
+    }
+  }
   
   // 初始化用户信息
   const initUser = () => {
@@ -28,6 +37,8 @@ export const useUserStore = defineStore('user', () => {
   return {
     userInfo,
     isLoggedIn,
+    myStatus,
+    setMyStatus,
     initUser,
     setUser,
     clearUser

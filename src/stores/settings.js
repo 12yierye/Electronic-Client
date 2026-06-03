@@ -11,6 +11,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const cacheRetentionDays = ref(30)        // 缓存消息保留天数
   const showModeUnreadBadge = ref(true)     // 模式切换按钮（公网/内网）角标红点
   const showTabUnreadBadge = ref(true)      // 标签页（好友/群聊）角标红点
+  const showOnlineStatus = ref(true)        // 显示好友在线状态
+  const debugMode = ref(false)              // 调试模式
 
   // 系统主题监听
   let systemThemeMedia = null
@@ -40,6 +42,8 @@ export const useSettingsStore = defineStore('settings', () => {
       cacheRetentionDays.value = settings.cacheRetentionDays || 30
       showModeUnreadBadge.value = settings.showModeUnreadBadge !== undefined ? settings.showModeUnreadBadge : true
       showTabUnreadBadge.value = settings.showTabUnreadBadge !== undefined ? settings.showTabUnreadBadge : true
+      showOnlineStatus.value = settings.showOnlineStatus !== undefined ? settings.showOnlineStatus : true
+      debugMode.value = settings.debugMode !== undefined ? settings.debugMode : false
     }
     applyTheme()
   }
@@ -55,7 +59,9 @@ export const useSettingsStore = defineStore('settings', () => {
       navFlashIntensity: navFlashIntensity.value,
       cacheRetentionDays: cacheRetentionDays.value,
       showModeUnreadBadge: showModeUnreadBadge.value,
-      showTabUnreadBadge: showTabUnreadBadge.value
+      showTabUnreadBadge: showTabUnreadBadge.value,
+      showOnlineStatus: showOnlineStatus.value,
+      debugMode: debugMode.value
     }))
   }
 
@@ -130,6 +136,16 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSettings()
   }
 
+  const setShowOnlineStatus = (value) => {
+    showOnlineStatus.value = value
+    saveSettings()
+  }
+
+  const setDebugMode = (value) => {
+    debugMode.value = value
+    saveSettings()
+  }
+
   return {
     theme,
     language,
@@ -140,6 +156,7 @@ export const useSettingsStore = defineStore('settings', () => {
     cacheRetentionDays,
     showModeUnreadBadge,
     showTabUnreadBadge,
+    showOnlineStatus,
     effectiveTheme,
     loadSettings,
     saveSettings,
@@ -152,6 +169,9 @@ export const useSettingsStore = defineStore('settings', () => {
     setNavFlashIntensity,
     setCacheRetentionDays,
     setShowModeUnreadBadge,
-    setShowTabUnreadBadge
+    setShowTabUnreadBadge,
+    setShowOnlineStatus,
+    debugMode,
+    setDebugMode
   }
 })

@@ -100,3 +100,29 @@ export const setCloudProvider = (provider) => {
     console.log('[Config] Cloud Provider updated:', cloudProvider)
   }
 }
+
+let imageProviderConfig = {}
+export const getProviderConfig = (providerId) => imageProviderConfig[providerId]
+export const setProviderConfig = (config) => { if (config) imageProviderConfig = config }
+export const getAllProviderConfigs = () => imageProviderConfig
+
+let useSystemBrowser = false
+export const getUseSystemBrowser = () => useSystemBrowser
+export const setUseSystemBrowser = (val) => { useSystemBrowser = !!val }
+
+let imageGenConfig = null
+let imageGenPriority = 'search'
+let imageGenServerIp = '127.0.0.1'
+let imageGenServerPort = '7860'
+export const getImageGenConfig = () => imageGenConfig
+export const setImageGenConfig = (config) => { imageGenConfig = config }
+export const getImageGenPriority = () => imageGenPriority
+export const setImageGenPriority = (val) => { imageGenPriority = val === 'generate' ? 'generate' : 'search' }
+let imageGenSubPriority = 'search'
+export const getImageGenSubPriority = () => imageGenSubPriority
+export const setImageGenSubPriority = (val) => { imageGenSubPriority = val === 'server' ? 'server' : 'search' }
+export const getImageGenServerIP = () => imageGenServerIp
+export const setImageGenServerIP = (ip) => { if (ip) imageGenServerIp = ip }
+export const getImageGenServerPort = () => imageGenServerPort
+export const setImageGenServerPort = (port) => { if (port) imageGenServerPort = port }
+export const getImageGenServerURL = () => `http://${imageGenServerIp}:${imageGenServerPort}`

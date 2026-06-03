@@ -34,6 +34,14 @@
         <el-button :icon="Plus" text size="small" class="conv-new-btn" @click="handleNewConv" />
         <span class="header-divider" />
         <el-switch v-model="planningMode" size="small" active-text="规划" @change="onPlanningToggle" />
+        <el-switch
+          v-if="currentModelSupportsThinking"
+          v-model="enableThinking"
+          size="small"
+          active-text="思考"
+          inactive-text="常规"
+          @change="onThinkingToggle"
+        />
       </div>
       <div class="ai-header-right">
         <el-radio-group :model-value="aiMode" size="small" @change="onModeChange">
@@ -150,6 +158,19 @@
                 <div class="pptx-card-meta" v-if="msg.pptxCard.slideCount">{{ msg.pptxCard.slideCount }} 页</div>
                 <div class="pptx-card-desc">{{ msg.pptxCard.message }}</div>
                 <div class="pptx-card-click">点击打开文件</div>
+              </div>
+            </div>
+
+            <!-- 图片画廊 -->
+            <div v-if="msg.imageGallery" class="image-gallery">
+              <div class="image-gallery-header">
+                <span>图片搜索 — "{{ msg.imageGallery.query }}"</span>
+              </div>
+              <div class="image-gallery-grid">
+                <div v-for="(img, i) in msg.imageGallery.images" :key="i" class="image-gallery-item" @click="openImageUrl(img.original || img.url)">
+                  <img :src="img.url" :alt="img.alt" loading="lazy" @error="$event.target.style.display='none'" />
+                  <div class="image-gallery-caption">{{ img.photographer }}</div>
+                </div>
               </div>
             </div>
 
@@ -304,7 +325,7 @@ watch(() => aiStore.currentModel, v => { localModelLabel.value = v || '本地模
 watch(() => aiStore.planningMode, v => { planningMode.value = v })
 
 const CLOUD_PROVIDERS = [
-  { id: 'deepseek', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', thinking: 'none', contextLimit: 1000000 }, { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', thinking: 'always', contextLimit: 1000000 }] },
+  { id: 'deepseek', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', thinking: 'optional', contextLimit: 1000000 }, { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', thinking: 'always', contextLimit: 1000000 }] },
   { id: 'openai', models: [{ id: 'gpt-4o', name: 'GPT-4o', thinking: 'none' }, { id: 'gpt-4o-mini', name: 'GPT-4o Mini', thinking: 'none' }, { id: 'o3-mini', name: 'o3-mini', thinking: 'optional' }, { id: 'o1', name: 'o1', thinking: 'always' }] },
   { id: 'qwen', models: [{ id: 'qwen-plus', name: 'Qwen Plus', thinking: 'none' }, { id: 'qwen-max', name: 'Qwen Max', thinking: 'optional' }, { id: 'qwen-turbo', name: 'Qwen Turbo', thinking: 'none' }, { id: 'qwen-long', name: 'Qwen Long', thinking: 'none' }] },
   { id: 'zhipu', models: [{ id: 'glm-4-flash', name: 'GLM-4 Flash', thinking: 'none' }, { id: 'glm-4', name: 'GLM-4', thinking: 'optional' }, { id: 'glm-4-plus', name: 'GLM-4 Plus', thinking: 'optional' }] },
@@ -357,7 +378,7 @@ function onCloudModelChange(model) {
 }
 
 function goToSettings() {
-  localStorage.setItem('settingsActiveNav', 'ai')
+  localStorage.setItem('settingsActiveNav', 'aiModel')
   emit('navigate', 'settings')
 }
 
@@ -365,6 +386,15 @@ async function openPPTX(filePath) {
   if (!filePath) return
   if (window.electronAPI?.openFilePath) {
     await window.electronAPI.openFilePath(filePath)
+  }
+}
+
+function openImageUrl(url) {
+  if (!url) return
+  if (window.electronAPI?.openExternal) {
+    window.electronAPI.openExternal(url)
+  } else {
+    window.open(url, '_blank')
   }
 }
 
@@ -379,6 +409,20 @@ function onPlanningToggle(val) {
   if (!val && window.electronAPI?.agentCancelPlanning) {
     window.electronAPI.agentCancelPlanning()
   }
+}
+
+const enableThinking = ref(aiStore.enableThinking)
+
+const currentModelSupportsThinking = computed(() => {
+  if (aiMode.value !== 'cloud') return false
+  const modelId = cloudModelName.value
+  const model = cloudModelList.value.find(m => m.id === modelId)
+  return model && (model.thinking === 'optional' || model.thinking === 'always')
+})
+
+function onThinkingToggle(val) {
+  enableThinking.value = val
+  aiStore.setEnableThinking(val)
 }
 
 function handleAgentResend(message) {
@@ -1005,6 +1049,18 @@ onUnmounted(() => {
         color: var(--accent-color);
         font-weight: 500;
       }
+    }
+  }
+
+  .image-gallery {
+    margin: 12px 0;
+    .image-gallery-header { font-size: 13px; font-weight: 600; color: var(--el-text-color-secondary); margin-bottom: 8px; }
+    .image-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+    .image-gallery-item {
+      border-radius: 6px; overflow: hidden; cursor: pointer; border: 1px solid var(--el-border-color); background: var(--el-fill-color-lighter); transition: transform 0.15s;
+      &:hover { transform: scale(1.03); }
+      img { width: 100%; height: 90px; object-fit: cover; display: block; }
+      .image-gallery-caption { font-size: 11px; color: var(--el-text-color-secondary); padding: 2px 6px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     }
   }
 

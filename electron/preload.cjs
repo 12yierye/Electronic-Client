@@ -112,6 +112,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onWsOnlineStatus: (callback) => {
     ipcRenderer.on('ws:online_status', (event, data) => callback(data))
   },
+  setMyStatus: (status) => ipcRenderer.invoke('user:setStatus', status),
   onWsUpdateBadge: (callback) => {
     ipcRenderer.on('ws:update_badge', () => callback())
   },
@@ -179,6 +180,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setPPTDir: (dir) => ipcRenderer.invoke('set-ppt-dir', dir),
   getPPTDir: () => ipcRenderer.invoke('get-ppt-dir'),
   scanDirectory: (dir) => ipcRenderer.invoke('scan-directory', dir),
+  scanDebugDirectory: (dir) => ipcRenderer.invoke('scan-debug-directory', dir),
   deletePPTFile: (paths) => ipcRenderer.invoke('delete-ppt-file', paths),
 
   // 动态设置 AI API 地址
@@ -214,6 +216,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   agentCancelPlanning: () => ipcRenderer.invoke('agent:cancelPlanning'),
   agentStatus: () => ipcRenderer.invoke('agent:status'),
   agentGenerateTitle: (message) => ipcRenderer.invoke('agent:generateTitle', { message }),
+  testImageSearch: (query, provider) => ipcRenderer.invoke('agent:testImageSearch', { query, provider }),
   onAgentProgress: (callback) => {
     ipcRenderer.on('agent:progress', (event, data) => callback(data))
   },
@@ -225,6 +228,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('agent:chunk')
   },
 
+  // 调试功能
+  debugGeneratePPTX: (data) => ipcRenderer.invoke('agent:debugGeneratePPTX', data),
+  onDebugProgress: (callback) => {
+    ipcRenderer.on('agent:debugProgress', (event, data) => callback(data))
+  },
+  removeDebugListeners: () => {
+    ipcRenderer.removeAllListeners('agent:debugProgress')
+  },
+
+  // 图片搜索提供者配置
+  setImageProviderConfig: (config) => ipcRenderer.invoke('set-image-provider-config', config),
+  getImageProviderConfig: () => ipcRenderer.invoke('get-image-provider-config'),
+
+  // 系统浏览器设置
+  setUseSystemBrowser: (val) => ipcRenderer.invoke('set-use-system-browser', val),
+  getUseSystemBrowser: () => ipcRenderer.invoke('get-use-system-browser'),
+
   // 云端 API 配置
   setCloudApiBase: (url) => ipcRenderer.invoke('set-cloud-api-base', url),
   setCloudApiKey: (key) => ipcRenderer.invoke('set-cloud-api-key', key),
@@ -232,6 +252,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setCloudProvider: (provider) => ipcRenderer.invoke('set-cloud-provider', provider),
   getCloudConfig: () => ipcRenderer.invoke('get-cloud-config'),
   testCloudApi: (data) => ipcRenderer.invoke('test-cloud-api', data),
+
+  // AI 图片生成
+  setImageGenConfig: (config) => ipcRenderer.invoke('set-image-gen-config', config),
+  getImageGenConfig: () => ipcRenderer.invoke('get-image-gen-config'),
+  setImageGenPriority: (val) => ipcRenderer.invoke('set-image-gen-priority', val),
+  getImageGenPriority: () => ipcRenderer.invoke('get-image-gen-priority'),
+  setImageGenSubPriority: (val) => ipcRenderer.invoke('set-image-gen-sub-priority', val),
+  getImageGenSubPriority: () => ipcRenderer.invoke('get-image-gen-sub-priority'),
+  setImageGenServer: (config) => ipcRenderer.invoke('set-image-gen-server', config),
+  getImageGenServer: () => ipcRenderer.invoke('get-image-gen-server'),
+  testImageGen: (prompt) => ipcRenderer.invoke('test-image-gen', { prompt }),
 })
 
 console.log('[Preload] ready')

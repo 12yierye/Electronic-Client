@@ -220,3 +220,15 @@ export function flashWindow(shouldFlash) {
     try { mw.flashFrame(true) } catch (_) {}
   }
 }
+
+export function sendWsMessage(data) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false
+  try {
+    const payload = typeof data === 'string' ? data : JSON.stringify(data)
+    ws.send(payload)
+    return true
+  } catch (e) {
+    console.error('[WS] sendWsMessage error:', e.message)
+    return false
+  }
+}

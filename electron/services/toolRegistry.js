@@ -2,6 +2,7 @@ import axios from 'axios'
 import fs from 'fs'
 import { getAPIBase, getPPTDir } from '../config.js'
 import { join } from 'node:path'
+import { searchImages } from './imageSearch.js'
 
 class ToolRegistry {
   constructor() {
@@ -168,6 +169,24 @@ class ToolRegistry {
           success: true,
           username: ctx.username
         }
+      }
+    })
+
+    this.register({
+      name: 'search_images',
+      description: 'Search for free stock images by keyword. Returns up to 5 image URLs.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search keywords (e.g. "数学公式", "solar system", "地球")' },
+          perPage: { type: 'number', description: 'Number of results (default 3)' }
+        },
+        required: ['query']
+      },
+      handler: async (params, ctx) => {
+        const results = await searchImages(params.query, { perPage: params.perPage || 3 })
+        if (results.length === 0) return { success: false, message: '未找到相关图片' }
+        return { success: true, images: results.slice(0, 5), count: results.length }
       }
     })
 

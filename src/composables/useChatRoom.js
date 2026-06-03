@@ -4,6 +4,23 @@ import { loadUsersAvatars } from './useAvatar'
 import { saveMessagesToCache, loadMessagesFromCache, cleanExpiredCache, removeConversationCache, isMessageSeen, markMessagesSeen, clearSeenCache } from './messageCache'
 
 export const chatTotalUnread = ref(0)
+export const onlineUsers = ref({})
+export const groupAvatars = ref({})
+
+export function loadGroupAvatars() {
+  const avatars = {}
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && key.startsWith('groupAvatar_')) {
+      const groupId = key.replace('groupAvatar_', '')
+      const data = localStorage.getItem(key)
+      if (data) avatars[groupId] = data
+    }
+  }
+  if (Object.keys(avatars).length > 0) {
+    groupAvatars.value = { ...groupAvatars.value, ...avatars }
+  }
+}
 // 内网和公网未读完全独立存储
 export const publicUserUnread = ref({})
 export const publicGroupUnread = ref({})
@@ -274,8 +291,16 @@ export function useChatRoom() {
   const selectUser = async (user, mode = chatMode.value) => {
     selectedUser.value = { ...user, chatMode: mode }
     selectedGroup.value = null
-    // 不再立即清零未读 — 改由轮询在 readPoint 更新后自然归零
-    // 这确保未读红点有足够时间渲染到屏幕上
+    // 立即清零未读并通知服务端，无需等待消息加载
+    if (user?.username) {
+      userUnread.value = { ...userUnread.value, [user.username]: 0 }
+      syncToGlobalUnread()
+      refreshTotalUnread()
+      updateTaskbarBadge()
+      if (window.electronAPI) {
+        window.electronAPI.markChatRead(currentUsername.value, user.username, null).catch(() => {})
+      }
+    }
     if (mode === 'lan') await loadLanChatMessages()
     else await loadChatMessages()
     if (user?.username) {
@@ -288,11 +313,6 @@ export function useChatRoom() {
       if (window.electronAPI) {
         window.electronAPI.markChatRead(currentUsername.value, user.username, lastId || null).catch(() => {})
       }
-      // 消息加载完毕、readPoint 更新后，再清零未读（此时用户已看到消息）
-      userUnread.value = { ...userUnread.value, [user.username]: 0 }
-      syncToGlobalUnread()
-      refreshTotalUnread()
-      updateTaskbarBadge()
     }
   }
 
@@ -559,12 +579,32 @@ export function useChatRoom() {
   }
 
   const handleRequest = async (requestId, action) => {
-    if (!window.electronAPI) return
-    const result = await window.electronAPI.handleFriendRequest(requestId, action)
-    if (result.success) {
-      ElMessage.success(action === 'accept' ? '已接受' : '已拒绝')
-      await loadFriendRequests()
-      await loadFriendsList()
+    try {
+      const result = await window.electronAPI.handleFriendRequest(requestId, action)
+      if (result.success) {
+        ElMessage.success(action === 'accept' ? '已接受好友申请' : '已拒绝好友申请')
+        await loadFriendRequests()
+        await loadFriendsList()
+      } else {
+        ElMessage.error(result.message || '操作失败')
+      }
+    } catch (error) {
+      ElMessage.error('操作失败: ' + error.message)
+    }
+  }
+
+  const handleRemoveFriend = async (friendUsername) => {
+    if (!currentUsername.value || !friendUsername) return
+    try {
+      const result = await window.electronAPI.removeFriend(currentUsername.value, friendUsername)
+      if (result.success) {
+        ElMessage.success(`已删除好友 "${friendUsername}"`)
+        await loadFriendsList()
+      } else {
+        ElMessage.error(result.message || '删除失败')
+      }
+    } catch (error) {
+      ElMessage.error('删除失败: ' + error.message)
     }
   }
 
@@ -683,7 +723,16 @@ export function useChatRoom() {
   const selectGroup = async (group) => {
     selectedGroup.value = group
     selectedUser.value = null
-    // 不立即清零 — 等消息加载完再加零
+    // 立即清零未读并通知服务端，无需等待消息加载
+    if (group?.id) {
+      groupUnread.value = { ...groupUnread.value, [group.id]: 0 }
+      syncToGlobalUnread()
+      refreshTotalUnread()
+      updateTaskbarBadge()
+      if (window.electronAPI) {
+        window.electronAPI.markGroupRead(currentUsername.value, group.id, null).catch(() => {})
+      }
+    }
     await loadGroupMessages()
     if (group?.id) {
       const lastId = getLastRealMsgId()
@@ -695,11 +744,6 @@ export function useChatRoom() {
       if (window.electronAPI) {
         window.electronAPI.markGroupRead(currentUsername.value, group.id, lastId || null).catch(() => {})
       }
-      // 消息加载完后再清零
-      groupUnread.value = { ...groupUnread.value, [group.id]: 0 }
-      syncToGlobalUnread()
-      refreshTotalUnread()
-      updateTaskbarBadge()
     }
   }
 
@@ -1013,7 +1057,7 @@ export function useChatRoom() {
   let unreadPollingTimer = null
   let unreadPollingActive = false
   const POLLING_INTERVAL = 2000
-  const UNREAD_POLLING_INTERVAL = 5000
+  const UNREAD_POLLING_INTERVAL = 2000
 
   const pollUnreadCounts = async () => {
     const username = currentUsername.value
@@ -1264,11 +1308,20 @@ export function useChatRoom() {
 
   const setupWebSocket = () => {
     if (!window.electronAPI) return
+    loadGroupAvatars()
     window.electronAPI.wsConnect(currentUsername.value).catch(() => {})
 
     window.electronAPI.onWsNewMessage(handleWsNewMessage)
     window.electronAPI.onWsNewGroupMessage(handleWsNewGroupMessage)
     window.electronAPI.onWsUpdateBadge(handleWsUpdateBadge)
+    if (window.electronAPI.onWsOnlineStatus) {
+      window.electronAPI.onWsOnlineStatus(handleWsOnlineStatus)
+    }
+  }
+
+  const handleWsOnlineStatus = (data) => {
+    if (!data || !data.username) return
+    onlineUsers.value = { ...onlineUsers.value, [data.username]: data.status || 'online' }
   }
 
   const teardownWebSocket = () => {
@@ -1368,10 +1421,10 @@ export function useChatRoom() {
     selectUser, loadChatMessages, loadLanChatMessages,
     sendLanMessage, sendMessage, handleImageSelect, handleGroupImageSelect,
     handleSelectImage, handleSelectDocument,
-    handleAddFriend, handleRequest,
+    handleAddFriend, handleRequest, handleRemoveFriend,
     normalizeMessage, formatDate, formatMessageTime,
     isImageMessage, isDocumentMessage, parseDocumentInfo, onImageLoad, retryMessage,
-    startMessagePolling, stopMessagePolling,
+    startMessagePolling, stopMessagePolling, pollForNewMessages, pollUnreadCounts,
     handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
     selectGroup, loadGroupMessages, sendGroupMessage,
     createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,

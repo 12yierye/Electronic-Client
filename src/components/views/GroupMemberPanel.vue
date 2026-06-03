@@ -47,22 +47,30 @@
     <template v-if="mode === 'group'">
       <el-divider />
 
+      <div v-if="isCreator" class="section section-settings">
+        <div class="setting-row vertical">
+          <span class="setting-label">群聊头像</span>
+          <div class="group-avatar-row">
+            <el-avatar :size="64" :src="groupAvatarData">群</el-avatar>
+            <el-button size="small" @click="openAvatarPicker">更换头像</el-button>
+            <input ref="avatarInputRef" type="file" accept="image/*" style="display:none" @change="onAvatarFileChange" />
+          </div>
+        </div>
+      </div>
+
+      <el-divider />
+
       <div class="section section-actions">
-        <el-button
-          v-if="isCreator"
-          type="danger"
-          size="small"
-          @click="handleDisband"
-        >
-          解散群聊
-        </el-button>
-        <el-button
-          v-else
-          size="small"
-          @click="handleExit"
-        >
-          退出群聊
-        </el-button>
+        <el-button v-if="isCreator" type="danger" size="small" @click="handleDisband">解散群聊</el-button>
+        <el-button v-else size="small" @click="handleExit">退出群聊</el-button>
+      </div>
+    </template>
+
+    <!-- 用户模式操作 -->
+    <template v-if="mode === 'user'">
+      <el-divider />
+      <div class="section section-actions">
+        <el-button type="danger" size="small" @click="handleDeleteFriend">删除好友</el-button>
       </div>
     </template>
   </div>
@@ -71,6 +79,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { getUserAvatar, loadUsersAvatars } from '../../composables/useAvatar'
+import { groupAvatars } from '../../composables/useChatRoom'
 
 const props = defineProps({
     members: { type: Array, default: () => [] },
@@ -82,10 +91,34 @@ const props = defineProps({
     targetUsername: { type: String, default: '' }
 })
 
-const emit = defineEmits(['close', 'disband', 'exit'])
+const emit = defineEmits(['close', 'disband', 'exit', 'deleteFriend'])
 
 const myNickname = ref('')
 const dndEnabled = ref(false)
+const groupAvatarData = ref('')
+const avatarInputRef = ref(null)
+
+function groupAvatarKey() {
+    return `groupAvatar_${props.groupId}`
+}
+
+function openAvatarPicker() {
+    avatarInputRef.value?.click()
+}
+
+function onAvatarFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+        const dataUrl = reader.result
+        groupAvatarData.value = dataUrl
+        localStorage.setItem(groupAvatarKey(), dataUrl)
+        groupAvatars.value = { ...groupAvatars.value, [props.groupId]: dataUrl }
+        e.target.value = ''
+    }
+    reader.readAsDataURL(file)
+}
 
 function nicknameKey() {
     return `groupNickname_${props.currentUsername}_${props.groupId}`
@@ -130,9 +163,24 @@ const handleExit = () => {
     }).catch(() => {})
 }
 
+const handleDeleteFriend = () => {
+    ElMessageBox.confirm(`确定删除好友 "${props.targetUsername}"？`, '删除好友', {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+    }).then(() => {
+        emit('deleteFriend', props.targetUsername)
+    }).catch(() => {})
+}
+
 onMounted(() => {
     myNickname.value = localStorage.getItem(nicknameKey()) || ''
     dndEnabled.value = localStorage.getItem(dndKey()) === '1'
+    const saved = localStorage.getItem(groupAvatarKey()) || ''
+    groupAvatarData.value = saved
+    if (saved) {
+        groupAvatars.value = { ...groupAvatars.value, [props.groupId]: saved }
+    }
     loadUsersAvatars(props.members)
 })
 
@@ -227,6 +275,13 @@ watch(() => props.members, (members) => {
             gap: 8px;
             margin-top: auto;
         }
+    }
+
+    .group-avatar-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 4px;
     }
 }
 </style>

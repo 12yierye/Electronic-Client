@@ -1,8 +1,8 @@
-import { BrowserWindow, Menu, app } from 'electron'
+import { BrowserWindow, Menu, app, shell } from 'electron'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'fs'
-import { DOC_SERVER, setMainWindow } from './config.js'
+import { DOC_SERVER, setMainWindow, getUseSystemBrowser } from './config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -70,6 +70,14 @@ export function createWindow() {
   } else {
     mainWindow.loadFile(join(__dirname, '../dist/index.html'))
   }
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (getUseSystemBrowser()) {
+      shell.openExternal(url)
+      return { action: 'deny' }
+    }
+    return { action: 'allow' }
+  })
 
   mainWindow.webContents.openDevTools()
 

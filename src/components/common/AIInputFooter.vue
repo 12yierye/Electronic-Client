@@ -51,9 +51,43 @@ const handleEnterKey = (e) => {
   handleSend()
 }
 
+const handleTestImage = async (query) => {
+  isSending.value = true
+  aiStore.addUserMessage('/test-image ' + query)
+  inputMessage.value = ''
+  const msgId = aiStore.startStreamingMessage()
+  try {
+    const res = await window.electronAPI.testImageSearch(query, 'all')
+    if (res?.success && res.count > 0) {
+      const lines = [`**图片搜索结果** — 关键词: "${query}"`, ``, `✅ 找到 ${res.count} 张图片 (${res.time}ms)`]
+      if (res.firstUrl) {
+        lines.push(``, `第一张: `, ``, `![](${res.firstUrl})`)
+      }
+      res.images.slice(1).forEach((img, i) => {
+        if (img.url) lines.push(``, `${i + 2}. ${img.url}`)
+      })
+      aiStore.appendStreamingContent(lines.join('\n'))
+    } else if (res?.success) {
+      aiStore.appendStreamingContent(`**图片搜索** — 关键词: "${query}"\n\n未找到匹配图片 (${res.time}ms)。\n\n> 提示：如需获取真实图片，请在设置→文件管理→Pexels API Key 中配置密钥。`)
+    } else {
+      aiStore.appendStreamingContent(`**图片搜索失败**\n\n${res?.message || '未知错误'}\n\n请在设置→文件管理→Pexels API Key 中配置密钥。`)
+    }
+  } catch (e) {
+    aiStore.appendStreamingContent(`**图片搜索异常**\n\n${e.message}`)
+  }
+  aiStore.endStreamingMessage()
+  aiStore.persistCurrentConversation()
+  isSending.value = false
+}
+
 const handleSend = async () => {
   const message = inputMessage.value.trim()
   if (!message || isSending.value) return
+
+  const testImgMatch = message.match(/^\/test-image\s+(.+)/)
+  if (testImgMatch && window.electronAPI?.testImageSearch) {
+    return handleTestImage(testImgMatch[1])
+  }
 
   const currentUsername = userStore.userInfo?.username
   const currentMode = localStorage.getItem('aiMode') || aiStore.aiMode || 'local'
@@ -96,6 +130,7 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
       if (data.type === 'content') aiStore.appendStreamingContent(data.content)
       else if (data.type === 'reasoning') aiStore.appendReasoningContent(data.content)
       else if (data.type === 'pptx_card') aiStore.addPPTXCard(data)
+      else if (data.type === 'image_gallery') aiStore.addImageGallery(data)
       else if (data.type === 'question') {
         aiStore.endStreamingMessage()
         aiStore.addQuestionBubble(data.question, data.options, data.multiSelect)
@@ -112,8 +147,8 @@ const handleAgentSend = async (message, currentUsername, currentMode) => {
     }
     const history = aiStore.getConversationHistory ? aiStore.getConversationHistory(aiStore.contextTokens) : []
     const pptCards = (aiStore.messages || []).filter(m => m.pptxCard).map(m => m.pptxCard)
-    const result = await window.electronAPI.agentRun({ message, aiMode: mode, cloudConfig, history, pptCards, planningMode: aiStore.planningMode })
-    if (result.reply && result.reply !== '已完成所有操作。') {
+    const result = await window.electronAPI.agentRun({ message, aiMode: mode, cloudConfig, history, pptCards, planningMode: aiStore.planningMode, enableThinking: aiStore.enableThinking, locale: localStorage.getItem('appLanguage') || 'zh-CN' })
+    if (result.reply && result.reply.trim()) {
       aiStore.appendStreamingContent(result.reply)
     }
     if (result.cancelled) aiStore.appendStreamingContent('\n[已中断]')

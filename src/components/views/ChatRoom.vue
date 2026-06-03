@@ -70,7 +70,10 @@
               @click="selectUser(friend, 'public')"
             >
               <el-badge :is-dot="getUserDND(friend.username)" :value="getUserDND(friend.username) ? '' : (userUnread[friend.username] || 0)" :hidden="(userUnread[friend.username] || 0) === 0">
-                <el-avatar :size="40" :src="getUserAvatar(friend.username)">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
+                <div class="avatar-with-status">
+                  <el-avatar :size="40" :src="getUserAvatar(friend.username)">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
+                  <span v-if="settingsStore.showOnlineStatus" :class="['avatar-status-dot', onlineUsers[friend.username] || (friend.online ? 'online' : 'offline')]" />
+                </div>
               </el-badge>
               <div class="user-info">
                 <div class="user-name">{{ friend.username }}</div>
@@ -80,8 +83,8 @@
                 </div>
               </div>
               <el-tag v-if="getUserDND(friend.username)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
-              <el-icon 
-                v-if="friend.starred" 
+              <el-icon
+                v-if="friend.starred"
                 class="star-icon starred"
               ><Star /></el-icon>
             </div>
@@ -98,8 +101,8 @@
               @click="selectGroup(group)"
             >
               <el-badge :is-dot="getGroupDND(group.id)" :value="getGroupDND(group.id) ? '' : (groupUnread[group.id] || 0)" :hidden="(groupUnread[group.id] || 0) === 0">
-                <el-avatar :size="40" style="background: var(--accent-color)">
-                  <el-icon><ChatDotRound /></el-icon>
+                <el-avatar :size="40" :src="groupAvatars[group.id] || ''" :style="groupAvatars[group.id] ? '' : 'background: var(--accent-color)'">
+                  <el-icon v-if="!groupAvatars[group.id]"><ChatDotRound /></el-icon>
                 </el-avatar>
               </el-badge>
               <div class="user-info">
@@ -121,7 +124,10 @@
               @click="selectUser(user, 'lan')"
             >
               <el-badge :is-dot="getUserDND(user.username)" :value="getUserDND(user.username) ? '' : (userUnread[user.username] || 0)" :hidden="(userUnread[user.username] || 0) === 0">
-                <el-avatar :size="40" :src="getUserAvatar(user.username)">{{ user.username.charAt(0).toUpperCase() }}</el-avatar>
+                <div class="avatar-with-status">
+                  <el-avatar :size="40" :src="getUserAvatar(user.username)">{{ user.username.charAt(0).toUpperCase() }}</el-avatar>
+                  <span v-if="settingsStore.showOnlineStatus" :class="['avatar-status-dot', onlineUsers[user.username] || (user.online ? 'online' : 'offline')]" />
+                </div>
               </el-badge>
               <div class="user-info">
                 <div class="user-name">{{ user.username }}</div>
@@ -145,8 +151,8 @@
               @click="selectGroup(group)"
             >
               <el-badge :is-dot="getGroupDND(group.id)" :value="getGroupDND(group.id) ? '' : (groupUnread[group.id] || 0)" :hidden="(groupUnread[group.id] || 0) === 0">
-                <el-avatar :size="40" style="background: var(--accent-color)">
-                  <el-icon><ChatDotRound /></el-icon>
+                <el-avatar :size="40" :src="groupAvatars[group.id] || ''" :style="groupAvatars[group.id] ? '' : 'background: var(--accent-color)'">
+                  <el-icon v-if="!groupAvatars[group.id]"><ChatDotRound /></el-icon>
                 </el-avatar>
               </el-badge>
               <div class="user-info">
@@ -235,7 +241,7 @@
             </div>
           </div>
           
-          <div class="chat-messages" ref="chatMessagesRef">
+          <div class="chat-messages" ref="chatMessagesRef" @scroll="onChatScroll">
             <template v-if="selectedUser || selectedGroup">
               <div
                 v-for="(msg, idx) in chatMessagesWithBubbles"
@@ -412,15 +418,16 @@
         :target-username="selectedUser.username"
         mode="user"
         @close="showChatSettingsPanel = false"
+        @delete-friend="onDeleteFriend"
       />
     </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch, nextTick, onDeactivated } from 'vue'
+import { computed, ref, watch, nextTick, onActivated, onDeactivated } from 'vue'
 import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus, Document, Close } from '@element-plus/icons-vue'
-import { useChatRoom, sharedLastMsgMap } from '../../composables/useChatRoom'
+import { useChatRoom, sharedLastMsgMap, onlineUsers, groupAvatars } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
 import { useSettingsStore } from '../../stores/settings'
 import { getUserAvatar } from '../../composables/useAvatar'
@@ -454,7 +461,7 @@ const {
   selectUser, loadChatMessages, loadLanChatMessages,
   sendLanMessage, sendMessage, handleImageSelect, handleGroupImageSelect,
   handleSelectImage, handleSelectDocument,
-  handleAddFriend, handleRequest,
+  handleAddFriend, handleRequest, handleRemoveFriend,
   normalizeMessage, formatDate, formatMessageTime,
   isImageMessage, isDocumentMessage, parseDocumentInfo, onImageLoad, retryMessage,
   startMessagePolling, stopMessagePolling,
@@ -464,7 +471,8 @@ const {
   loadPublicGroupsList,
   groupUnread, getGroupDND,
   userUnread, getUserDND,
-  _pubUserUnread, _lanUserUnread, _pubGroupUnread, _lanGroupUnread
+  _pubUserUnread, _lanUserUnread, _pubGroupUnread, _lanGroupUnread,
+  pollForNewMessages, pollUnreadCounts
 } = useChatRoom()
 
 const chatSettingsTitle = computed(() => {
@@ -605,21 +613,36 @@ watch([selectedUser, selectedGroup], () => {
 })
 
 const chatMessagesRef = ref(null)
+const autoScroll = ref(true)
+
+function isAtBottom() {
+  const el = chatMessagesRef.value
+  if (!el) return false
+  return el.scrollTop + el.clientHeight >= el.scrollHeight - 50
+}
 
 function scrollToBottom() {
+  if (!autoScroll.value) return
   nextTick(() => {
     const el = chatMessagesRef.value
-    if (el) {
+    if (el && autoScroll.value) {
       el.scrollTop = el.scrollHeight
     }
   })
 }
 
+function onChatScroll() {
+  autoScroll.value = isAtBottom()
+}
+
 watch(chatMessages, () => {
-  scrollToBottom()
+  if (autoScroll.value) {
+    scrollToBottom()
+  }
 }, { deep: false })
 
 watch([selectedUser, selectedGroup], () => {
+  autoScroll.value = true
   if (selectedUser.value || selectedGroup.value) {
     scrollToBottom()
   }
@@ -656,6 +679,11 @@ function handleMsgContextMenu(event, msg) {
   }
 }
 
+async function onDeleteFriend(friendUsername) {
+  await handleRemoveFriend(friendUsername)
+  showChatSettingsPanel.value = false
+}
+
 function scrollToQuoted(quote) {
   if (!quote) return
 }
@@ -679,6 +707,14 @@ function handleOrgMembersSelect(memberUsernames) {
 onDeactivated(() => {
   selectedUser.value = null
   selectedGroup.value = null
+})
+
+onActivated(() => {
+  autoScroll.value = true
+  scrollToBottom()
+  // 立即同步所有消息和未读计数，无需等待轮询间隔
+  pollForNewMessages()
+  pollUnreadCounts()
 })
 </script>
 
@@ -835,6 +871,25 @@ onDeactivated(() => {
         line-height: 0;
       }
 
+      .avatar-with-status {
+        position: relative;
+        line-height: 0;
+
+        .avatar-status-dot {
+          position: absolute;
+          bottom: 0;
+          right: 0;
+          width: 11px;
+          height: 11px;
+          border-radius: 50%;
+          border: 2px solid var(--bg-primary);
+
+          &.online { background: #67c23a; }
+          &.dnd { background: #e6a23c; }
+          &.offline { background: #909399; }
+        }
+      }
+
       .dnd-tag {
         flex-shrink: 0;
         font-size: 11px;
@@ -864,6 +919,16 @@ onDeactivated(() => {
           color: #f1c40f;
         }
       }
+    }
+
+    .recommended-tip {
+      padding: 12px 12px 4px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
 
     .request-item {
@@ -910,6 +975,7 @@ onDeactivated(() => {
       flex: 1;
       overflow-y: auto;
       padding: 20px;
+      overflow-anchor: none;
       
       .chat-message {
         display: flex;

@@ -16,13 +16,30 @@
     <div class="sidebar-content">
       <!-- 用户信息 -->
       <div class="user-info-card">
-        <el-avatar :size="60" :src="getUserAvatar(userInfo?.username)">
-          {{ userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}
-        </el-avatar>
+        <div class="avatar-wrapper">
+          <el-avatar :size="60" :src="getUserAvatar(userInfo?.username)">
+            {{ userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}
+          </el-avatar>
+          <span :class="['status-dot', userStore.myStatus]" />
+        </div>
         <div class="user-details">
           <div class="user-name">{{ userInfo?.username || t('sidebar.notLoggedIn') }}</div>
           <div class="user-email">{{ userInfo?.email || t('sidebar.unknownUser') }}</div>
         </div>
+      </div>
+
+      <div class="status-row">
+        <el-select :model-value="userStore.myStatus" size="small" @change="onStatusChange" style="width:100%">
+          <el-option label="在线" value="online">
+            <span class="status-option"><span class="status-dot-inline online" /> 在线</span>
+          </el-option>
+          <el-option label="忙碌" value="dnd">
+            <span class="status-option"><span class="status-dot-inline dnd" /> 忙碌</span>
+          </el-option>
+          <el-option label="离线" value="offline">
+            <span class="status-option"><span class="status-dot-inline offline" /> 离线</span>
+          </el-option>
+        </el-select>
       </div>
       
       <el-divider />
@@ -64,6 +81,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { SwitchButton, Close, Loading } from '@element-plus/icons-vue'
 import { useI18n } from '../../composables/useI18n'
 import { getUserAvatar } from '../../composables/useAvatar'
+import { useUserStore } from '../../stores/user'
 
 const props = defineProps({
   visible: Boolean,
@@ -72,6 +90,11 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'logout', 'exit'])
 const { t } = useI18n()
+const userStore = useUserStore()
+
+const onStatusChange = (val) => {
+  userStore.setMyStatus(val)
+}
 
 const connectionInfo = ref({ ping: 50, packetLoss: 0.5 }) // 初始显示良好状态
 let pingInterval = null
@@ -189,6 +212,24 @@ onUnmounted(() => {
   gap: 15px;
   padding: 20px 0;
   
+  .avatar-wrapper {
+    position: relative;
+    
+    .status-dot {
+      position: absolute;
+      bottom: 3px;
+      right: 3px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid var(--bg-secondary, #2d2d3f);
+      
+      &.online { background: #67c23a; }
+      &.dnd { background: #e6a23c; }
+      &.offline { background: #909399; }
+    }
+  }
+
   .user-details {
     text-align: center;
     
@@ -204,6 +245,26 @@ onUnmounted(() => {
       margin-top: 5px;
     }
   }
+}
+
+.status-row {
+  padding: 10px 0;
+}
+
+.status-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot-inline {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  &.online { background: #67c23a; }
+  &.dnd { background: #e6a23c; }
+  &.offline { background: #909399; }
 }
 
 .connection-status {

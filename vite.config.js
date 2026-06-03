@@ -82,10 +82,10 @@ export default defineConfig(({ mode }) => {
       minify: 'esbuild',
       rollupOptions: {
         output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('marked')) return 'marked'
-            }
+          manualChunks: {
+            katex: ['katex'],
+            vendor: ['vue', 'pinia', 'element-plus'],
+            marked: ['marked']
           }
         }
       }

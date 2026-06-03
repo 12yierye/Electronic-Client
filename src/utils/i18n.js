@@ -5,6 +5,10 @@ export const languages = [
   { code: 'ja', name: 'Japanese', nativeName: '日本語', flag: '🇯🇵' }
 ]
 
+export function getAgentLocale() {
+  return localStorage.getItem('appLanguage') || defaultLang
+}
+
 // 默认语言
 export const defaultLang = 'zh-CN'
 

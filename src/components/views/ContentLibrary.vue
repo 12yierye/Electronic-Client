@@ -5,19 +5,31 @@
       <el-input v-model="searchQuery" placeholder="搜索课件..." clearable style="width:240px" />
     </div>
 
-    <div v-if="filteredFiles.length === 0" class="cl-empty">
-      <el-empty description="暂无生成的课件" />
+    <div class="cl-tabs">
+      <el-radio-group v-model="activeFilter" size="small" @change="onFilterChange">
+        <el-radio-button value="all">全部</el-radio-button>
+        <el-radio-button value="pptx">课件</el-radio-button>
+        <el-radio-button value="docx">讲义</el-radio-button>
+        <el-radio-button value="json">练习</el-radio-button>
+      </el-radio-group>
+    </div>
+
+    <div v-if="pagedFiles.length === 0" class="cl-empty">
+      <el-empty :description="searchQuery || activeFilter !== 'all' ? '未找到匹配的课件' : '暂无生成的课件'" />
     </div>
 
     <div class="cl-grid" v-else>
-      <el-card v-for="f in filteredFiles" :key="f.path" class="cl-card" shadow="hover">
-        <div class="cl-card-icon">
-          <el-icon :size="40"><Document /></el-icon>
+      <el-card v-for="f in pagedFiles" :key="f.path" class="cl-card" shadow="hover">
+        <div v-if="f.thumbnail" class="cl-thumb-wrapper">
+          <img :src="f.thumbnail" class="cl-thumb" alt="preview" @error="$event.target.style.display='none'" />
+        </div>
+        <div v-else class="cl-card-icon" :style="{ color: typeColor(f.type) }">
+          <el-icon :size="40"><component :is="typeIcon(f.type)" /></el-icon>
         </div>
         <div class="cl-card-body">
           <div class="cl-card-name">{{ f.topic }}</div>
           <div class="cl-card-meta">
-            <el-tag size="small" :type="f.type === 'pptx' ? 'warning' : 'info'">{{ f.type?.toUpperCase() || 'PPTX' }}</el-tag>
+            <el-tag size="small" :type="typeTag(f.type)">{{ f.type?.toUpperCase() || 'PPTX' }}</el-tag>
             <span>{{ f.slideCount || 0 }} 页</span>
             <span>·</span>
             <span>{{ formatSize(f.pptxSize || f.size || 0) }}</span>
@@ -32,25 +44,84 @@
       </el-card>
     </div>
 
-    <div class="cl-footer">
+    <div class="cl-footer" v-if="allFilteredFiles.length > 0">
       <el-button @click="refreshFiles" :icon="RefreshRight">刷新</el-button>
-      <span class="cl-count">共 {{ filteredFiles.length }} 个课件</span>
+      <span class="cl-count">共 {{ allFilteredFiles.length }} 个</span>
+      <el-pagination
+        v-if="totalPages > 1"
+        v-model:current-page="currentPage"
+        :page-size="pageSize"
+        :total="allFilteredFiles.length"
+        layout="prev, pager, next"
+        size="small"
+        background
+        class="cl-pagination"
+        @current-change="onPageChange"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Document, RefreshRight } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Document, RefreshRight, Notebook, Files, Collection } from '@element-plus/icons-vue'
 
 const files = ref([])
 const searchQuery = ref('')
+const activeFilter = ref('all')
+const currentPage = ref(1)
+const pageSize = ref(12)
 
-const filteredFiles = computed(() => {
-  if (!searchQuery.value) return files.value
-  const q = searchQuery.value.toLowerCase()
-  return files.value.filter(f => f.topic?.toLowerCase().includes(q))
+const allFilteredFiles = computed(() => {
+  let result = files.value
+  if (activeFilter.value !== 'all') {
+    result = result.filter(f => {
+      if (activeFilter.value === 'json') return (f.type || '').toLowerCase() === 'json'
+      return (f.type || '').toLowerCase() === activeFilter.value
+    })
+  }
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    result = result.filter(f => f.topic?.toLowerCase().includes(q))
+  }
+  return result
 })
+
+const totalPages = computed(() => Math.max(1, Math.ceil(allFilteredFiles.value.length / pageSize.value)))
+
+const pagedFiles = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return allFilteredFiles.value.slice(start, start + pageSize.value)
+})
+
+function onFilterChange() {
+  currentPage.value = 1
+}
+
+function onPageChange() {}
+
+function typeColor(type) {
+  const t = (type || '').toLowerCase()
+  if (t === 'pptx') return '#d24726'
+  if (t === 'docx') return '#2b579a'
+  if (t === 'json') return '#217346'
+  return '#666'
+}
+
+function typeIcon(type) {
+  const t = (type || '').toLowerCase()
+  if (t === 'docx') return Notebook
+  if (t === 'json') return Collection
+  return Document
+}
+
+function typeTag(type) {
+  const t = (type || '').toLowerCase()
+  if (t === 'docx') return ''
+  if (t === 'json') return 'success'
+  return 'warning'
+}
 
 async function refreshFiles() {
   if (!window.electronAPI?.getPPTDir) return
@@ -61,6 +132,7 @@ async function refreshFiles() {
     const result = await window.electronAPI.scanDirectory(dirRes.dir)
     if (result.success) {
       files.value = result.files || []
+      currentPage.value = 1
     }
   } catch {}
 }
@@ -116,9 +188,13 @@ onMounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 
     h2 { margin: 0; color: var(--text-primary); }
+  }
+
+  .cl-tabs {
+    margin-bottom: 20px;
   }
 
   .cl-grid {
@@ -135,14 +211,28 @@ onMounted(() => {
 
     :deep(.el-card__body) {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 16px;
       padding: 16px;
     }
   }
 
+  .cl-thumb-wrapper {
+    flex-shrink: 0;
+    width: 80px;
+    height: 60px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+
+    .cl-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
   .cl-card-icon {
-    color: #d24726;
     flex-shrink: 0;
   }
 
@@ -166,6 +256,7 @@ onMounted(() => {
     margin-bottom: 8px;
     display: flex;
     gap: 6px;
+    align-items: center;
   }
 
   .cl-card-actions {
@@ -189,6 +280,11 @@ onMounted(() => {
   .cl-count {
     font-size: 13px;
     color: var(--text-secondary);
+    flex: 1;
+  }
+
+  .cl-pagination {
+    margin-left: auto;
   }
 }
 </style>
