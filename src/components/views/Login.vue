@@ -239,19 +239,21 @@ const handleRegisterSubmit = async () => {
 
 // 同步保存的服务器地址到主进程
 const syncServerSettingsToMain = async () => {
+    let url = apiBase.value
     const raw = localStorage.getItem(SERVER_SETTINGS_KEY)
-    if (!raw) return
-    try {
-        const s = JSON.parse(raw)
-        const ip = s.serverIP || '127.0.0.1'
-        const port = s.serverPort || '3000'
-        const url = `http://${ip}:${port}`
-        if (window.electronAPI?.setApiBaseUrl) {
-            await window.electronAPI.setApiBaseUrl(url)
-            console.log('[Login] synced server settings to main:', url)
+    if (raw) {
+        try {
+            const s = JSON.parse(raw)
+            const ip = s.serverIP || '127.0.0.1'
+            const port = s.serverPort || '3000'
+            url = `http://${ip}:${port}`
+        } catch (e) {
+            // ignore
         }
-    } catch (e) {
-        // ignore
+    }
+    if (window.electronAPI?.setApiBaseUrl) {
+        await window.electronAPI.setApiBaseUrl(url)
+        console.log('[Login] synced server settings to main:', url)
     }
 }
 

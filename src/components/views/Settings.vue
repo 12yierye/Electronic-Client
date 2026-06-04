@@ -1152,13 +1152,18 @@ const handleShowOnlineStatusChange = (value) => {
     settingsStore.setShowOnlineStatus(value)
 }
 
-const saveServerSettings = () => {
+const saveServerSettings = async () => {
     const settings = {
         serverIP: serverIP.value,
         serverPort: serverPort.value,
         enablePinyinSearch: enablePinyinSearch.value
     }
     localStorage.setItem(SERVER_SETTINGS_KEY, JSON.stringify(settings))
+
+    const url = `http://${serverIP.value}:${serverPort.value}`
+    if (window.electronAPI?.setApiBaseUrl) {
+        await window.electronAPI.setApiBaseUrl(url)
+    }
 }
 
 const savePinyinSearchSetting = () => {
