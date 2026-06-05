@@ -24,12 +24,13 @@ export async function validateLogin(username, password) {
     }
 }
 
-export async function validateRegister(userData) {
+export async function validateRegister(userData, primaryServerUrl) {
     try {
         if (!userData.username || !userData.password || !userData.email) {
             return { success: false, message: '用户名、密码和邮箱不能为空' }
         }
-        const response = await axios.post(`${getAPIBase()}/register`, userData, { timeout: 5000 })
+        const url = primaryServerUrl || getAPIBase()
+        const response = await axios.post(`${url}/register`, userData, { timeout: 5000 })
         return response.data
     } catch (err) {
         if (err.response) return { success: false, message: err.response.data.message || '注册失败' }

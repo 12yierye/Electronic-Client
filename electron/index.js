@@ -12,6 +12,8 @@ import { registerOrgIpc } from './ipc/org.js'
 import { registerBroadcastIpc } from './ipc/broadcast.js'
 import { registerAgentIpc } from './ipc/agent.js'
 import { registerSettingsIpc } from './ipc/settings.js'
+import { registerUpdateIpc } from './ipc/update.js'
+import { checkForUpdates } from './services/autoUpdater.js'
 import { clearAllScheduledTasks, saveScheduledTasks, restoreScheduledTasks } from './services/scheduledTasks.js'
 
 app.setPath('userData', join(app.getPath('appData'), 'Electronic'))
@@ -59,6 +61,7 @@ registerOrgIpc()
 registerBroadcastIpc()
 registerAgentIpc()
 registerSettingsIpc()
+registerUpdateIpc()
 // console.log('[Main] IPC handlers registered')
 
 app.setUserTasks([
@@ -83,6 +86,10 @@ app.whenReady().then(() => {
   console.log('[Main] App Ready')
   restoreScheduledTasks()
   createWindow()
+  // 启动后静默检查更新
+  setTimeout(() => {
+    checkForUpdates(true)
+  }, 5000)
 }).catch(err => {
   console.error('[Main] App Ready ERROR:', err)
 })

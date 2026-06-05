@@ -4,36 +4,16 @@
       <!-- 左侧好友列表 -->
       <el-aside width="280px" :class="['chat-aside', settingsStore.friendListDensity]">
         <div class="chat-tabs">
-          <!-- 聊天模式切换 -->
-          <div class="mode-switch-row">
-            <el-radio-group v-model="chatMode" size="small" @change="handleChatModeChange">
-              <el-radio-button value="public" :class="{ 'has-unread': showModeUnread && chatMode === 'lan' && hasPublicUnread }">
-                {{ t('chatRoom.public') }}
-              </el-radio-button>
-              <el-radio-button v-if="lanSettings.serverIP" value="lan" :class="{ 'has-unread': showModeUnread && chatMode === 'public' && hasLanUnread }">
-                {{ t('chatRoom.lan') }}
-              </el-radio-button>
-            </el-radio-group>
-          </div>
-
           <div class="tab-row">
             <el-radio-group v-model="activeTab" size="small">
-              <!-- 公网模式显示：好友、群聊、架构、添加好友、申请 -->
-              <template v-if="chatMode === 'public'">
-                <el-radio-button value="friends" :class="{ 'has-unread': showTabUnread && hasNonDNDFriendUnread }">{{ t('chatRoom.friends') }}</el-radio-button>
-                <el-radio-button value="groups" :class="{ 'has-unread': showTabUnread && hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
-                <el-radio-button value="org">{{ t('org.title') }}</el-radio-button>
-                <el-radio-button value="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
-                <el-radio-button value="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
-                  {{ t('chatRoom.requests') }}
-                </el-radio-button>
-              </template>
-              <!-- 内网模式显示：用户、群聊、架构 -->
-              <template v-else>
-                <el-radio-button value="users" :class="{ 'has-unread': showTabUnread && hasNonDNDFriendUnread }">{{ t('chatRoom.users') }}</el-radio-button>
-                <el-radio-button value="groups" :class="{ 'has-unread': showTabUnread && hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
-                <el-radio-button value="org">{{ t('org.title') }}</el-radio-button>
-              </template>
+              <el-radio-button value="conversations" :class="{ 'has-unread': hasAnyUnread }">{{ t('chatRoom.conversations') }}</el-radio-button>
+              <el-radio-button value="contacts" :class="{ 'has-unread': showTabUnread && hasNonDNDContactUnread }">{{ t('chatRoom.contacts') }}</el-radio-button>
+              <el-radio-button value="groups" :class="{ 'has-unread': showTabUnread && hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
+              <el-radio-button value="org">{{ t('org.title') }}</el-radio-button>
+              <el-radio-button value="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
+              <el-radio-button value="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
+                {{ t('chatRoom.requests') }}
+              </el-radio-button>
             </el-radio-group>
           </div>
         </div>
@@ -58,122 +38,106 @@
           </div>
         </div>
         
-        <!-- 好友/用户列表 -->
         <div class="user-list">
-          <!-- 公网：好友列表 -->
-          <template v-if="chatMode === 'public' && activeTab === 'friends'">
-            <div class="category-header">{{ t('chatRoom.friends') }}</div>
-            <div 
-              v-for="friend in sortedFriendsList" 
-              :key="friend.username"
-              :class="['user-item', { active: selectedUser?.username === friend.username }]"
-              @click="selectUser(friend, 'public')"
+          <!-- 统一会话列表 -->
+          <template v-if="activeTab === 'conversations'">
+            <div class="category-header">{{ t('chatRoom.conversations') }}</div>
+            <div
+              v-for="item in sortedConversations"
+              :key="item.key"
+              :class="['user-item', { active: isConversationActive(item) }]"
+              @click="selectConversation(item)"
             >
-              <el-badge :is-dot="getUserDND(friend.username)" :value="getUserDND(friend.username) ? '' : (userUnread[friend.username] || 0)" :hidden="(userUnread[friend.username] || 0) === 0">
+              <el-badge :is-dot="item.dnd" :value="item.dnd ? '' : (item.unread || 0)" :hidden="!(item.unread)">
                 <div class="avatar-with-status">
-                  <el-avatar :size="40" :src="getUserAvatar(friend.username)">{{ friend.username.charAt(0).toUpperCase() }}</el-avatar>
-                  <span v-if="settingsStore.showOnlineStatus" :class="['avatar-status-dot', onlineUsers[friend.username] || (friend.online ? 'online' : 'offline')]" />
+                  <el-avatar :size="40" :src="item.avatar">{{ item.name.charAt(0).toUpperCase() }}</el-avatar>
+                  <span v-if="settingsStore.showOnlineStatus && item.type === 'user'" :class="['avatar-status-dot', onlineUsers[item.name] || 'offline']" />
                 </div>
               </el-badge>
               <div class="user-info">
-                <div class="user-name">{{ friend.username }}</div>
+                <div class="user-name">
+                  {{ item.name }}
+                  <el-tag :type="item.serverOrigin === 'lan' ? 'warning' : 'primary'" size="small" effect="plain" class="network-tag">
+                    {{ item.serverOrigin === 'lan' ? '🏠 内网' : '🌐 公网' }}
+                  </el-tag>
+                </div>
+                <div class="user-role">{{ item.lastMsg || '' }}</div>
+              </div>
+              <el-tag v-if="item.dnd" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
+            </div>
+            <el-empty v-if="sortedConversations.length === 0" :description="t('chatRoom.noConversations')" />
+          </template>
+
+          <!-- 统一联系人列表（公网好友 + 内网用户） -->
+          <template v-else-if="activeTab === 'contacts'">
+            <div class="category-header">{{ t('chatRoom.contacts') }}</div>
+            <div
+              v-for="contact in sortedContacts"
+              :key="contact.key"
+              :class="['user-item', { active: selectedUser?.username === contact.username }]"
+              @click="selectUser(contact)"
+            >
+              <el-badge :is-dot="getUserDND(contact.username)" :value="getUserDND(contact.username) ? '' : (getServerUnread(contact.serverOrigin, 'user')[contact.username] || 0)" :hidden="(getServerUnread(contact.serverOrigin, 'user')[contact.username] || 0) === 0">
+                <div class="avatar-with-status">
+                  <el-avatar :size="40" :src="contact.avatar">{{ contact.name.charAt(0).toUpperCase() }}</el-avatar>
+                  <span v-if="settingsStore.showOnlineStatus" :class="['avatar-status-dot', onlineUsers[contact.username] || 'offline']" />
+                </div>
+              </el-badge>
+              <div class="user-info">
+                <div class="user-name">
+                  {{ contact.name }}
+                  <el-tag :type="contact.serverOrigin === 'lan' ? 'warning' : 'primary'" size="small" effect="plain" class="network-tag">
+                    {{ contact.serverOrigin === 'lan' ? '🏠 内网' : '🌐 公网' }}
+                  </el-tag>
+                </div>
                 <div class="user-role">
-                  <span v-if="friend.online" class="online-status">{{ t('chatRoom.online') }}</span>
+                  <span v-if="contact.online" class="online-status">{{ t('chatRoom.online') }}</span>
                   <span v-else>{{ t('chatRoom.offline') }}</span>
                 </div>
               </div>
-              <el-tag v-if="getUserDND(friend.username)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
-              <el-icon
-                v-if="friend.starred"
-                class="star-icon starred"
-              ><Star /></el-icon>
+              <el-tag v-if="getUserDND(contact.username)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
             </div>
-            <el-empty v-if="friendsList.length === 0" :description="t('chatRoom.noFriends')" />
+            <el-empty v-if="sortedContacts.length === 0" :description="t('chatRoom.noContacts')" />
           </template>
-          
-          <!-- 公网：群聊列表 -->
-          <template v-else-if="chatMode === 'public' && activeTab === 'groups'">
-            <div class="category-header">我的群聊</div>
+
+          <!-- 统一群聊列表 -->
+          <template v-else-if="activeTab === 'groups'">
+            <div class="category-header">{{ t('chatRoom.groups') }}</div>
             <div
-              v-for="group in sortedPublicGroupsList"
-              :key="group.id"
+              v-for="group in sortedGroups"
+              :key="group.key"
               :class="['user-item', { active: selectedGroup?.id === group.id }]"
               @click="selectGroup(group)"
             >
-              <el-badge :is-dot="getGroupDND(group.id)" :value="getGroupDND(group.id) ? '' : (groupUnread[group.id] || 0)" :hidden="(groupUnread[group.id] || 0) === 0">
+              <el-badge :is-dot="getGroupDND(group.id)" :value="getGroupDND(group.id) ? '' : (getServerUnread(group.serverOrigin, 'group')[group.id] || 0)" :hidden="(getServerUnread(group.serverOrigin, 'group')[group.id] || 0) === 0">
                 <el-avatar :size="40" :src="groupAvatars[group.id] || ''" :style="groupAvatars[group.id] ? '' : 'background: var(--accent-color)'">
                   <el-icon v-if="!groupAvatars[group.id]"><ChatDotRound /></el-icon>
                 </el-avatar>
               </el-badge>
               <div class="user-info">
-                <div class="user-name">{{ group.name }}</div>
-                <div class="user-role">{{ t('chatRoom.members', { n: group.members.length }) }}</div>
+                <div class="user-name">
+                  {{ group.name }}
+                  <el-tag :type="group.serverOrigin === 'lan' ? 'warning' : 'primary'" size="small" effect="plain" class="network-tag">
+                    {{ group.serverOrigin === 'lan' ? '🏠 内网' : '🌐 公网' }}
+                  </el-tag>
+                </div>
+                <div class="user-role">{{ t('chatRoom.members', { n: group.memberCount || group.members?.length || 0 }) }}</div>
               </div>
               <el-tag v-if="getGroupDND(group.id)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
             </div>
-            <el-empty v-if="sortedPublicGroupsList.length === 0" :description="t('chatRoom.noGroups')" />
+            <el-empty v-if="sortedGroups.length === 0" :description="t('chatRoom.noGroups')" />
           </template>
-          
-          <!-- 内网：用户列表 -->
-          <template v-else-if="chatMode === 'lan' && activeTab === 'users'">
-            <div class="category-header">{{ t('chatRoom.users') }}</div>
-            <div 
-              v-for="user in sortedLanFriendsList" 
-              :key="user.username"
-              :class="['user-item', { active: selectedUser?.username === user.username }]"
-              @click="selectUser(user, 'lan')"
-            >
-              <el-badge :is-dot="getUserDND(user.username)" :value="getUserDND(user.username) ? '' : (userUnread[user.username] || 0)" :hidden="(userUnread[user.username] || 0) === 0">
-                <div class="avatar-with-status">
-                  <el-avatar :size="40" :src="getUserAvatar(user.username)">{{ user.username.charAt(0).toUpperCase() }}</el-avatar>
-                  <span v-if="settingsStore.showOnlineStatus" :class="['avatar-status-dot', onlineUsers[user.username] || (user.online ? 'online' : 'offline')]" />
-                </div>
-              </el-badge>
-              <div class="user-info">
-                <div class="user-name">{{ user.username }}</div>
-                <div class="user-role">
-                  <span v-if="user.online" class="online-status">{{ t('chatRoom.online') }}</span>
-                  <span v-else>{{ t('chatRoom.offline') }}</span>
-                </div>
-              </div>
-              <el-tag v-if="getUserDND(user.username)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
-            </div>
-            <el-empty v-if="lanFriendsList.length === 0" :description="t('chatRoom.noLanUsers')" />
-          </template>
-          
-          <!-- 内网：群聊列表 -->
-          <template v-else-if="chatMode === 'lan' && activeTab === 'groups'">
-            <div class="category-header">我的群聊</div>
-            <div
-              v-for="group in sortedLanGroupsList"
-              :key="group.id"
-              :class="['user-item', { active: selectedGroup?.id === group.id }]"
-              @click="selectGroup(group)"
-            >
-              <el-badge :is-dot="getGroupDND(group.id)" :value="getGroupDND(group.id) ? '' : (groupUnread[group.id] || 0)" :hidden="(groupUnread[group.id] || 0) === 0">
-                <el-avatar :size="40" :src="groupAvatars[group.id] || ''" :style="groupAvatars[group.id] ? '' : 'background: var(--accent-color)'">
-                  <el-icon v-if="!groupAvatars[group.id]"><ChatDotRound /></el-icon>
-                </el-avatar>
-              </el-badge>
-              <div class="user-info">
-                <div class="user-name">{{ group.name }}</div>
-                <div class="user-role">{{ t('chatRoom.members', { n: group.members.length }) }}</div>
-              </div>
-              <el-tag v-if="getGroupDND(group.id)" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
-            </div>
-            <el-empty v-if="sortedLanGroupsList.length === 0" :description="t('chatRoom.noGroups')" />
-          </template>
-          
-          <!-- 公网：添加好友 -->
-          <template v-else-if="chatMode === 'public' && activeTab === 'add'">
+
+          <!-- 添加好友 -->
+          <template v-else-if="activeTab === 'add'">
             <div v-if="!searchQuery" class="recommended-tip">
               {{ t('chatRoom.recommended') }}
               <el-button size="small" text @click="showRecommended = !showRecommended">
                 {{ showRecommended ? t('chatRoom.hide') : t('chatRoom.show') }}
               </el-button>
             </div>
-            <div 
-              v-for="user in showRecommended ? filteredUsers : []" 
+            <div
+              v-for="user in showRecommended ? filteredUsers : []"
               v-show="showRecommended || searchQuery"
               :key="user.username"
               class="user-item"
@@ -188,8 +152,8 @@
             </div>
             <el-empty v-if="filteredUsers.length === 0 && (showRecommended || searchQuery)" :description="t('chatRoom.noUsersFound')" />
           </template>
-          
-          <!-- 公网/内网：组织架构 -->
+
+          <!-- 组织架构 -->
           <template v-else-if="activeTab === 'org'">
             <OrgTree
               @node-select="handleOrgNodeSelect"
@@ -197,10 +161,10 @@
             />
           </template>
 
-          <!-- 公网：好友申请 -->
-          <template v-else-if="chatMode === 'public' && activeTab === 'requests'">
-            <div 
-              v-for="request in friendRequests" 
+          <!-- 好友申请 -->
+          <template v-else-if="activeTab === 'requests'">
+            <div
+              v-for="request in friendRequests"
               :key="request.id"
               class="request-item"
             >
@@ -378,10 +342,10 @@
             style="width: 100%"
           >
             <el-option
-              v-for="user in (chatMode === 'lan' ? lanFriendsList : friendsList)"
-              :key="user.username"
-              :label="user.username"
-              :value="user.username"
+              v-for="contact in allContacts"
+              :key="contact.key"
+              :label="contact.name + (contact.serverOrigin === 'lan' ? ' (内网)' : '')"
+              :value="contact.username"
             />
           </el-select>
         </el-form-item>
@@ -449,7 +413,7 @@ watch(showChatSettingsPanel, (val) => {
 const uploadMenuVisible = ref(false)
 
 const {
-  activeTab, chatMode, useLanChat, lanSettings, searchQuery,
+  activeTab, hasLanServer, lanSettings, searchQuery,
   selectedUser, selectedGroup, inputMessage,
   friendsList, allUsersList, friendRequests, chatMessages,
   lanFriendsList, lanGroupsList, publicGroupsList,
@@ -465,12 +429,11 @@ const {
   normalizeMessage, formatDate, formatMessageTime,
   isImageMessage, isDocumentMessage, parseDocumentInfo, onImageLoad, retryMessage,
   startMessagePolling, stopMessagePolling,
-  handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
+  switchTab, loadLanFriendsList, loadLanGroupsList,
   selectGroup, loadGroupMessages, sendGroupMessage,
   createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
-  loadPublicGroupsList,
-  groupUnread, getGroupDND,
-  userUnread, getUserDND,
+  loadPublicGroupsList, getServerUnread, getGroupDND,
+  getUserDND,
   _pubUserUnread, _lanUserUnread, _pubGroupUnread, _lanGroupUnread,
   pollForNewMessages, pollUnreadCounts
 } = useChatRoom()
@@ -495,58 +458,111 @@ const onCtrlEnterKey = (event) => {
   }
 }
 
-// 当前模式的未读（userUnread/groupUnread 已按 chatMode 自动路由到正确存储）
-const hasNonDNDFriendUnread = computed(() => {
-  for (const [key, count] of Object.entries(userUnread.value)) {
+const showTabUnread = computed(() => settingsStore.showTabUnreadBadge)
+
+// 跨网络未读汇总
+const hasNonDNDContactUnread = computed(() => {
+  for (const [key, count] of Object.entries(_pubUserUnread.value)) {
+    if (count > 0 && !getUserDND(key)) return true
+  }
+  for (const [key, count] of Object.entries(_lanUserUnread.value)) {
     if (count > 0 && !getUserDND(key)) return true
   }
   return false
 })
 
 const hasNonDNDGroupUnread = computed(() => {
-  for (const [key, count] of Object.entries(groupUnread.value)) {
+  for (const [key, count] of Object.entries(_pubGroupUnread.value)) {
+    if (count > 0 && !getGroupDND(key)) return true
+  }
+  for (const [key, count] of Object.entries(_lanGroupUnread.value)) {
     if (count > 0 && !getGroupDND(key)) return true
   }
   return false
 })
 
-// "另一模式"的未读汇总（用于在模式切换按钮上显示角标）
-const hasPublicUnread = computed(() => {
-  const store = _pubUserUnread.value
-  for (const [key, count] of Object.entries(store)) {
-    if (count > 0 && !getUserDND(key)) return true
-  }
-  const gstore = _pubGroupUnread.value
-  for (const [key, count] of Object.entries(gstore)) {
-    if (count > 0 && !getGroupDND(key)) return true
-  }
-  return false
+const hasAnyUnread = computed(() => {
+  return hasNonDNDContactUnread.value || hasNonDNDGroupUnread.value
 })
 
-const hasLanUnread = computed(() => {
-  const store = _lanUserUnread.value
-  for (const [key, count] of Object.entries(store)) {
-    if (count > 0 && !getUserDND(key)) return true
+// 统一联系人列表（公网好友 + 内网用户）
+const allContacts = computed(() => {
+  const contacts = []
+  for (const f of friendsList.value) {
+    contacts.push({ ...f, key: 'pub_' + f.username, name: f.username, serverOrigin: 'public', type: 'user', avatar: getUserAvatar(f.username) })
   }
-  const gstore = _lanGroupUnread.value
-  for (const [key, count] of Object.entries(gstore)) {
-    if (count > 0 && !getGroupDND(key)) return true
+  for (const u of lanFriendsList.value) {
+    contacts.push({ ...u, key: 'lan_' + u.username, name: u.username, serverOrigin: 'lan', type: 'user', avatar: getUserAvatar(u.username) })
   }
-  return false
+  return contacts
 })
 
-// 可从设置控制的角标显示开关
-const showModeUnread = computed(() => settingsStore.showModeUnreadBadge)
-const showTabUnread = computed(() => settingsStore.showTabUnreadBadge)
+// 统一群聊列表
+const allGroups = computed(() => {
+  const groups = []
+  for (const g of filteredPublicGroupsList.value) {
+    groups.push({ ...g, key: 'pub_group_' + g.id, serverOrigin: 'public', memberCount: g.members?.length || 0 })
+  }
+  for (const g of filteredLanGroupsList.value) {
+    groups.push({ ...g, key: 'lan_group_' + g.id, serverOrigin: 'lan', memberCount: g.members?.length || 0 })
+  }
+  return groups
+})
 
-// 排序列表：免打扰的排到后面，再按最后消息时间降序
-const sortedFriendsList = computed(() => {
+// 统一会话列表（联系人和群聊混合，按最后消息时间排序）
+const sortedConversations = computed(() => {
   void dndTick.value
-  return [...friendsList.value].sort((a, b) => {
+  const items = []
+  for (const c of allContacts.value) {
+    const unreadStore = getServerUnread(c.serverOrigin, 'user')
+    const unread = unreadStore[c.username] || 0
+    const lastMsg = sharedLastMsgMap.value['user:' + c.username]
+    items.push({
+      key: 'conv_user_' + c.serverOrigin + '_' + c.username,
+      name: c.name,
+      username: c.username,
+      serverOrigin: c.serverOrigin,
+      type: 'user',
+      avatar: c.avatar,
+      unread,
+      dnd: getUserDND(c.username),
+      lastMsg: lastMsg?.message || '',
+      lastTime: lastMsg?.time || 0,
+      _contact: c
+    })
+  }
+  for (const g of allGroups.value) {
+    const unreadStore = getServerUnread(g.serverOrigin, 'group')
+    const unread = unreadStore[g.id] || 0
+    const lastMsg = sharedLastMsgMap.value['group:' + g.id]
+    items.push({
+      key: 'conv_group_' + g.serverOrigin + '_' + g.id,
+      name: g.name,
+      id: g.id,
+      serverOrigin: g.serverOrigin,
+      type: 'group',
+      avatar: groupAvatars.value[g.id] || '',
+      unread,
+      dnd: getGroupDND(g.id),
+      lastMsg: lastMsg?.message || '',
+      lastTime: lastMsg?.time || 0,
+      _group: g
+    })
+  }
+  // 免打扰排后，最后消息时间降序
+  return items.sort((a, b) => {
+    if (a.dnd !== b.dnd) return a.dnd ? 1 : -1
+    return (b.lastTime || 0) - (a.lastTime || 0)
+  })
+})
+
+// 联系人排序
+const sortedContacts = computed(() => {
+  void dndTick.value
+  return [...allContacts.value].sort((a, b) => {
     const aDND = getUserDND(a.username)
     const bDND = getUserDND(b.username)
     if (aDND !== bDND) return aDND ? 1 : -1
-    // 按最后消息时间降序
     const aLast = sharedLastMsgMap.value['user:' + a.username]
     const bLast = sharedLastMsgMap.value['user:' + b.username]
     const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
@@ -555,24 +571,10 @@ const sortedFriendsList = computed(() => {
   })
 })
 
-const sortedLanFriendsList = computed(() => {
+// 群聊排序
+const sortedGroups = computed(() => {
   void dndTick.value
-  return [...lanFriendsList.value].sort((a, b) => {
-    const aDND = getUserDND(a.username)
-    const bDND = getUserDND(b.username)
-    if (aDND !== bDND) return aDND ? 1 : -1
-    const aLast = sharedLastMsgMap.value['user:' + a.username]
-    const bLast = sharedLastMsgMap.value['user:' + b.username]
-    const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
-    const bTime = bLast?.time ? new Date(bLast.time).getTime() : 0
-    return bTime - aTime
-  })
-})
-
-// 群聊排序：最后消息时间降序
-const sortedPublicGroupsList = computed(() => {
-  void dndTick.value
-  return [...filteredPublicGroupsList.value].sort((a, b) => {
+  return [...allGroups.value].sort((a, b) => {
     const aDND = getGroupDND(a.id)
     const bDND = getGroupDND(b.id)
     if (aDND !== bDND) return aDND ? 1 : -1
@@ -584,27 +586,24 @@ const sortedPublicGroupsList = computed(() => {
   })
 })
 
-const sortedLanGroupsList = computed(() => {
-  void dndTick.value
-  return [...filteredLanGroupsList.value].sort((a, b) => {
-    const aDND = getGroupDND(a.id)
-    const bDND = getGroupDND(b.id)
-    if (aDND !== bDND) return aDND ? 1 : -1
-    const aLast = sharedLastMsgMap.value['group:' + a.id]
-    const bLast = sharedLastMsgMap.value['group:' + b.id]
-    const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
-    const bTime = bLast?.time ? new Date(bLast.time).getTime() : 0
-    return bTime - aTime
-  })
-})
+// 判断会话是否活跃
+const isConversationActive = (item) => {
+  if (item.type === 'user') return selectedUser.value?.username === item.username
+  if (item.type === 'group') return selectedGroup.value?.id === item.id
+  return false
+}
+
+// 选择会话
+const selectConversation = (item) => {
+  if (item.type === 'user') {
+    selectUser(item._contact)
+  } else if (item.type === 'group') {
+    selectGroup(item._group)
+  }
+}
 
 const searchPlaceholder = computed(() => {
-  if (chatMode.value === 'public' && activeTab.value === 'groups') {
-    return t('chatRoom.searchGroupPlaceholder')
-  }
-  if (chatMode.value === 'lan' && activeTab.value === 'groups') {
-    return t('chatRoom.searchGroupPlaceholder')
-  }
+  if (activeTab.value === 'groups') return t('chatRoom.searchGroupPlaceholder')
   return t('chatRoom.searchUser')
 })
 
@@ -896,6 +895,16 @@ onActivated(() => {
         padding: 0 4px;
         height: 20px;
         line-height: 20px;
+      }
+
+      .network-tag {
+        flex-shrink: 0;
+        font-size: 10px;
+        padding: 0 4px;
+        height: 18px;
+        line-height: 18px;
+        margin-left: 4px;
+        vertical-align: middle;
       }
       
       .user-info {

@@ -86,10 +86,9 @@ function isNewerThan(msgId, lastReadId) {
 }
 
 export function useChatRoom() {
-  const activeTab = ref('friends')
-  const chatMode = ref('public')
+  const activeTab = ref('conversations')
   const lanSettings = ref({ serverIP: '', serverPort: '3000' })
-  const useLanChat = computed(() => !!lanSettings.value.serverIP)
+  const hasLanServer = computed(() => !!lanSettings.value.serverIP)
   const searchQuery = ref('')
   const selectedUser = ref(null)
   const selectedGroup = ref(null)
@@ -98,6 +97,22 @@ export function useChatRoom() {
   const allUsersList = ref([])
   const friendRequests = ref([])
   const chatMessages = ref([])
+  // WS 消息批处理：500ms 窗口内合并 IPC
+  let flushTimer = null
+  let lastBadgeTotal = -1
+  function scheduleBatchFlush() {
+    if (flushTimer) return
+    flushTimer = setTimeout(() => {
+      flushTimer = null
+      syncToGlobalUnread()
+      refreshTotalUnread()
+      updateTaskbarBadge()
+      // 窗口闪烁也合并到批处理中
+      if (window.electronAPI?.flashWindow) {
+        window.electronAPI.flashWindow(true).catch(() => {})
+      }
+    }, 500)
+  }
   const lanFriendsList = ref([])
   const lanGroupsList = ref([])
   const showCreateGroupDialog = ref(false)
@@ -116,15 +131,13 @@ export function useChatRoom() {
   const _pubGroupUnread = ref({ ...publicGroupUnread.value })
   const _lanGroupUnread = ref({ ...lanGroupUnread.value })
 
-  // 根据当前 chatMode 自动路由到正确的存储
-  const groupUnread = computed({
-    get: () => chatMode.value === 'lan' ? _lanGroupUnread.value : _pubGroupUnread.value,
-    set: (val) => chatMode.value === 'lan' ? _lanGroupUnread.value = val : _pubGroupUnread.value = val
-  })
-  const userUnread = computed({
-    get: () => chatMode.value === 'lan' ? _lanUserUnread.value : _pubUserUnread.value,
-    set: (val) => chatMode.value === 'lan' ? _lanUserUnread.value = val : _pubUserUnread.value = val
-  })
+  // 获取指定网络来源的未读计数
+  const getServerUnread = (serverOrigin, type = 'user') => {
+    if (serverOrigin === 'lan') {
+      return type === 'user' ? _lanUserUnread.value : _lanGroupUnread.value
+    }
+    return type === 'user' ? _pubUserUnread.value : _pubGroupUnread.value
+  }
 
   // 同步本地副本到模块级 ref，供 refreshTotalUnread 汇总
   function syncToGlobalUnread() {
@@ -237,21 +250,25 @@ export function useChatRoom() {
     if (ids.length) markMessagesSeen(currentUsername.value, ids)
   }
 
-  // 搜索用户（调用服务端 API）
-  watch(searchQuery, async (query) => {
+  // 搜索用户（调用服务端 API，300ms 防抖）
+  let searchTimer = null
+  watch(searchQuery, (query) => {
+    if (searchTimer) clearTimeout(searchTimer)
     if (!query.trim() || !window.electronAPI) {
       searchResults.value = []
       return
     }
-    if (activeTab.value === 'add') {
-      const result = await window.electronAPI.searchUsers(query.trim())
-      if (result.success && result.users) {
-        searchResults.value = result.users
-        loadUsersAvatars(searchResults.value.map(u => u.username))
+    searchTimer = setTimeout(async () => {
+      if (activeTab.value === 'add') {
+        const result = await window.electronAPI.searchUsers(query.trim())
+        if (result.success && result.users) {
+          searchResults.value = result.users
+          loadUsersAvatars(searchResults.value.map(u => u.username))
+        }
+      } else {
+        searchResults.value = []
       }
-    } else {
-      searchResults.value = []
-    }
+    }, 300)
   })
 
   const loadFriendsList = async () => {
@@ -288,20 +305,21 @@ export function useChatRoom() {
     }
   }
 
-  const selectUser = async (user, mode = chatMode.value) => {
-    selectedUser.value = { ...user, chatMode: mode }
+  const selectUser = async (user) => {
+    const origin = user.serverOrigin || 'public'
+    selectedUser.value = { ...user, serverOrigin: origin }
     selectedGroup.value = null
-    // 立即清零未读并通知服务端，无需等待消息加载
+    const unreadStore = origin === 'lan' ? _lanUserUnread : _pubUserUnread
     if (user?.username) {
-      userUnread.value = { ...userUnread.value, [user.username]: 0 }
+      unreadStore.value = { ...unreadStore.value, [user.username]: 0 }
       syncToGlobalUnread()
       refreshTotalUnread()
       updateTaskbarBadge()
-      if (window.electronAPI) {
+      if (window.electronAPI && origin !== 'lan') {
         window.electronAPI.markChatRead(currentUsername.value, user.username, null).catch(() => {})
       }
     }
-    if (mode === 'lan') await loadLanChatMessages()
+    if (origin === 'lan') await loadLanChatMessages()
     else await loadChatMessages()
     if (user?.username) {
       const lastId = getLastRealMsgId()
@@ -310,7 +328,7 @@ export function useChatRoom() {
         readPoints.value = { ...readPoints.value, [ck]: lastId }
         saveReadPoints(currentUsername.value, readPoints.value)
       }
-      if (window.electronAPI) {
+      if (window.electronAPI && origin !== 'lan') {
         window.electronAPI.markChatRead(currentUsername.value, user.username, lastId || null).catch(() => {})
       }
     }
@@ -441,7 +459,7 @@ export function useChatRoom() {
   }
 
   const sendMessage = async (messageText, msgType = 'text') => {
-    if (selectedUser.value?.chatMode === 'lan') {
+    if (selectedUser.value?.serverOrigin === 'lan') {
       await sendLanMessage(messageText, msgType)
       return
     }
@@ -511,7 +529,7 @@ export function useChatRoom() {
       await sendGroupMessage(msg.message, msg.type || 'text')
     } else {
       inputMessage.value = msg.message
-      await (selectedUser.value?.chatMode === 'lan'
+      await (selectedUser.value?.serverOrigin === 'lan'
         ? sendLanMessage(msg.message, msg.type || 'text')
         : sendMessage(msg.message, msg.type || 'text'))
     }
@@ -543,7 +561,7 @@ export function useChatRoom() {
     if (selectedGroup.value) {
       await sendGroupMessage(result.data, 'image')
     } else if (selectedUser.value) {
-      if (selectedUser.value.chatMode === 'lan') await sendLanMessage(result.data, 'image')
+      if (selectedUser.value.serverOrigin === 'lan') await sendLanMessage(result.data, 'image')
       else await sendMessage(result.data, 'image')
     }
   }
@@ -556,7 +574,7 @@ export function useChatRoom() {
     if (selectedGroup.value) {
       await sendGroupMessage(docInfo, 'document')
     } else if (selectedUser.value) {
-      if (selectedUser.value.chatMode === 'lan') await sendLanMessage(docInfo, 'document')
+      if (selectedUser.value.serverOrigin === 'lan') await sendLanMessage(docInfo, 'document')
       else await sendMessage(docInfo, 'document')
     }
   }
@@ -668,7 +686,7 @@ export function useChatRoom() {
     return localStorage.getItem(`userDND_${username}_${targetUsername}`) === '1'
   }
 
-  const clearGroupUnread = (groupId) => {
+  const clearGroupUnread = (groupId, origin = 'public') => {
     const username = currentUsername.value
     if (!username || !groupId) return
     const lastId = getLastRealMsgId()
@@ -677,15 +695,16 @@ export function useChatRoom() {
       readPoints.value = { ...readPoints.value, [ck]: lastId }
       saveReadPoints(username, readPoints.value)
     }
-    groupUnread.value = { ...groupUnread.value, [groupId]: 0 }
+    const store = origin === 'lan' ? _lanGroupUnread : _pubGroupUnread
+    store.value = { ...store.value, [groupId]: 0 }
     syncToGlobalUnread()
     refreshTotalUnread()
-    if (window.electronAPI) {
+    if (window.electronAPI && origin !== 'lan') {
         window.electronAPI.markGroupRead(username, groupId, lastId || null).catch(() => {})
     }
   }
 
-  const clearUserUnread = (targetUsername) => {
+  const clearUserUnread = (targetUsername, origin = 'public') => {
     const username = currentUsername.value
     if (!username || !targetUsername) return
     const lastId = getLastRealMsgId()
@@ -694,10 +713,11 @@ export function useChatRoom() {
       readPoints.value = { ...readPoints.value, [ck]: lastId }
       saveReadPoints(username, readPoints.value)
     }
-    userUnread.value = { ...userUnread.value, [targetUsername]: 0 }
+    const store = origin === 'lan' ? _lanUserUnread : _pubUserUnread
+    store.value = { ...store.value, [targetUsername]: 0 }
     syncToGlobalUnread()
     refreshTotalUnread()
-    if (window.electronAPI) {
+    if (window.electronAPI && origin !== 'lan') {
         window.electronAPI.markChatRead(username, targetUsername, lastId || null).catch(() => {})
     }
   }
@@ -721,15 +741,16 @@ export function useChatRoom() {
   }
 
   const selectGroup = async (group) => {
-    selectedGroup.value = group
+    const origin = group.serverOrigin || group.networkType || 'public'
+    selectedGroup.value = { ...group, serverOrigin: origin }
     selectedUser.value = null
-    // 立即清零未读并通知服务端，无需等待消息加载
+    const unreadStore = origin === 'lan' ? _lanGroupUnread : _pubGroupUnread
     if (group?.id) {
-      groupUnread.value = { ...groupUnread.value, [group.id]: 0 }
+      unreadStore.value = { ...unreadStore.value, [group.id]: 0 }
       syncToGlobalUnread()
       refreshTotalUnread()
       updateTaskbarBadge()
-      if (window.electronAPI) {
+      if (window.electronAPI && origin !== 'lan') {
         window.electronAPI.markGroupRead(currentUsername.value, group.id, null).catch(() => {})
       }
     }
@@ -741,7 +762,7 @@ export function useChatRoom() {
         readPoints.value = { ...readPoints.value, [ck]: lastId }
         saveReadPoints(currentUsername.value, readPoints.value)
       }
-      if (window.electronAPI) {
+      if (window.electronAPI && origin !== 'lan') {
         window.electronAPI.markGroupRead(currentUsername.value, group.id, lastId || null).catch(() => {})
       }
     }
@@ -754,9 +775,9 @@ export function useChatRoom() {
       deletedGroupIds.value = deletedGroupIds.value.filter(id => id !== groupId)
       localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
     }
-    const cacheType = chatMode.value === 'lan' ? 'lan_group' : 'pub_group'
+    const origin = selectedGroup.value.serverOrigin || 'public'
+    const cacheType = origin === 'lan' ? 'lan_group' : 'pub_group'
 
-    // 缓存优先
     if (!append) {
       const cached = loadMessagesFromCache(currentUsername.value, cacheType, String(groupId))
       if (cached) {
@@ -766,7 +787,7 @@ export function useChatRoom() {
     }
 
     let data
-    if (chatMode.value === 'lan') {
+    if (origin === 'lan') {
       if (!lanSettings.value.serverIP) return
       const response = await fetch(
         `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages?groupId=${encodeURIComponent(groupId)}`,
@@ -816,9 +837,10 @@ export function useChatRoom() {
         updateMessageStatus(tempId, false)
       }
     }, SEND_TIMEOUT)
+    const origin = selectedGroup.value.serverOrigin || 'public'
     let data
-    if (chatMode.value === 'lan') {
-      if (!lanSettings.value.serverIP) return
+    if (origin === 'lan') {
+      if (!lanSettings.value.serverIP) { clearTimeout(timeoutId); if (!resolved) { resolved = true; updateMessageStatus(tempId, false) }; return }
       try {
         const response = await fetch(
           `http://${lanSettings.value.serverIP}:${lanSettings.value.serverPort}/api/group-messages`,
@@ -873,9 +895,10 @@ export function useChatRoom() {
       ElMessage.warning('至少添加 2 名成员')
       return
     }
-    const groupData = { name: newGroupName.value.trim(), creator: currentUsername.value, members: [...newGroupMembers.value], networkType: chatMode.value }
+    const origin = selectedUser.value?.serverOrigin || 'public'
+    const groupData = { name: newGroupName.value.trim(), creator: currentUsername.value, members: [...newGroupMembers.value], networkType: origin }
     let data
-    if (chatMode.value === 'lan') {
+    if (origin === 'lan') {
       if (!lanSettings.value.serverIP) {
         ElMessage.error('请先配置内网服务器地址')
         return
@@ -907,7 +930,7 @@ export function useChatRoom() {
       showCreateGroupDialog.value = false
       newGroupName.value = ''
       newGroupMembers.value = []
-      if (chatMode.value === 'lan') await loadLanGroupsList()
+      if (origin === 'lan') await loadLanGroupsList()
       else await loadPublicGroupsList()
     } else {
       ElMessage.error(data.message || '创建失败')
@@ -915,12 +938,11 @@ export function useChatRoom() {
   }
 
   const handleSendMessage = (event) => {
-    // 阻止 Enter 默认换行行为
     if (event) event.preventDefault()
     const msg = inputMessage.value.trim()
     if (!msg) return
     if (selectedGroup.value) sendGroupMessage(msg, 'text')
-    else if (selectedUser.value?.chatMode === 'lan') sendLanMessage(msg, 'text')
+    else if (selectedUser.value?.serverOrigin === 'lan') sendLanMessage(msg, 'text')
     else sendMessage(msg, 'text')
     inputMessage.value = ''
   }
@@ -928,9 +950,9 @@ export function useChatRoom() {
   const handleDeleteGroup = async () => {
     if (!selectedGroup.value) return
     const groupId = selectedGroup.value.id
-    // 调用服务端 API 真正退出群聊
+    const origin = selectedGroup.value.serverOrigin || 'public'
     let left = false
-    if (chatMode.value === 'lan') {
+    if (origin === 'lan') {
       if (!lanSettings.value.serverIP) {
         ElMessage.error('请先配置内网服务器地址')
         return
@@ -968,12 +990,11 @@ export function useChatRoom() {
         deletedGroupIds.value.push(groupId)
         localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
       }
-      // 清除该群聊的本地缓存
-      const ct = chatMode.value === 'lan' ? 'lan_group' : 'pub_group'
+      const ct = origin === 'lan' ? 'lan_group' : 'pub_group'
       removeConversationCache(currentUsername.value, ct, String(groupId))
       selectedGroup.value = null
       chatMessages.value = []
-      if (chatMode.value === 'lan') loadLanGroupsList()
+      if (origin === 'lan') loadLanGroupsList()
       else loadPublicGroupsList()
       ElMessage.success('已退出群聊')
     }
@@ -981,8 +1002,9 @@ export function useChatRoom() {
 
   const handleDisbandGroup = async () => {
     if (!selectedGroup.value) return
+    const origin = selectedGroup.value.serverOrigin || 'public'
     let data
-    if (chatMode.value === 'lan') {
+    if (origin === 'lan') {
       if (!lanSettings.value.serverIP) {
         ElMessage.error('请先配置内网服务器地址')
         return
@@ -1014,30 +1036,27 @@ export function useChatRoom() {
       localStorage.setItem('deletedGroupIds', JSON.stringify(deletedGroupIds.value))
       selectedGroup.value = null
       chatMessages.value = []
-      if (chatMode.value === 'lan') await loadLanGroupsList()
+      if (origin === 'lan') await loadLanGroupsList()
       else await loadPublicGroupsList()
     } else {
       ElMessage.error(data.message || '解散失败')
     }
   }
 
-  const handleChatModeChange = async (mode) => {
-    // 同步当前模式未读到全局存储，确保导航栏角标不会丢失数据
-    syncToGlobalUnread()
+  const switchTab = async (tab) => {
+    activeTab.value = tab
     chatMessages.value = []
     selectedUser.value = null
     selectedGroup.value = null
     inputMessage.value = ''
     reloadLanSettings()
-    if (mode === 'lan') {
-      activeTab.value = 'users'
-      await loadLanFriendsList()
-      await loadLanGroupsList()
-    } else {
-      activeTab.value = 'friends'
-      await loadFriendsList()
-      await loadPublicGroupsList()
-    }
+    // 无论哪个 tab，都从两端加载数据
+    await Promise.all([
+      loadFriendsList(),
+      loadPublicGroupsList(),
+      hasLanServer.value ? loadLanFriendsList() : Promise.resolve(),
+      hasLanServer.value ? loadLanGroupsList() : Promise.resolve()
+    ])
   }
 
   const reloadLanSettings = () => {
@@ -1063,11 +1082,11 @@ export function useChatRoom() {
     const username = currentUsername.value
     if (!username) return
     try {
-      if (lanSettings.value.serverIP && chatMode.value === 'lan') {
-        // ===== LAN 模式：只用 LAN 接口 =====
+      // === 始终轮询 LAN 端（如果配置了） ===
+      if (lanSettings.value.serverIP) {
         for (const friend of lanFriendsList.value) {
           const target = friend.username
-          if (selectedUser.value && selectedUser.value.username === target && selectedUser.value.chatMode === 'lan') continue
+          if (selectedUser.value && selectedUser.value.username === target && selectedUser.value.serverOrigin === 'lan') continue
           const ck = userConvKey(target)
           const lastId = readPoints.value[ck] || '0'
           try {
@@ -1081,13 +1100,13 @@ export function useChatRoom() {
               const unread = msgs.filter(m =>
                 m.from !== username && m.id && isNewerThan(m.id, lastId)
               ).length
-              userUnread.value = { ...userUnread.value, [target]: unread }
+              _lanUserUnread.value = { ..._lanUserUnread.value, [target]: unread }
             }
           } catch (_) {}
         }
         for (const group of lanGroupsList.value) {
           const gid = group.id
-          if (selectedGroup.value && String(selectedGroup.value.id) === String(gid)) continue
+          if (selectedGroup.value && String(selectedGroup.value.id) === String(gid) && selectedGroup.value.serverOrigin === 'lan') continue
           const ck = groupConvKey(gid)
           const lastId = readPoints.value[ck] || '0'
           try {
@@ -1101,36 +1120,37 @@ export function useChatRoom() {
               const unread = msgs.filter(m =>
                 m.from !== username && m.id && isNewerThan(m.id, lastId)
               ).length
-              groupUnread.value = { ...groupUnread.value, [gid]: unread }
+              _lanGroupUnread.value = { ..._lanGroupUnread.value, [gid]: unread }
             }
           } catch (_) {}
         }
-      } else if (window.electronAPI && window.electronAPI.getUnreadCounts) {
-        // ===== 公共模式：只用公共接口 =====
+      }
+      // === 始终轮询公网端 ===
+      if (window.electronAPI && window.electronAPI.getUnreadCounts) {
         const rp = JSON.parse(JSON.stringify(readPoints.value))
         const result = await window.electronAPI.getUnreadCounts(username, rp)
         if (result.success) {
           const selUser = selectedUser.value
-          const updatedUser = { ...userUnread.value }
+          const updatedUser = { ..._pubUserUnread.value }
           for (const [key, count] of Object.entries(result.conversations || {})) {
-            if (selUser && selUser.username === key) {
+            if (selUser && selUser.username === key && selUser.serverOrigin !== 'lan') {
               updatedUser[key] = 0
               continue
             }
             updatedUser[key] = typeof count === 'number' ? count : 0
           }
-          userUnread.value = updatedUser
+          _pubUserUnread.value = updatedUser
 
           const selGroup = selectedGroup.value
-          const updatedGroup = { ...groupUnread.value }
+          const updatedGroup = { ..._pubGroupUnread.value }
           for (const [key, count] of Object.entries(result.groups || {})) {
-            if (selGroup && String(selGroup.id) === String(key)) {
+            if (selGroup && String(selGroup.id) === String(key) && selGroup.serverOrigin !== 'lan') {
               updatedGroup[key] = 0
               continue
             }
             updatedGroup[key] = typeof count === 'number' ? count : 0
           }
-          groupUnread.value = updatedGroup
+          _pubGroupUnread.value = updatedGroup
         }
       }
     } catch (e) {
@@ -1141,11 +1161,14 @@ export function useChatRoom() {
     updateTaskbarBadge()
   }
 
-  // 更新任务栏角标
+  // 更新任务栏角标（仅在值变化时发送 IPC）
   const updateTaskbarBadge = () => {
     const total = getTotalUnread()
-    if (window.electronAPI && window.electronAPI.setBadgeCount) {
-      window.electronAPI.setBadgeCount(total).catch(() => {})
+    if (total !== lastBadgeTotal) {
+      lastBadgeTotal = total
+      if (window.electronAPI && window.electronAPI.setBadgeCount) {
+        window.electronAPI.setBadgeCount(total).catch(() => {})
+      }
     }
   }
 
@@ -1188,7 +1211,7 @@ export function useChatRoom() {
       if (selectedGroup.value) {
         await loadGroupMessages(true)
       } else if (selectedUser.value) {
-        if (selectedUser.value.chatMode === 'lan') await loadLanChatMessages(true)
+        if (selectedUser.value.serverOrigin === 'lan') await loadLanChatMessages(true)
         else await loadChatMessages(true)
       }
       if (selectedUser.value || selectedGroup.value) {
@@ -1244,10 +1267,6 @@ export function useChatRoom() {
     // WebSocket 消息总是公网来源，写入公网存储
     const current = _pubUserUnread.value[sender] || 0
     _pubUserUnread.value = { ..._pubUserUnread.value, [sender]: current + 1 }
-    // 如果当前在公网模式，同步到 userUnread（供界面显示）
-    if (chatMode.value === 'public') {
-      userUnread.value = { ...userUnread.value, [sender]: (_pubUserUnread.value[sender] || 0) }
-    }
 
     // 更新最后消息
     const msg = data.message || {}
@@ -1256,14 +1275,7 @@ export function useChatRoom() {
       ['user:' + sender]: { message: msg.message || '', time: msg.timestamp || Date.now(), from: sender }
     }
 
-    syncToGlobalUnread()
-    refreshTotalUnread()
-    updateTaskbarBadge()
-
-    // 闪烁窗口
-    if (window.electronAPI && window.electronAPI.flashWindow) {
-      window.electronAPI.flashWindow(true).catch(() => {})
-    }
+    scheduleBatchFlush()
   }
 
   const handleWsNewGroupMessage = (data) => {
@@ -1286,9 +1298,6 @@ export function useChatRoom() {
     // WebSocket 消息总是公网来源，写入公网存储
     const current = _pubGroupUnread.value[groupId] || 0
     _pubGroupUnread.value = { ..._pubGroupUnread.value, [groupId]: current + 1 }
-    if (chatMode.value === 'public') {
-      groupUnread.value = { ...groupUnread.value, [groupId]: (_pubGroupUnread.value[groupId] || 0) }
-    }
 
     // 更新最后消息
     const msg = data.message || {}
@@ -1297,9 +1306,7 @@ export function useChatRoom() {
       ['group:' + groupId]: { message: msg.message || '', time: msg.timestamp || Date.now(), from: msgFrom }
     }
 
-    syncToGlobalUnread()
-    refreshTotalUnread()
-    updateTaskbarBadge()
+    scheduleBatchFlush()
   }
 
   const handleWsUpdateBadge = () => {
@@ -1365,36 +1372,34 @@ export function useChatRoom() {
     }
   }
 
-  // 调试：监听 userUnread 的所有变化
   onMounted(() => {
     reloadLanSettings()
-    // 加载缓存保留天数设置
     const savedCacheDays = localStorage.getItem('cacheRetentionDays')
     if (savedCacheDays) {
       cacheRetentionDays.value = parseInt(savedCacheDays) || 30
     }
-    // 启动时清理过期缓存
     cleanExpiredCache(currentUsername.value, cacheRetentionDays.value)
 
-    // 监听缓存保留天数变化，立即清理
     watch(cacheRetentionDays, (newDays) => {
       localStorage.setItem('cacheRetentionDays', String(newDays))
       cleanExpiredCache(currentUsername.value, newDays)
     })
 
-    // 恢复用户偏好设置（群聊隐藏、DND等）
     const savedDeletedGroups = localStorage.getItem('deletedGroupIds')
     if (savedDeletedGroups) {
       deletedGroupIds.value = JSON.parse(savedDeletedGroups)
     }
-    // 从 localStorage 恢复已读状态，防止重登后已读消息被重置为未读
     const savedReadPoints = loadReadPoints(currentUsername.value)
     readPoints.value = Object.keys(savedReadPoints).length > 0 ? savedReadPoints : {}
+    // 同时加载公网和内网数据
     loadFriendsList()
     loadAllUsers()
     loadFriendRequests()
     loadPublicGroupsList()
-    if (lanSettings.value.serverIP) loadLanFriendsList()
+    if (lanSettings.value.serverIP) {
+      loadLanFriendsList()
+      loadLanGroupsList()
+    }
     startMessagePolling()
     startUnreadPolling()
     setupWebSocket()
@@ -1409,7 +1414,7 @@ export function useChatRoom() {
   })
 
   return {
-    activeTab, chatMode, useLanChat, lanSettings, searchQuery,
+    activeTab, hasLanServer, lanSettings, searchQuery,
     selectedUser, selectedGroup, inputMessage,
     friendsList, allUsersList, friendRequests, chatMessages,
     lanFriendsList, lanGroupsList, publicGroupsList,
@@ -1425,15 +1430,13 @@ export function useChatRoom() {
     normalizeMessage, formatDate, formatMessageTime,
     isImageMessage, isDocumentMessage, parseDocumentInfo, onImageLoad, retryMessage,
     startMessagePolling, stopMessagePolling, pollForNewMessages, pollUnreadCounts,
-    handleChatModeChange, loadLanFriendsList, loadLanGroupsList,
+    switchTab, loadLanFriendsList, loadLanGroupsList,
     selectGroup, loadGroupMessages, sendGroupMessage,
     createGroup, handleSendMessage, handleDeleteGroup, handleDisbandGroup,
-    loadPublicGroupsList, groupUnread, getGroupDND, clearGroupUnread,
-    userUnread, getUserDND, clearUserUnread, getTotalUnread,
+    loadPublicGroupsList, getServerUnread, getGroupDND, clearGroupUnread,
+    getUserDND, clearUserUnread, getTotalUnread,
     sharedLastMsgMap,
-    // 暴露独立的内网/公网未读存储（供 ChatRoom.vue 模式角标使用）
     _pubUserUnread, _lanUserUnread, _pubGroupUnread, _lanGroupUnread,
-    // 缓存保留天数
     cacheRetentionDays
   }
 }

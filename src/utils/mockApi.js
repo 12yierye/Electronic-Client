@@ -34,7 +34,16 @@ export const mockElectronAPI = {
   // ===== 真实服务端请求 =====
 
   login: async (username, password) => {
-    return serverFetch(`${getServerBaseUrl()}/login`, { username, password })
+    const result = await serverFetch(`${getServerBaseUrl()}/login`, { username, password })
+    // 服务端返回 token 和 userId
+    if (result.success && result.token) {
+      localStorage.setItem('authToken', result.token)
+    }
+    if (result.success && result.user) {
+      const uid = result.user.id || result.user.userId
+      if (uid) localStorage.setItem('userId', String(uid))
+    }
+    return result
   },
 
   register: async (userData) => {
@@ -239,6 +248,12 @@ export const mockElectronAPI = {
   },
 
   // ===== 设置桩 =====
+
+  getAuthToken: async () => {
+    const token = localStorage.getItem('authToken') || ''
+    const userId = localStorage.getItem('userId') || ''
+    return { success: true, token, userId }
+  },
 
   setDownloadDir: async () => {
     return { success: true }

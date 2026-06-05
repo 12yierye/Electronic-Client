@@ -68,12 +68,18 @@
     </el-dialog>
 
     <!-- 编辑服务器地址对话框 -->
-    <el-dialog v-model="serverDialogVisible" :title="t('login.editServer')" width="400px" class="server-dialog">
-      <el-form label-width="80px">
-        <el-form-item :label="t('login.serverIP')">
+    <el-dialog v-model="serverDialogVisible" title="服务器配置" width="420px" class="server-dialog">
+      <el-form label-width="100px" label-position="left">
+        <h4 style="margin:0 0 8px 0;font-size:13px;color:var(--text-secondary)">公网服务器（认证 & 日常聊天）</h4>
+        <el-form-item label="公网 URL">
+          <el-input v-model="publicServerUrl" placeholder="http://your-public-server.com:3000" />
+        </el-form-item>
+        <el-divider style="margin:12px 0" />
+        <h4 style="margin:0 0 8px 0;font-size:13px;color:var(--text-secondary)">内网 LAN 服务器（可选）</h4>
+        <el-form-item label="IP 地址">
           <el-input v-model="serverIP" :placeholder="t('settings.serverIPPlaceholder')" />
         </el-form-item>
-        <el-form-item :label="t('login.serverPort')">
+        <el-form-item label="端口">
           <el-input v-model="serverPort" :placeholder="t('settings.serverPortPlaceholder')" />
         </el-form-item>
       </el-form>
@@ -107,6 +113,7 @@ const apiBase = ref('http://localhost:3000')
 const serverDialogVisible = ref(false)
 const serverIP = ref('127.0.0.1')
 const serverPort = ref('3000')
+const publicServerUrl = ref('')
 const savingServer = ref(false)
 
 // 读取保存的服务器设置
@@ -124,6 +131,14 @@ const loadServerSettings = () => {
             // ignore
         }
     }
+    const pri = localStorage.getItem('primaryServer')
+    if (pri) {
+        try {
+            publicServerUrl.value = JSON.parse(pri).url || ''
+        } catch (e) {
+            // ignore
+        }
+    }
 }
 
 const openServerDialog = () => {
@@ -132,25 +147,28 @@ const openServerDialog = () => {
 }
 
 const saveServerSettings = async () => {
-    if (!serverIP.value) {
-        ElMessage.warning(t('settings.enterServerIP'))
-        return
-    }
     savingServer.value = true
     try {
-        const ip = serverIP.value.trim()
-        const port = serverPort.value.trim() || '3000'
-        const url = `http://${ip}:${port}`
-
-        const settings = { serverIP: ip, serverPort: port }
-        localStorage.setItem(SERVER_SETTINGS_KEY, JSON.stringify(settings))
-        apiBase.value = url
-
-        if (window.electronAPI?.setApiBaseUrl) {
-            await window.electronAPI.setApiBaseUrl(url)
+        // 保存公网服务器 URL
+        if (publicServerUrl.value.trim()) {
+            localStorage.setItem('primaryServer', JSON.stringify({ url: publicServerUrl.value.trim() }))
         }
 
-        ElMessage.success(t('login.serverSaved'))
+        // 保存 LAN 服务器设置
+        if (serverIP.value.trim()) {
+            const ip = serverIP.value.trim()
+            const port = serverPort.value.trim() || '3000'
+            const url = `http://${ip}:${port}`
+            const settings = { serverIP: ip, serverPort: port }
+            localStorage.setItem(SERVER_SETTINGS_KEY, JSON.stringify(settings))
+            apiBase.value = url
+
+            if (window.electronAPI?.setApiBaseUrl) {
+                await window.electronAPI.setApiBaseUrl(url)
+            }
+        }
+
+        ElMessage.success('服务器配置已保存')
         serverDialogVisible.value = false
     } catch (error) {
         ElMessage.error(error.message)
@@ -208,7 +226,7 @@ const handleRegister = () => {
   registerDialogVisible.value = true
 }
 
-// 提交注册
+// 提交注册（始终通过主服务器注册）
 const handleRegisterSubmit = async () => {
   if (!registerFormRef.value) return
 
@@ -217,11 +235,22 @@ const handleRegisterSubmit = async () => {
 
     registerLoading.value = true
     try {
+      let primaryUrl = localStorage.getItem('primaryServer')
+        ? (JSON.parse(localStorage.getItem('primaryServer')).url || '')
+        : ''
+      if (!primaryUrl) {
+        registerDialogVisible.value = false
+        registerLoading.value = false
+        openServerDialog()
+        ElMessage.warning('请先配置公网服务器地址')
+        return
+      }
+
       const result = await window.electronAPI.register({
         username: registerForm.username,
         password: registerForm.password,
         email: registerForm.email
-      })
+      }, primaryUrl)
 
       if (result.success) {
         ElMessage.success(t('login.registerSuccess'))
@@ -318,10 +347,15 @@ const checkAutoLogin = async () => {
     // 验证凭证
     const isValid = await verifyCredential(credential)
     if (isValid) {
-      // 自动登录成功
       const userResult = await window.electronAPI.getUserByUsername(credential.username)
       if (userResult.success) {
         localStorage.setItem('userInfo', JSON.stringify(userResult.user))
+        if (userResult.token) {
+          localStorage.setItem('authToken', userResult.token)
+        }
+        if (userResult.user?.id || userResult.user?.userId) {
+          localStorage.setItem('userId', String(userResult.user.id || userResult.user.userId))
+        }
         ElMessage.success(t('login.autoLoginSuccess'))
         emit('auto-login-success', userResult.user)
         return true
@@ -346,10 +380,16 @@ const handleLogin = async () => {
 
     loading.value = true
     try {
-      // 服务器登录（admin 用户需在服务器上创建）
       const result = await window.electronAPI.login(loginForm.username, loginForm.password)
       if (result.success) {
         localStorage.setItem('userInfo', JSON.stringify(result.user))
+        // 保存 token 和 userId
+        if (result.token) {
+          localStorage.setItem('authToken', result.token)
+        }
+        if (result.user?.id || result.user?.userId) {
+          localStorage.setItem('userId', String(result.user.id || result.user.userId))
+        }
 
         // 如果勾选了自动登录，生成凭证
         if (autoLogin.value) {
@@ -458,6 +498,17 @@ defineExpose({ checkAutoLogin })
     margin-left: 10px;
     font-size: 12px;
     color: var(--el-color-success);
+  }
+}
+
+.server-dialog {
+  :deep(.el-divider) {
+    margin: 12px 0;
+  }
+  h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
   }
 }
 </style>

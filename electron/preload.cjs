@@ -228,6 +228,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('agent:chunk')
   },
 
+  // 自动更新
+  checkForUpdate: (silent) => ipcRenderer.invoke('update:check', silent),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateStatus: (callback) => {
+    ipcRenderer.on('update:status', (event, data) => callback(data))
+  },
+  onUpdateProgress: (callback) => {
+    ipcRenderer.on('update:progress', (event, data) => callback(data))
+  },
+  removeUpdateListeners: () => {
+    ipcRenderer.removeAllListeners('update:status')
+    ipcRenderer.removeAllListeners('update:progress')
+  },
+
   // 调试功能
   debugGeneratePPTX: (data) => ipcRenderer.invoke('agent:debugGeneratePPTX', data),
   onDebugProgress: (callback) => {

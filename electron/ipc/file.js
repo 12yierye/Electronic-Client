@@ -3,7 +3,7 @@ import { join, parse } from 'node:path'
 import axios from 'axios'
 import fs from 'fs'
 import crypto from 'crypto'
-import { getAPIBase, getDownloadDir, setDownloadDir } from '../config.js'
+import { getAPIBase, getLanServerUrl, getDownloadDir, setDownloadDir } from '../config.js'
 
 const CHUNK_SIZE = 2 * 1024 * 1024
 
@@ -20,8 +20,13 @@ function getNextAvailableName(dir, name) {
     return newName
 }
 
+function resolveBaseUrl(serverOrigin) {
+    return serverOrigin === 'lan' ? getLanServerUrl() : getAPIBase()
+}
+
 export function registerFileIpc() {
-    ipcMain.handle('download-file', async (event, username, filename) => {
+    ipcMain.handle('download-file', async (event, username, filename, serverOrigin = 'public') => {
+        const baseUrl = resolveBaseUrl(serverOrigin)
         const downloadsDir = getDownloadDir()
         const tempFilename = filename + '.part'
         let finalPath = join(downloadsDir, filename)
@@ -54,7 +59,7 @@ export function registerFileIpc() {
 
             const response = await axios({
                 method: 'GET',
-                url: `${getAPIBase()}/user/download/${encodeURIComponent(username)}/${encodeURIComponent(filename)}`,
+                url: `${baseUrl}/user/download/${encodeURIComponent(username)}/${encodeURIComponent(filename)}`,
                 responseType: 'stream',
                 onDownloadProgress: (progressEvent) => {
                     const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
@@ -85,23 +90,26 @@ export function registerFileIpc() {
         }
     })
 
-    ipcMain.handle('upload-file', async (event, username, filename, fileData) => {
+    ipcMain.handle('upload-file', async (event, username, filename, fileData, serverOrigin = 'public') => {
+        const baseUrl = resolveBaseUrl(serverOrigin)
         try {
-            const response = await axios.post(`${getAPIBase()}/user/upload?username=${encodeURIComponent(username)}&filename=${encodeURIComponent(filename)}`, fileData, { headers: { 'Content-Type': 'application/octet-stream' } })
+            const response = await axios.post(`${baseUrl}/user/upload?username=${encodeURIComponent(username)}&filename=${encodeURIComponent(filename)}`, fileData, { headers: { 'Content-Type': 'application/octet-stream' } })
             return response.data
         } catch (error) { return { success: false, message: error.message } }
     })
 
-    ipcMain.handle('delete-file', async (event, username, filename) => {
+    ipcMain.handle('delete-file', async (event, username, filename, serverOrigin = 'public') => {
+        const baseUrl = resolveBaseUrl(serverOrigin)
         try {
-            const response = await axios.delete(`${getAPIBase()}/user/file/${encodeURIComponent(username)}/${encodeURIComponent(filename)}`)
+            const response = await axios.delete(`${baseUrl}/user/file/${encodeURIComponent(username)}/${encodeURIComponent(filename)}`)
             return response.data
         } catch (error) { return { success: false, message: error.message } }
     })
 
-    ipcMain.handle('get-user-files', async (event, username) => {
+    ipcMain.handle('get-user-files', async (event, username, serverOrigin = 'public') => {
+        const baseUrl = resolveBaseUrl(serverOrigin)
         try {
-            const response = await axios.get(`${getAPIBase()}/user/files?username=${encodeURIComponent(username)}`)
+            const response = await axios.get(`${baseUrl}/user/files?username=${encodeURIComponent(username)}`)
             return response.data
         } catch (error) {
             console.error('[GetUserFiles] err:', error.message)
@@ -109,9 +117,10 @@ export function registerFileIpc() {
         }
     })
 
-    ipcMain.handle('get-all-files', async () => {
+    ipcMain.handle('get-all-files', async (serverOrigin = 'public') => {
+        const baseUrl = resolveBaseUrl(serverOrigin)
         try {
-            const response = await axios.get(`${getAPIBase()}/files/all`)
+            const response = await axios.get(`${baseUrl}/files/all`)
             return response.data
         } catch (error) {
             console.error('[GetAllFiles] err:', error.message)
@@ -179,7 +188,8 @@ export function registerFileIpc() {
         return { success: true, data, name, ext }
     })
 
-    ipcMain.handle('file:uploadChunked', async (event, { filePath, fileName, fileSize, fileData }) => {
+    ipcMain.handle('file:uploadChunked', async (event, { filePath, fileName, fileSize, fileData, serverOrigin = 'public' }) => {
+        const baseUrl = resolveBaseUrl(serverOrigin)
         try {
             let fileBuffer
             if (filePath) {
@@ -193,7 +203,7 @@ export function registerFileIpc() {
             const md5 = crypto.createHash('md5').update(fileBuffer).digest('hex')
             const totalChunks = Math.ceil(fileBuffer.length / CHUNK_SIZE)
 
-            const uploadedRes = await axios.get(`${getAPIBase()}/api/file/chunks?md5=${md5}`)
+            const uploadedRes = await axios.get(`${baseUrl}/api/file/chunks?md5=${md5}`)
             const uploadedIndexes = uploadedRes.data?.chunks || []
 
             for (let i = 0; i < totalChunks; i++) {
@@ -207,7 +217,7 @@ export function registerFileIpc() {
                 const chunk = fileBuffer.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
                 const chunkData = Buffer.from(chunk).toString('base64')
 
-                await axios.post(`${getAPIBase()}/api/file/chunk`, {
+                await axios.post(`${baseUrl}/api/file/chunk`, {
                     md5, index: i, totalChunks, fileName, chunk: chunkData
                 })
 
@@ -216,14 +226,15 @@ export function registerFileIpc() {
                 } catch (_) {}
             }
 
-            await axios.post(`${getAPIBase()}/api/file/merge`, { md5, fileName, totalChunks })
+            await axios.post(`${baseUrl}/api/file/merge`, { md5, fileName, totalChunks })
             return { success: true, md5 }
         } catch (error) {
             return { success: false, message: error.message }
         }
     })
 
-    ipcMain.handle('file:downloadVerified', async (event, { fileId, fileName, expectedMd5 }) => {
+    ipcMain.handle('file:downloadVerified', async (event, { fileId, fileName, expectedMd5, serverOrigin = 'public' }) => {
+        const baseUrl = resolveBaseUrl(serverOrigin)
         const downloadsDir = getDownloadDir()
         const tempPath = join(downloadsDir, fileName + '.part')
         const finalPath = join(downloadsDir, fileName)
@@ -237,7 +248,7 @@ export function registerFileIpc() {
             for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
                 const response = await axios({
                     method: 'GET',
-                    url: `${getAPIBase()}/api/file/download/${encodeURIComponent(fileId || fileName)}`,
+                    url: `${baseUrl}/api/file/download/${encodeURIComponent(fileId || fileName)}`,
                     responseType: 'arraybuffer',
                     onDownloadProgress: (progressEvent) => {
                         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)

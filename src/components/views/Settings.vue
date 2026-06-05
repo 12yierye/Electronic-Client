@@ -351,7 +351,20 @@
 
         <!-- 服务器 -->
         <div v-else-if="activeNav === 'server'" class="settings-section">
-          <h3>{{ t('settings.serverTitle') }}</h3>
+          <h3>公网服务器（认证源 + 日常聊天）</h3>
+          <div class="setting-tip">所有用户在此注册登录，也是验证 LAN 服务器身份的认证源。</div>
+          <el-form-item label="公网服务器 URL：">
+            <el-input
+              v-model="primaryServerUrl"
+              placeholder="http://your-public-server.com:3000"
+              @blur="savePrimaryServerSetting"
+            />
+          </el-form-item>
+
+          <el-divider />
+
+          <h3>{{ t('settings.serverTitle') }}（内网 LAN 服务器 - 可选）</h3>
+          <div class="setting-tip">配置后可同时连接内网服务器，与公网联系人共存互不干扰。</div>
           <el-form-item :label="t('settings.serverIP') + '：'">
             <el-input
               v-model="serverIP"
@@ -383,10 +396,42 @@
               <span class="about-value">v{{ appVersion }}</span>
             </div>
             <div class="update-actions">
-              <el-button type="primary" @click="handleCheckUpdate" :loading="checkingUpdate">
-                {{ checkingUpdate ? t('settings.checking') : t('settings.checkUpdateBtn') }}
-              </el-button>
+              <template v-if="updateStatus === 'idle' || updateStatus === 'error' || updateStatus === 'checking'">
+                <el-button type="primary" @click="handleCheckUpdate" :loading="updateStatus === 'checking'">
+                  {{ updateStatus === 'checking' ? t('settings.checking') : t('settings.checkUpdateBtn') }}
+                </el-button>
+              </template>
+              <template v-else-if="updateStatus === 'available'">
+                <el-button type="success" @click="handleDownloadUpdate">
+                  下载更新 v{{ updateVersion }}
+                </el-button>
+              </template>
+              <template v-else-if="updateStatus === 'downloading'">
+                <el-button type="warning" disabled>
+                  下载中 {{ updateProgress }}%
+                </el-button>
+              </template>
+              <template v-else-if="updateStatus === 'downloaded'">
+                <el-button type="danger" @click="handleInstallUpdate">
+                  立即安装并重启
+                </el-button>
+              </template>
             </div>
+
+            <!-- 下载进度条 -->
+            <div v-if="updateStatus === 'downloading'" class="update-progress-section">
+              <el-progress
+                :percentage="updateProgress"
+                :stroke-width="12"
+                :text-inside="true"
+                striped
+                striped-flow
+                :duration="6"
+                status="success"
+              />
+              <div class="update-speed">{{ updateSpeed }}</div>
+            </div>
+
             <div v-if="updateMessage" class="update-message" :class="updateMessageType">{{ updateMessage }}</div>
           </div>
           <el-divider />
@@ -511,6 +556,7 @@ const theme = ref('dark')
 const language = ref('zh-CN')
 const serverIP = ref('127.0.0.1')
 const serverPort = ref('3000')
+const primaryServerUrl = ref('')
 const testingServer = ref(false)
 const enablePinyinSearch = ref(false)
 const useSystemBrowser = ref(false)
@@ -523,9 +569,15 @@ const cacheDayOptions = [7, 14, 30, 60, 90, 180]
 const showModeUnreadBadge = ref(true)
 const showTabUnreadBadge = ref(true)
 const showOnlineStatus = ref(true)
+// 自动更新状态
 const checkingUpdate = ref(false)
 const updateMessage = ref('')
 const updateMessageType = ref('')
+const updateVersion = ref('')
+const updateProgress = ref(0)
+const updateSpeed = ref('')
+const updateStatus = ref('idle') // idle | checking | available | downloading | downloaded | error
+const canInstall = ref(false)
 
 // 调试中心
 const debugSlideCount = ref(10)
@@ -1056,12 +1108,22 @@ onMounted(() => {
     const savedMode = localStorage.getItem('aiMode')
     if (savedMode) aiSettingsMode.value = savedMode
 
+    setupUpdateListeners()
+
     const raw = localStorage.getItem(SERVER_SETTINGS_KEY)
     if (raw) {
         const s = JSON.parse(raw)
         serverIP.value = s.serverIP || s.lanServerIP || '127.0.0.1'
         serverPort.value = s.serverPort || s.lanServerPort || '3000'
         enablePinyinSearch.value = s.enablePinyinSearch || false
+    }
+
+    const primaryRaw = localStorage.getItem('primaryServer')
+    if (primaryRaw) {
+        try {
+            const p = JSON.parse(primaryRaw)
+            primaryServerUrl.value = p.url || ''
+        } catch {}
     }
 
     const savedDir = localStorage.getItem(getDownloadDirKey())
@@ -1103,6 +1165,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (window.electronAPI?.removeDebugListeners) { window.electronAPI.removeDebugListeners() }
+  removeUpdateListeners()
 })
 watch(activeNav, (val) => {
   if (val === 'debug') loadDebugFiles()
@@ -1152,6 +1215,8 @@ const handleShowOnlineStatusChange = (value) => {
     settingsStore.setShowOnlineStatus(value)
 }
 
+const PRIMARY_SERVER_KEY = 'primaryServer'
+
 const saveServerSettings = async () => {
     const settings = {
         serverIP: serverIP.value,
@@ -1163,6 +1228,15 @@ const saveServerSettings = async () => {
     const url = `http://${serverIP.value}:${serverPort.value}`
     if (window.electronAPI?.setApiBaseUrl) {
         await window.electronAPI.setApiBaseUrl(url)
+    }
+}
+
+const savePrimaryServerSetting = () => {
+    if (primaryServerUrl.value) {
+        localStorage.setItem(PRIMARY_SERVER_KEY, JSON.stringify({ url: primaryServerUrl.value }))
+        ElMessage.success('主服务器地址已保存')
+    } else {
+        localStorage.removeItem(PRIMARY_SERVER_KEY)
     }
 }
 
@@ -1205,67 +1279,83 @@ const handleReportIssue = () => {
     handleOpenLink('https://github.com/12yierye/Electronic-Client/issues')
 }
 
-const handleCheckUpdate = async () => {
-    checkingUpdate.value = true
+// ===== 自动更新逻辑 =====
+
+// 监听更新状态事件
+function setupUpdateListeners() {
+  window.electronAPI?.onUpdateStatus((data) => {
+    switch (data.status) {
+      case 'checking':
+        updateStatus.value = 'checking'
+        checkingUpdate.value = true
+        updateMessage.value = t('settings.checking')
+        updateMessageType.value = 'info'
+        break
+      case 'update-available':
+        updateStatus.value = 'available'
+        checkingUpdate.value = false
+        updateVersion.value = data.version
+        updateMessage.value = t('settings.updateFound') + ': v' + data.version
+        updateMessageType.value = 'info'
+        break
+      case 'update-not-available':
+        updateStatus.value = 'idle'
+        checkingUpdate.value = false
+        updateMessage.value = t('settings.alreadyLatest') + ' (v' + appVersion + ')'
+        updateMessageType.value = 'success'
+        break
+      case 'downloading':
+        updateStatus.value = 'downloading'
+        updateMessage.value = t('settings.downloading')
+        updateMessageType.value = 'info'
+        break
+      case 'update-downloaded':
+        updateStatus.value = 'downloaded'
+        canInstall.value = true
+        updateMessage.value = t('settings.downloadComplete')
+        updateMessageType.value = 'success'
+        break
+      case 'error':
+        updateStatus.value = 'error'
+        checkingUpdate.value = false
+        updateProgress.value = 0
+        updateMessage.value = data.message || t('settings.updateFailed')
+        updateMessageType.value = 'error'
+        break
+    }
+  })
+
+  window.electronAPI?.onUpdateProgress((data) => {
+    updateProgress.value = data.percent
+    updateSpeed.value = data.speed + ' MB/s'
+  })
+}
+
+function removeUpdateListeners() {
+  window.electronAPI?.removeUpdateListeners()
+}
+
+// 检查更新
+const handleCheckUpdate = () => {
     updateMessage.value = ''
     updateMessageType.value = ''
-
-    try {
-        const res = await fetch('https://api.github.com/repos/12yierye/Electronic-Client/releases/latest')
-
-        if (res.status === 404) {
-            updateMessage.value = t('settings.noReleases')
-            updateMessageType.value = 'error'
-            return
-        }
-
-        if (res.status === 403 || res.status === 429) {
-            updateMessage.value = t('settings.updateFailed')
-            updateMessageType.value = 'error'
-            return
-        }
-
-        if (!res.ok) throw new Error('GitHub API error')
-
-        const data = await res.json()
-
-        if (!data || !data.tag_name) {
-            updateMessage.value = t('settings.updateFailed')
-            updateMessageType.value = 'error'
-            return
-        }
-
-        const latestVersion = data.tag_name.replace(/^v/, '')
-        const current = appVersion
-
-        const compareVersions = (a, b) => {
-            const pa = a.split('.').map(Number)
-            const pb = b.split('.').map(Number)
-            for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-                const va = pa[i] || 0
-                const vb = pb[i] || 0
-                if (va > vb) return 1
-                if (va < vb) return -1
-            }
-            return 0
-        }
-
-        const cmp = compareVersions(latestVersion, current)
-
-        if (cmp <= 0) {
-            updateMessage.value = t('settings.alreadyLatest') + ' (v' + current + ')'
-            updateMessageType.value = 'success'
-        } else {
-            updateMessage.value = t('settings.updateFound') + ': v' + latestVersion
-            updateMessageType.value = 'info'
-        }
-    } catch {
-        updateMessage.value = t('settings.updateFailed')
-        updateMessageType.value = 'error'
-    } finally {
-        checkingUpdate.value = false
-    }
+    updateVersion.value = ''
+    updateProgress.value = 0
+    updateSpeed.value = ''
+    canInstall.value = false
+    window.electronAPI?.checkForUpdate(false)
 }
+
+// 下载更新
+const handleDownloadUpdate = () => {
+    window.electronAPI?.downloadUpdate()
+}
+
+// 安装更新
+const handleInstallUpdate = () => {
+    window.electronAPI?.installUpdate()
+}
+
 </script>
 
 <style lang="scss" scoped>
@@ -1483,6 +1573,25 @@ const handleCheckUpdate = async () => {
 
                     .update-actions {
                         margin-top: 20px;
+                        display: flex;
+                        gap: 12px;
+                        flex-wrap: wrap;
+                    }
+
+                    .update-progress-section {
+                        margin-top: 16px;
+
+                        .el-progress {
+                            max-width: 400px;
+                        }
+
+                        .update-speed {
+                            margin-top: 6px;
+                            font-size: 12px;
+                            color: var(--text-secondary);
+                            text-align: right;
+                            max-width: 400px;
+                        }
                     }
 
                     .update-message {

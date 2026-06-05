@@ -211,6 +211,10 @@ const messages = {
       cannotExecute: '抱歉，我无法执行该操作：{functionName}'
     },
     chatRoom: {
+      conversations: '会话',
+      contacts: '联系人',
+      noConversations: '暂无会话',
+      noContacts: '暂无联系人',
       public: '公网',
       lan: '内网',
       friends: '好友',
@@ -496,6 +500,10 @@ const messages = {
       cannotExecute: 'Sorry, I cannot execute this operation: {functionName}'
     },
     chatRoom: {
+      conversations: 'Conversations',
+      contacts: 'Contacts',
+      noConversations: 'No conversations',
+      noContacts: 'No contacts',
       public: 'Public',
       lan: 'LAN',
       friends: 'Friends',
@@ -781,6 +789,10 @@ const messages = {
       cannotExecute: '申し訳ありません、この操作を実行できません：{functionName}'
     },
     chatRoom: {
+      conversations: '会話',
+      contacts: '連絡先',
+      noConversations: '会話がありません',
+      noContacts: '連絡先がありません',
       public: 'パブリック',
       lan: 'LAN',
       friends: '友達',

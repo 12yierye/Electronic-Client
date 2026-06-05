@@ -2,7 +2,6 @@ import { app } from 'electron'
 
 // 服务端 API 地址（运行时可变）
 let apiBase = process.env.API_URL || 'http://127.0.0.1:3000'
-// 同步到 global 保证跨模块共享
 global.__apiBase = apiBase
 
 export const getAPIBase = () => global.__apiBase || apiBase
@@ -14,6 +13,24 @@ export const setAPIBase = (url) => {
         console.log('[Config] API Base updated:', apiBase)
     }
 }
+
+// 公网服务器 URL（认证源，与 apiBase 可不同）
+let publicServerUrl = ''
+export const getPublicServerUrl = () => publicServerUrl || getAPIBase()
+export const setPublicServerUrl = (url) => { if (url) publicServerUrl = url }
+
+// LAN 服务器 URL（可选）
+let lanServerUrl = ''
+export const getLanServerUrl = () => lanServerUrl
+export const setLanServerUrl = (url) => { lanServerUrl = url }
+
+// 用户认证信息
+let authToken = ''
+let userId = ''
+export const getAuthToken = () => authToken
+export const setAuthToken = (token) => { authToken = token }
+export const getUserId = () => userId
+export const setUserId = (id) => { userId = id }
 
 export const DOC_SERVER = process.env.DOC_SERVER || 'http://120.24.26.164'
 export const SCHEDULED_TASKS_FILE = app.getPath('userData') + '/scheduled-tasks.json'

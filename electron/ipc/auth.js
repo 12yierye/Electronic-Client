@@ -1,6 +1,6 @@
 import { app, ipcMain } from 'electron'
 import axios from 'axios'
-import { getAPIBase, setAPIBase, mainWindow, setMainWindow } from '../config.js'
+import { getAPIBase, setAPIBase, getPublicServerUrl, getAuthToken, setAuthToken, getUserId, setUserId, getLanServerUrl, mainWindow, setMainWindow } from '../config.js'
 import { validateLogin, validateRegister } from '../services/serverApi.js'
 import { createWindow } from '../window.js'
 import { disconnectWebSocket } from '../services/websocket.js'
@@ -14,18 +14,45 @@ export function registerAuthIpc() {
     ipcMain.handle('login', async (event, username, password) => {
         const result = await validateLogin(username, password)
         if (result.success && result.user) {
-            global.userInfo = { username: result.user.username, email: result.user.email || '', role: result.user.role || '', avatar: result.user.avatar || '' }
+            global.userInfo = {
+                userId: result.user.id || result.user.userId || '',
+                username: result.user.username,
+                email: result.user.email || '',
+                role: result.user.role || '',
+                avatar: result.user.avatar || ''
+            }
+            // 保存 token 和 userId
+            if (result.token) setAuthToken(result.token)
+            if (result.user.id || result.user.userId) setUserId(result.user.id || result.user.userId)
         }
         return result
     })
 
-    ipcMain.handle('register', async (event, userData) => {
-        return await validateRegister(userData)
+    ipcMain.handle('register', async (event, userData, primaryServerUrl) => {
+        return await validateRegister(userData, primaryServerUrl)
+    })
+
+    // 获取当前认证 token
+    ipcMain.handle('get-auth-token', () => {
+        return { success: true, token: getAuthToken(), userId: getUserId() }
+    })
+
+    // 向 LAN 服务器验证 token（LAN 服务器调用公网验证接口）
+    ipcMain.handle('verify-lan-token', async (event, lanServerUrl, token) => {
+        try {
+            const publicUrl = getPublicServerUrl()
+            const response = await axios.post(`${publicUrl}/auth/verify-token`, { token })
+            return response.data
+        } catch (error) {
+            return { success: false, message: error.message }
+        }
     })
 
     ipcMain.handle('user-logout', async () => {
         disconnectWebSocket()
         global.userInfo = null
+        setAuthToken('')
+        setUserId('')
         if (mainWindow) {
             mainWindow.once('closed', () => {
                 setMainWindow(null)
@@ -50,6 +77,8 @@ export function registerAuthIpc() {
             createWindow()
         }
         global.userInfo = null
+        setAuthToken('')
+        setUserId('')
     })
 
     ipcMain.on('exit-app', () => {
