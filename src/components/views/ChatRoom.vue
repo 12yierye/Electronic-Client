@@ -74,7 +74,7 @@
             <div
               v-for="contact in sortedContacts"
               :key="contact.key"
-              :class="['user-item', { active: selectedUser?.username === contact.username }]"
+              :class="['user-item', { active: selectedUser?.username === contact.username && selectedUser?.serverOrigin === contact.serverOrigin }]"
               @click="selectUser(contact)"
             >
               <el-badge :is-dot="getUserDND(contact.username)" :value="getUserDND(contact.username) ? '' : (getServerUnread(contact.serverOrigin, 'user')[contact.username] || 0)" :hidden="(getServerUnread(contact.serverOrigin, 'user')[contact.username] || 0) === 0">
@@ -516,7 +516,7 @@ const sortedConversations = computed(() => {
   for (const c of allContacts.value) {
     const unreadStore = getServerUnread(c.serverOrigin, 'user')
     const unread = unreadStore[c.username] || 0
-    const lastMsg = sharedLastMsgMap.value['user:' + c.username]
+    const lastMsg = sharedLastMsgMap.value['user:' + c.serverOrigin + ':' + c.username]
     items.push({
       key: 'conv_user_' + c.serverOrigin + '_' + c.username,
       name: c.name,
@@ -534,7 +534,7 @@ const sortedConversations = computed(() => {
   for (const g of allGroups.value) {
     const unreadStore = getServerUnread(g.serverOrigin, 'group')
     const unread = unreadStore[g.id] || 0
-    const lastMsg = sharedLastMsgMap.value['group:' + g.id]
+    const lastMsg = sharedLastMsgMap.value['group:' + g.serverOrigin + ':' + g.id]
     items.push({
       key: 'conv_group_' + g.serverOrigin + '_' + g.id,
       name: g.name,
@@ -563,8 +563,8 @@ const sortedContacts = computed(() => {
     const aDND = getUserDND(a.username)
     const bDND = getUserDND(b.username)
     if (aDND !== bDND) return aDND ? 1 : -1
-    const aLast = sharedLastMsgMap.value['user:' + a.username]
-    const bLast = sharedLastMsgMap.value['user:' + b.username]
+    const aLast = sharedLastMsgMap.value['user:' + a.serverOrigin + ':' + a.username]
+    const bLast = sharedLastMsgMap.value['user:' + b.serverOrigin + ':' + b.username]
     const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
     const bTime = bLast?.time ? new Date(bLast.time).getTime() : 0
     return bTime - aTime
@@ -578,8 +578,8 @@ const sortedGroups = computed(() => {
     const aDND = getGroupDND(a.id)
     const bDND = getGroupDND(b.id)
     if (aDND !== bDND) return aDND ? 1 : -1
-    const aLast = sharedLastMsgMap.value['group:' + a.id]
-    const bLast = sharedLastMsgMap.value['group:' + b.id]
+    const aLast = sharedLastMsgMap.value['group:' + a.serverOrigin + ':' + a.id]
+    const bLast = sharedLastMsgMap.value['group:' + b.serverOrigin + ':' + b.id]
     const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
     const bTime = bLast?.time ? new Date(bLast.time).getTime() : 0
     return bTime - aTime
@@ -588,8 +588,8 @@ const sortedGroups = computed(() => {
 
 // 判断会话是否活跃
 const isConversationActive = (item) => {
-  if (item.type === 'user') return selectedUser.value?.username === item.username
-  if (item.type === 'group') return selectedGroup.value?.id === item.id
+  if (item.type === 'user') return selectedUser.value?.username === item.username && selectedUser.value?.serverOrigin === item.serverOrigin
+  if (item.type === 'group') return selectedGroup.value?.id === item.id && selectedGroup.value?.serverOrigin === item.serverOrigin
   return false
 }
 

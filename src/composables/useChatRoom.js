@@ -71,8 +71,12 @@ function saveReadPoints(username, points) {
   localStorage.setItem(readPointsKey(username), JSON.stringify(points))
 }
 
-const userConvKey = (target) => 'user:' + target
-const groupConvKey = (groupId) => 'group:' + groupId
+const userConvKey = (target, origin = 'public') => {
+  return origin === 'public' ? 'user:' + target : 'user:' + origin + ':' + target
+}
+const groupConvKey = (groupId, origin = 'public') => {
+  return origin === 'public' ? 'group:' + groupId : 'group:' + origin + ':' + groupId
+}
 
 function compareIds(a, b) {
   const na = Number(a), nb = Number(b)
@@ -309,6 +313,7 @@ export function useChatRoom() {
     const origin = user.serverOrigin || 'public'
     selectedUser.value = { ...user, serverOrigin: origin }
     selectedGroup.value = null
+    chatMessages.value = []
     const unreadStore = origin === 'lan' ? _lanUserUnread : _pubUserUnread
     if (user?.username) {
       unreadStore.value = { ...unreadStore.value, [user.username]: 0 }
@@ -324,7 +329,7 @@ export function useChatRoom() {
     if (user?.username) {
       const lastId = getLastRealMsgId()
       if (lastId) {
-        const ck = userConvKey(user.username)
+        const ck = userConvKey(user.username, origin)
         readPoints.value = { ...readPoints.value, [ck]: lastId }
         saveReadPoints(currentUsername.value, readPoints.value)
       }
@@ -360,7 +365,7 @@ export function useChatRoom() {
         chatMessages.value = newMessages
       }
       loadUsersAvatars(newMessages.map(m => m.from))
-      updateLastMsgFromMessages(newMessages, target)
+      updateLastMsgFromMessages(newMessages, target, 'public')
       // 消息已读，缓存到本地
       saveMessagesToCache(currentUsername.value, 'pub_user', target, newMessages)
       // 标记消息 ID 为已读（去重依据）
@@ -397,7 +402,7 @@ export function useChatRoom() {
           chatMessages.value = newMessages
         }
         loadUsersAvatars(newMessages.map(m => m.from))
-        updateLastMsgFromMessages(newMessages, target)
+        updateLastMsgFromMessages(newMessages, target, 'lan')
         saveMessagesToCache(currentUsername.value, 'lan_user', target, newMessages)
         markLoadedAsSeen(newMessages)
       }
@@ -443,7 +448,7 @@ export function useChatRoom() {
           // 更新最后消息
           sharedLastMsgMap.value = {
             ...sharedLastMsgMap.value,
-            ['user:' + selectedUser.value.username]: { message, time: new Date().toISOString(), from: currentUsername.value }
+            ['user:lan:' + selectedUser.value.username]: { message, time: new Date().toISOString(), from: currentUsername.value }
           }
         } else {
           updateMessageStatus(tempId, false)
@@ -491,7 +496,7 @@ export function useChatRoom() {
           // 更新最后消息
           sharedLastMsgMap.value = {
             ...sharedLastMsgMap.value,
-            ['user:' + selectedUser.value.username]: { message, time: new Date().toISOString(), from: currentUsername.value }
+            ['user:public:' + selectedUser.value.username]: { message, time: new Date().toISOString(), from: currentUsername.value }
           }
         } else {
           updateMessageStatus(tempId, false)
@@ -691,7 +696,7 @@ export function useChatRoom() {
     if (!username || !groupId) return
     const lastId = getLastRealMsgId()
     if (lastId) {
-      const ck = groupConvKey(groupId)
+      const ck = groupConvKey(groupId, origin)
       readPoints.value = { ...readPoints.value, [ck]: lastId }
       saveReadPoints(username, readPoints.value)
     }
@@ -709,7 +714,7 @@ export function useChatRoom() {
     if (!username || !targetUsername) return
     const lastId = getLastRealMsgId()
     if (lastId) {
-      const ck = userConvKey(targetUsername)
+      const ck = userConvKey(targetUsername, origin)
       readPoints.value = { ...readPoints.value, [ck]: lastId }
       saveReadPoints(username, readPoints.value)
     }
@@ -744,6 +749,7 @@ export function useChatRoom() {
     const origin = group.serverOrigin || group.networkType || 'public'
     selectedGroup.value = { ...group, serverOrigin: origin }
     selectedUser.value = null
+    chatMessages.value = []
     const unreadStore = origin === 'lan' ? _lanGroupUnread : _pubGroupUnread
     if (group?.id) {
       unreadStore.value = { ...unreadStore.value, [group.id]: 0 }
@@ -758,7 +764,7 @@ export function useChatRoom() {
     if (group?.id) {
       const lastId = getLastRealMsgId()
       if (lastId) {
-        const ck = groupConvKey(group.id)
+        const ck = groupConvKey(group.id, origin)
         readPoints.value = { ...readPoints.value, [ck]: lastId }
         saveReadPoints(currentUsername.value, readPoints.value)
       }
@@ -810,7 +816,7 @@ export function useChatRoom() {
         chatMessages.value = newMessages
       }
       loadUsersAvatars(newMessages.map(m => m.from))
-      updateGroupLastMsgFromMessages(newMessages, selectedGroup.value.id)
+      updateGroupLastMsgFromMessages(newMessages, selectedGroup.value.id, origin)
       saveMessagesToCache(currentUsername.value, cacheType, String(groupId), newMessages)
       markLoadedAsSeen(newMessages)
     }
@@ -856,7 +862,7 @@ export function useChatRoom() {
           data = await response.json()
           if (data.success) {
             updateMessageStatus(tempId, true, data.data?.id)
-            sharedLastMsgMap.value = { ...sharedLastMsgMap.value, ['group:' + groupId]: { message, time: new Date().toISOString(), from: currentUsername.value } }
+            sharedLastMsgMap.value = { ...sharedLastMsgMap.value, ['group:lan:' + groupId]: { message, time: new Date().toISOString(), from: currentUsername.value } }
           }
           else updateMessageStatus(tempId, false)
         }
@@ -872,7 +878,7 @@ export function useChatRoom() {
           resolved = true
           if (result.success) {
             updateMessageStatus(tempId, true, result.data?.id)
-            sharedLastMsgMap.value = { ...sharedLastMsgMap.value, ['group:' + groupId]: { message, time: new Date().toISOString(), from: currentUsername.value } }
+            sharedLastMsgMap.value = { ...sharedLastMsgMap.value, ['group:public:' + groupId]: { message, time: new Date().toISOString(), from: currentUsername.value } }
           }
           else updateMessageStatus(tempId, false)
         }
@@ -1087,7 +1093,7 @@ export function useChatRoom() {
         for (const friend of lanFriendsList.value) {
           const target = friend.username
           if (selectedUser.value && selectedUser.value.username === target && selectedUser.value.serverOrigin === 'lan') continue
-          const ck = userConvKey(target)
+          const ck = userConvKey(target, 'lan')
           const lastId = readPoints.value[ck] || '0'
           try {
             const response = await fetch(
@@ -1107,7 +1113,7 @@ export function useChatRoom() {
         for (const group of lanGroupsList.value) {
           const gid = group.id
           if (selectedGroup.value && String(selectedGroup.value.id) === String(gid) && selectedGroup.value.serverOrigin === 'lan') continue
-          const ck = groupConvKey(gid)
+          const ck = groupConvKey(gid, 'lan')
           const lastId = readPoints.value[ck] || '0'
           try {
             const response = await fetch(
@@ -1218,8 +1224,8 @@ export function useChatRoom() {
         const lastId = getLastRealMsgId()
         if (lastId) {
           let ck
-          if (selectedGroup.value) ck = groupConvKey(selectedGroup.value.id)
-          else if (selectedUser.value) ck = userConvKey(selectedUser.value.username)
+          if (selectedGroup.value) ck = groupConvKey(selectedGroup.value.id, selectedGroup.value.serverOrigin)
+          else if (selectedUser.value) ck = userConvKey(selectedUser.value.username, selectedUser.value.serverOrigin)
           if (ck) {
             readPoints.value = { ...readPoints.value, [ck]: lastId }
             saveReadPoints(currentUsername.value, readPoints.value)
@@ -1262,7 +1268,7 @@ export function useChatRoom() {
     if (msgId && isMessageSeen(username, msgId)) return
 
     // 如果正在查看该用户的聊天，不增加未读
-    if (selectedUser.value && selectedUser.value.username === sender) return
+    if (selectedUser.value && selectedUser.value.username === sender && selectedUser.value.serverOrigin === 'public') return
 
     // WebSocket 消息总是公网来源，写入公网存储
     const current = _pubUserUnread.value[sender] || 0
@@ -1272,7 +1278,7 @@ export function useChatRoom() {
     const msg = data.message || {}
     sharedLastMsgMap.value = {
       ...sharedLastMsgMap.value,
-      ['user:' + sender]: { message: msg.message || '', time: msg.timestamp || Date.now(), from: sender }
+      ['user:public:' + sender]: { message: msg.message || '', time: msg.timestamp || Date.now(), from: sender }
     }
 
     scheduleBatchFlush()
@@ -1303,7 +1309,7 @@ export function useChatRoom() {
     const msg = data.message || {}
     sharedLastMsgMap.value = {
       ...sharedLastMsgMap.value,
-      ['group:' + groupId]: { message: msg.message || '', time: msg.timestamp || Date.now(), from: msgFrom }
+      ['group:public:' + groupId]: { message: msg.message || '', time: msg.timestamp || Date.now(), from: msgFrom }
     }
 
     scheduleBatchFlush()
@@ -1341,10 +1347,10 @@ export function useChatRoom() {
   }
 
   // 从消息列表更新最后消息时间
-  const updateLastMsgFromMessages = (msgs, targetUser) => {
+  const updateLastMsgFromMessages = (msgs, targetUser, origin = 'public') => {
     if (!msgs.length || !targetUser) return
     const last = msgs[msgs.length - 1]
-    const key = 'user:' + targetUser
+    const key = 'user:' + origin + ':' + targetUser
     const existing = sharedLastMsgMap.value[key]
     const newTime = new Date(last.timestamp || Date.now()).getTime()
     const oldTime = existing?.time ? new Date(existing.time).getTime() : 0
@@ -1357,10 +1363,10 @@ export function useChatRoom() {
   }
 
   // 从群消息列表更新最后消息时间
-  const updateGroupLastMsgFromMessages = (msgs, groupId) => {
+  const updateGroupLastMsgFromMessages = (msgs, groupId, origin = 'public') => {
     if (!msgs.length || !groupId) return
     const last = msgs[msgs.length - 1]
-    const key = 'group:' + groupId
+    const key = 'group:' + origin + ':' + groupId
     const existing = sharedLastMsgMap.value[key]
     const newTime = new Date(last.timestamp || Date.now()).getTime()
     const oldTime = existing?.time ? new Date(existing.time).getTime() : 0

@@ -72,16 +72,19 @@ export function connectWebSocket(username) {
   console.log('[WS] Connecting to:', wsUrl)
 
   try {
-    ws = new WebSocket(wsUrl)
+    const socket = new WebSocket(wsUrl)
+    ws = socket
 
-    ws.on('open', () => {
+    socket.on('open', () => {
+      if (ws !== socket) return
       console.log('[WS] Connected')
       loadOfflineQueue()
-      ws.send(JSON.stringify({ type: 'auth', username }))
+      socket.send(JSON.stringify({ type: 'auth', username }))
       flushOfflineQueue()
     })
 
-    ws.on('message', (data) => {
+    socket.on('message', (data) => {
+      if (ws !== socket) return
       try {
         const msg = JSON.parse(data.toString())
         handleWsMessage(msg)
@@ -90,13 +93,14 @@ export function connectWebSocket(username) {
       }
     })
 
-    ws.on('close', () => {
+    socket.on('close', () => {
+      if (ws !== socket) return
       console.log('[WS] Disconnected')
       ws = null
       scheduleReconnect()
     })
 
-    ws.on('error', (err) => {
+    socket.on('error', (err) => {
       console.error('[WS] Error:', err.message || err)
     })
   } catch (e) {
