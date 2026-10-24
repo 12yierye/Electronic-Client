@@ -1,15 +1,16 @@
 import pkg from 'electron-updater'
 const { autoUpdater } = pkg
-import axios from 'axios'
 import fs from 'node:fs'
 import { join } from 'node:path'
-import { app, shell } from 'electron'
+import { app, shell, net } from 'electron'
 import { getMainWindow } from '../config.js'
 
 const REPO = '12yierye/Electronic-Client'
 const RELEASE_PAGE = `https://github.com/${REPO}/releases/latest`
 const CACHE_TTL = 10 * 60 * 1000
-const API_TIMEOUT = 15000
+const API_TIMEOUT = 10 * 1000
+const MAX_ATTEMPTS = 3
+const RETRY_DELAY = 1500
 
 // 关闭自动下载，让用户点击后再下载
 autoUpdater.autoDownload = false
@@ -62,14 +63,70 @@ function compareVersions(a, b) {
 }
 
 function describeError(error) {
-    const status = error?.response?.status
+    const status = error?.status || error?.response?.status
     if (status === 404) return '仓库暂无发布版本'
     if (status === 403 || status === 429) return 'GitHub 接口访问受限，请稍后重试'
     const code = error?.code
-    if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return '无法解析 GitHub 域名，请检查网络或代理'
-    if (code === 'ETIMEDOUT' || code === 'ECONNABORTED') return '连接 GitHub 超时，请检查网络或代理'
-    if (code === 'ECONNRESET' || code === 'ECONNREFUSED') return '连接 GitHub 失败，请检查网络或代理'
+    if (code === 'ENOTFOUND' || code === 'ERR_NAME_NOT_RESOLVED' || code === 'EAI_AGAIN') {
+        return '无法解析 GitHub 域名，请检查网络或代理'
+    }
+    if (code === 'ETIMEDOUT' || code === 'ECONNABORTED' || code === 'ERR_CONNECTION_TIMED_OUT') {
+        return '连接 GitHub 超时，请检查网络或代理'
+    }
+    if (code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'ERR_CONNECTION_RESET' || code === 'ERR_CONNECTION_REFUSED') {
+        return '连接 GitHub 失败，请检查网络或代理'
+    }
+    if (String(code || '').startsWith('ERR_CERT')) {
+        return '证书校验失败，请检查安全软件或代理的 HTTPS 拦截'
+    }
+    if (code === 'ERR_INTERNET_DISCONNECTED' || code === 'ERR_NETWORK_CHANGED') {
+        return '网络未连接，请检查网络'
+    }
     return error?.message || '检查更新失败'
+}
+
+// 走 Electron 的网络栈，复用系统证书库与系统代理，避免 Node CA 校验失败
+function requestJson(url) {
+    return new Promise((resolve, reject) => {
+        const request = net.request({ method: 'GET', url, redirect: 'follow' })
+
+        let settled = false
+        const finish = (fn, value) => {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            fn(value)
+        }
+
+        const timer = setTimeout(() => {
+            request.abort()
+            finish(reject, Object.assign(new Error('连接 GitHub 超时'), { code: 'ETIMEDOUT' }))
+        }, API_TIMEOUT)
+
+        request.setHeader('User-Agent', 'Electronic-Client')
+        request.setHeader('Accept', 'application/vnd.github+json')
+        const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN
+        if (token) request.setHeader('Authorization', `Bearer ${token}`)
+
+        request.on('response', (response) => {
+            let body = ''
+            response.on('data', (chunk) => { body += chunk.toString() })
+            response.on('error', (error) => finish(reject, error))
+            response.on('end', () => {
+                const status = response.statusCode
+                if (status < 200 || status >= 300) {
+                    return finish(reject, Object.assign(new Error(`HTTP ${status}`), { status }))
+                }
+                try {
+                    finish(resolve, JSON.parse(body))
+                } catch {
+                    finish(reject, new Error('GitHub 返回数据解析失败'))
+                }
+            })
+        })
+        request.on('error', (error) => finish(reject, error))
+        request.end()
+    })
 }
 
 // 直接查 GitHub Releases，开发模式也能用，不受 app-update.yml 限制
@@ -79,28 +136,27 @@ async function fetchLatestRelease(force = false) {
         return cache.release
     }
 
-    const headers = {
-        'User-Agent': 'Electronic-Client',
-        Accept: 'application/vnd.github+json'
+    let lastError = null
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+            const data = await requestJson(`https://api.github.com/repos/${REPO}/releases/latest`)
+            const release = {
+                version: normalizeVersion(data?.tag_name || data?.name || ''),
+                url: data?.html_url || RELEASE_PAGE,
+                notes: data?.body || '',
+                publishedAt: data?.published_at || ''
+            }
+            if (!release.version) throw new Error('发布信息缺少版本号')
+
+            writeCache({ checkedAt: Date.now(), release })
+            return release
+        } catch (error) {
+            lastError = error
+            console.warn(`[AutoUpdater] 获取发布信息失败（${attempt}/${MAX_ATTEMPTS}）:`, describeError(error))
+            if (attempt < MAX_ATTEMPTS) await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
+        }
     }
-    const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN
-    if (token) headers.Authorization = `Bearer ${token}`
-
-    const response = await axios.get(`https://api.github.com/repos/${REPO}/releases/latest`, {
-        timeout: API_TIMEOUT,
-        headers
-    })
-
-    const release = {
-        version: normalizeVersion(response.data?.tag_name || response.data?.name || ''),
-        url: response.data?.html_url || RELEASE_PAGE,
-        notes: response.data?.body || '',
-        publishedAt: response.data?.published_at || ''
-    }
-    if (!release.version) throw new Error('发布信息缺少版本号')
-
-    writeCache({ checkedAt: Date.now(), release })
-    return release
+    throw lastError
 }
 
 autoUpdater.on('update-available', (info) => {
@@ -165,7 +221,7 @@ autoUpdater.on('error', (err) => {
 export async function checkForUpdates(silent = false, force = false) {
     if (checking) return { success: false, message: '正在检查中' }
     checking = true
-    isSilentCheck = silent
+    isSilentCheck = true
 
     const currentVersion = app.getVersion()
     if (!silent) {
@@ -178,7 +234,6 @@ export async function checkForUpdates(silent = false, force = false) {
         release = await fetchLatestRelease(force)
     } catch (error) {
         apiError = error
-        console.warn('[AutoUpdater] GitHub API check failed:', describeError(error))
     }
 
     if (release) {
@@ -223,11 +278,8 @@ export async function checkForUpdates(silent = false, force = false) {
     }
 
     const message = apiError ? describeError(apiError) : '检查更新失败'
-    if (!silent) {
-        sendToRenderer('update:status', { status: 'error', message })
-    } else {
-        console.warn('[AutoUpdater] Silent check failed:', message)
-    }
+    // 连续失败 3 次后不向界面推送任何提示，仅记录日志
+    console.warn('[AutoUpdater] 检查更新失败，已静默处理:', message)
     checking = false
     isSilentCheck = false
     return { success: false, message }

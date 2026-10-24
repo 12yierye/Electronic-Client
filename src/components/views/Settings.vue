@@ -1445,14 +1445,19 @@ function removeUpdateListeners() {
 }
 
 // 检查更新
-const handleCheckUpdate = () => {
+const handleCheckUpdate = async () => {
     updateMessage.value = ''
     updateMessageType.value = ''
     updateVersion.value = ''
     updateProgress.value = 0
     updateSpeed.value = ''
     canInstall.value = false
-    window.electronAPI?.checkForUpdate(false, true)
+    const result = await window.electronAPI?.checkForUpdate(false, true)
+    // 检查失败时静默复位，不显示任何提示
+    if (result && !result.success) {
+        updateStatus.value = 'idle'
+        checkingUpdate.value = false
+    }
 }
 
 // 下载更新
