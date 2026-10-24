@@ -32,6 +32,29 @@ function cachePath() {
     return join(app.getPath('userData'), 'update-check.json')
 }
 
+function prefsPath() {
+    return join(app.getPath('userData'), 'update-prefs.json')
+}
+
+// 自动检查默认关闭，仅在设置中手动开启后生效
+export function isAutoCheckEnabled() {
+    try {
+        const prefs = JSON.parse(fs.readFileSync(prefsPath(), 'utf-8'))
+        return prefs?.autoCheck === true
+    } catch {
+        return false
+    }
+}
+
+export function setAutoCheckEnabled(enabled) {
+    try {
+        fs.writeFileSync(prefsPath(), JSON.stringify({ autoCheck: !!enabled }))
+    } catch (error) {
+        console.warn('[AutoUpdater] 保存自动检查设置失败:', error.message)
+    }
+    return !!enabled
+}
+
 function readCache() {
     try {
         return JSON.parse(fs.readFileSync(cachePath(), 'utf-8'))

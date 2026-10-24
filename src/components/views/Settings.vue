@@ -423,6 +423,13 @@
               <span class="about-label">{{ t('settings.currentVersion') }}</span>
               <span class="about-value">v{{ appVersion }}</span>
             </div>
+            <div class="about-row">
+              <span class="about-label">
+                {{ t('settings.autoCheckUpdate') }}
+                <SettingTip inline>{{ t('settings.autoCheckUpdateTip') }}</SettingTip>
+              </span>
+              <el-switch v-model="autoCheckUpdate" @change="handleAutoCheckUpdateChange" />
+            </div>
             <div class="update-actions">
               <template v-if="updateStatus === 'idle' || updateStatus === 'error' || updateStatus === 'checking'">
                 <el-button type="primary" @click="handleCheckUpdate" :loading="updateStatus === 'checking'">
@@ -605,6 +612,7 @@ const updateProgress = ref(0)
 const updateSpeed = ref('')
 const updateStatus = ref('idle') // idle | checking | available | downloading | downloaded | error
 const canInstall = ref(false)
+const autoCheckUpdate = ref(false)
 
 // 调试中心
 const debugSlideCount = ref(10)
@@ -1172,6 +1180,7 @@ onMounted(() => {
     useSystemBrowser.value = settingsStore.useSystemBrowser
     if (window.electronAPI?.getUseSystemBrowser) { window.electronAPI.getUseSystemBrowser().then(r => { if (r.success) useSystemBrowser.value = r.value }) }
     if (window.electronAPI?.setUseSystemBrowser) { window.electronAPI.setUseSystemBrowser(useSystemBrowser.value) }
+    window.electronAPI?.getAutoCheckUpdate?.().then(r => { if (r?.success) autoCheckUpdate.value = r.value })
     sendKey.value = settingsStore.sendKey || 'Enter'
     uiDensity.value = settingsStore.uiDensity || 'compact'
     navFlashIntensity.value = settingsStore.navFlashIntensity || 'medium'
@@ -1442,6 +1451,11 @@ function setupUpdateListeners() {
 
 function removeUpdateListeners() {
   window.electronAPI?.removeUpdateListeners()
+}
+
+// 自动检查更新开关
+const handleAutoCheckUpdateChange = async (value) => {
+    await window.electronAPI?.setAutoCheckUpdate(value)
 }
 
 // 检查更新

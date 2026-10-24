@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { checkForUpdates, downloadUpdate, installUpdate } from '../services/autoUpdater.js'
+import { checkForUpdates, downloadUpdate, installUpdate, isAutoCheckEnabled, setAutoCheckEnabled } from '../services/autoUpdater.js'
 
 export function registerUpdateIpc() {
     ipcMain.handle('update:check', async (event, silent = false, force = false) => {
@@ -14,5 +14,13 @@ export function registerUpdateIpc() {
     ipcMain.handle('update:install', async () => {
         installUpdate()
         return { success: true }
+    })
+
+    ipcMain.handle('update:get-auto-check', async () => {
+        return { success: true, value: isAutoCheckEnabled() }
+    })
+
+    ipcMain.handle('update:set-auto-check', async (event, enabled) => {
+        return { success: true, value: setAutoCheckEnabled(enabled) }
     })
 }

@@ -13,7 +13,7 @@ import { registerBroadcastIpc } from './ipc/broadcast.js'
 import { registerAgentIpc } from './ipc/agent.js'
 import { registerSettingsIpc } from './ipc/settings.js'
 import { registerUpdateIpc } from './ipc/update.js'
-import { checkForUpdates } from './services/autoUpdater.js'
+import { checkForUpdates, isAutoCheckEnabled } from './services/autoUpdater.js'
 import { clearAllScheduledTasks, saveScheduledTasks, restoreScheduledTasks } from './services/scheduledTasks.js'
 
 app.setPath('userData', join(app.getPath('appData'), 'Electronic'))
@@ -86,10 +86,12 @@ app.whenReady().then(() => {
   console.log('[Main] App Ready')
   restoreScheduledTasks()
   createWindow()
-  // 启动后静默检查更新
-  setTimeout(() => {
-    checkForUpdates(true)
-  }, 5000)
+  // 自动检查更新默认关闭，仅在设置中开启后于启动时静默检查
+  if (isAutoCheckEnabled()) {
+    setTimeout(() => {
+      checkForUpdates(true)
+    }, 5000)
+  }
 }).catch(err => {
   console.error('[Main] App Ready ERROR:', err)
 })
