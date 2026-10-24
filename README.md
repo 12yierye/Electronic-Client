@@ -66,7 +66,7 @@ docs/       更新记录等文档
 - [Electronic-Server](https://github.com/12yierye/Electronic-Server)：Node 服务端
 - [Electronic-Server-Rust](https://github.com/12yierye/Electronic-Server-Rust)：Rust 服务端
 - [Electronic-Manager](https://github.com/12yierye/Electronic-Manager)：管理端
-- [12yierye.github.io](https://github.com/12yierye/12yierye.github.io)：项目介绍页
+- [12yierye.github.io](https://12yierye.github.io)：项目介绍页
 
 ## 其他
 
