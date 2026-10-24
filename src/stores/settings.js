@@ -6,7 +6,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const language = ref('zh-CN')
   const useSystemBrowser = ref(false)  // 是否使用系统默认浏览器打开链接
   const sendKey = ref('Enter')        // 发送消息快捷键: 'Enter' | 'Ctrl+Enter'
-  const friendListDensity = ref('compact')  // 好友列表密度: 'compact' | 'relaxed'
+  const uiDensity = ref('compact')    // 界面样式: 'compact' | 'standard'
   const navFlashIntensity = ref('medium')   // 导航栏未读闪烁程度: 'off' | 'low' | 'medium' | 'high'
   const cacheRetentionDays = ref(30)        // 缓存消息保留天数
   const showModeUnreadBadge = ref(true)     // 模式切换按钮（公网/内网）角标红点
@@ -37,7 +37,8 @@ export const useSettingsStore = defineStore('settings', () => {
       language.value = settings.language || 'zh-CN'
       useSystemBrowser.value = settings.useSystemBrowser || false
       sendKey.value = settings.sendKey || 'Enter'
-      friendListDensity.value = settings.friendListDensity || 'compact'
+      const legacyDensity = settings.friendListDensity
+      uiDensity.value = settings.uiDensity || (legacyDensity === 'relaxed' ? 'standard' : legacyDensity) || 'compact'
       navFlashIntensity.value = settings.navFlashIntensity || 'medium'
       cacheRetentionDays.value = settings.cacheRetentionDays || 30
       showModeUnreadBadge.value = settings.showModeUnreadBadge !== undefined ? settings.showModeUnreadBadge : true
@@ -46,6 +47,7 @@ export const useSettingsStore = defineStore('settings', () => {
       debugMode.value = settings.debugMode !== undefined ? settings.debugMode : false
     }
     applyTheme()
+    applyDensity()
   }
 
   // 保存设置
@@ -55,7 +57,7 @@ export const useSettingsStore = defineStore('settings', () => {
       language: language.value,
       useSystemBrowser: useSystemBrowser.value,
       sendKey: sendKey.value,
-      friendListDensity: friendListDensity.value,
+      uiDensity: uiDensity.value,
       navFlashIntensity: navFlashIntensity.value,
       cacheRetentionDays: cacheRetentionDays.value,
       showModeUnreadBadge: showModeUnreadBadge.value,
@@ -111,9 +113,15 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSettings()
   }
 
-  const setFriendListDensity = (value) => {
-    friendListDensity.value = value
+  const setUiDensity = (value) => {
+    uiDensity.value = value === 'standard' ? 'standard' : 'compact'
+    applyDensity()
     saveSettings()
+  }
+
+  // 密度作用在根元素上，所有界面通过 CSS 变量响应
+  const applyDensity = () => {
+    document.documentElement.dataset.density = uiDensity.value
   }
 
   const setNavFlashIntensity = (value) => {
@@ -151,7 +159,7 @@ export const useSettingsStore = defineStore('settings', () => {
     language,
     useSystemBrowser,
     sendKey,
-    friendListDensity,
+    uiDensity,
     navFlashIntensity,
     cacheRetentionDays,
     showModeUnreadBadge,
@@ -165,7 +173,8 @@ export const useSettingsStore = defineStore('settings', () => {
     toggleLanguage,
     toggleUseSystemBrowser,
     setSendKey,
-    setFriendListDensity,
+    setUiDensity,
+    applyDensity,
     setNavFlashIntensity,
     setCacheRetentionDays,
     setShowModeUnreadBadge,

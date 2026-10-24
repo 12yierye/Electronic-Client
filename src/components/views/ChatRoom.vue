@@ -2,7 +2,7 @@
   <div class="chat-room-view">
     <el-container>
       <!-- 左侧好友列表 -->
-      <el-aside width="280px" :class="['chat-aside', settingsStore.friendListDensity]">
+      <el-aside width="280px" class="chat-aside">
         <div class="chat-tabs">
           <div class="tab-row">
             <el-radio-group v-model="activeTab" size="small">
@@ -10,11 +10,18 @@
               <el-radio-button value="contacts" :class="{ 'has-unread': showTabUnread && hasNonDNDContactUnread }">{{ t('chatRoom.contacts') }}</el-radio-button>
               <el-radio-button value="groups" :class="{ 'has-unread': showTabUnread && hasNonDNDGroupUnread }">{{ t('chatRoom.groups') }}</el-radio-button>
               <el-radio-button value="org">{{ t('org.title') }}</el-radio-button>
-              <el-radio-button value="add">{{ t('chatRoom.addFriend') }}</el-radio-button>
-              <el-radio-button value="requests" :class="{ 'has-pending': pendingRequestsCount > 0 }">
-                {{ t('chatRoom.requests') }}
-              </el-radio-button>
             </el-radio-group>
+            <el-dropdown trigger="click" class="more-dropdown" @command="handleMoreCommand">
+              <el-badge :is-dot="pendingRequestsCount > 0" :hidden="pendingRequestsCount === 0">
+                <el-button :icon="MoreFilled" size="small" circle />
+              </el-badge>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="add">{{ t('chatRoom.addFriend') }}</el-dropdown-item>
+                  <el-dropdown-item command="requests">{{ t('chatRoom.requests') }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
         
@@ -64,6 +71,7 @@
                 <div class="user-role">{{ item.lastMsg || '' }}</div>
               </div>
               <el-tag v-if="item.dnd" size="small" effect="plain" class="dnd-tag">免打扰</el-tag>
+              <el-icon class="conv-delete-btn" :title="t('chatRoom.deleteConversation')" @click.stop="hideConversation(item)"><Close /></el-icon>
             </div>
             <el-empty v-if="sortedConversations.length === 0" :description="t('chatRoom.noConversations')" />
           </template>
@@ -74,8 +82,8 @@
             <div
               v-for="contact in sortedContacts"
               :key="contact.key"
-              :class="['user-item', { active: selectedUser?.username === contact.username && selectedUser?.serverOrigin === contact.serverOrigin }]"
-              @click="selectUser(contact)"
+              :class="['user-item', { active: isContactActive(contact) }]"
+              @click="openContactOverview(contact)"
             >
               <el-badge :is-dot="getUserDND(contact.username)" :value="getUserDND(contact.username) ? '' : (getServerUnread(contact.serverOrigin, 'user')[contact.username] || 0)" :hidden="(getServerUnread(contact.serverOrigin, 'user')[contact.username] || 0) === 0">
                 <div class="avatar-with-status">
@@ -107,7 +115,7 @@
               v-for="group in sortedGroups"
               :key="group.key"
               :class="['user-item', { active: selectedGroup?.id === group.id }]"
-              @click="selectGroup(group)"
+              @click="openGroup(group)"
             >
               <el-badge :is-dot="getGroupDND(group.id)" :value="getGroupDND(group.id) ? '' : (getServerUnread(group.serverOrigin, 'group')[group.id] || 0)" :hidden="(getServerUnread(group.serverOrigin, 'group')[group.id] || 0) === 0">
                 <el-avatar :size="40" :src="groupAvatars[group.id] || ''" :style="groupAvatars[group.id] ? '' : 'background: var(--accent-color)'">
@@ -190,6 +198,49 @@
       <!-- 右侧聊天区域 -->
       <el-main>
         <div class="chat-main">
+          <div v-if="contactOverview" class="contact-overview">
+            <div class="overview-card">
+              <el-avatar :size="80" :src="contactOverview.avatar" class="overview-avatar">
+                {{ contactOverview.name.charAt(0).toUpperCase() }}
+              </el-avatar>
+              <h2 class="overview-name">{{ contactOverview.name }}</h2>
+              <div class="overview-tags">
+                <el-tag size="small" effect="plain" :type="contactOverview.serverOrigin === 'lan' ? 'warning' : 'primary'">
+                  {{ contactOverview.serverOrigin === 'lan' ? '🏠 内网' : '🌐 公网' }}
+                </el-tag>
+                <el-tag size="small" effect="plain" :type="onlineUsers[contactOverview.username] === 'online' ? 'success' : 'info'">
+                  {{ onlineUsers[contactOverview.username] === 'online' ? t('chatRoom.online') : t('chatRoom.offline') }}
+                </el-tag>
+              </div>
+              <div class="overview-rows">
+                <div class="overview-row">
+                  <span class="overview-label">角色</span>
+                  <span>{{ roleLabel(contactOverview.role) }}</span>
+                </div>
+                <div v-if="contactOverview.title" class="overview-row">
+                  <span class="overview-label">职称</span>
+                  <span>{{ contactOverview.title }}</span>
+                </div>
+                <div v-if="contactOverview.subject" class="overview-row">
+                  <span class="overview-label">学科</span>
+                  <span>{{ contactOverview.subject }}</span>
+                </div>
+                <div v-if="contactOverview.email" class="overview-row">
+                  <span class="overview-label">邮箱</span>
+                  <span>{{ contactOverview.email }}</span>
+                </div>
+                <div v-if="contactOverview.signature" class="overview-row">
+                  <span class="overview-label">签名</span>
+                  <span>{{ contactOverview.signature }}</span>
+                </div>
+              </div>
+              <el-button type="primary" :icon="Promotion" class="overview-start-btn" @click="startChatWith(contactOverview)">
+                {{ t('chatRoom.startChat') }}
+              </el-button>
+            </div>
+          </div>
+
+          <template v-else>
           <div class="chat-header">
             <span v-if="selectedGroup">{{ selectedGroup.name }}</span>
             <span v-else-if="selectedUser">{{ selectedUser.username }}</span>
@@ -320,6 +371,7 @@
               @click="handleSendMessage"
             />
           </div>
+          </template>
         </div>
       </el-main>
     </el-container>
@@ -390,11 +442,14 @@
 
 <script setup>
 import { computed, ref, watch, nextTick, onActivated, onDeactivated } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Search, Star, Promotion, Picture, ChatDotRound, MoreFilled, Loading, WarningFilled, Plus, Document, Close } from '@element-plus/icons-vue'
+import { matchByPinyin } from '../../utils/pinyin'
 import { useChatRoom, sharedLastMsgMap, onlineUsers, groupAvatars } from '../../composables/useChatRoom'
 import { useI18n } from '../../composables/useI18n'
 import { useSettingsStore } from '../../stores/settings'
 import { getUserAvatar } from '../../composables/useAvatar'
+import { loadMessagesFromCache } from '../../composables/messageCache'
 import GroupMemberPanel from './GroupMemberPanel.vue'
 import OrgTree from '../common/OrgTree.vue'
 import { useOrgStore } from '@/stores/org'
@@ -405,6 +460,18 @@ const settingsStore = useSettingsStore()
 const showChatSettingsPanel = ref(false)
 const showUsernameInPanel = ref(true)
 const dndTick = ref(0)
+
+// 会话列表依赖最后一条消息，重启后从本地恢复，避免会话全部消失
+const LAST_MSG_CACHE_KEY = 'sharedLastMsgMap'
+try {
+  const savedLastMsg = localStorage.getItem(LAST_MSG_CACHE_KEY)
+  if (savedLastMsg) sharedLastMsgMap.value = JSON.parse(savedLastMsg)
+} catch {}
+watch(sharedLastMsgMap, (value) => {
+  try {
+    localStorage.setItem(LAST_MSG_CACHE_KEY, JSON.stringify(value))
+  } catch {}
+}, { deep: true })
 
 // 监听设置面板关闭，强制刷新排序和 badge
 watch(showChatSettingsPanel, (val) => {
@@ -517,7 +584,7 @@ const sortedConversations = computed(() => {
     const unreadStore = getServerUnread(c.serverOrigin, 'user')
     const unread = unreadStore[c.username] || 0
     const lastMsg = sharedLastMsgMap.value['user:' + c.serverOrigin + ':' + c.username]
-    items.push({
+    const item = {
       key: 'conv_user_' + c.serverOrigin + '_' + c.username,
       name: c.name,
       username: c.username,
@@ -527,15 +594,16 @@ const sortedConversations = computed(() => {
       unread,
       dnd: getUserDND(c.username),
       lastMsg: lastMsg?.message || '',
-      lastTime: lastMsg?.time || 0,
+      lastTime: lastMsg?.time ? new Date(lastMsg.time).getTime() : 0,
       _contact: c
-    })
+    }
+    if (shouldShowConversation(item)) items.push(item)
   }
   for (const g of allGroups.value) {
     const unreadStore = getServerUnread(g.serverOrigin, 'group')
     const unread = unreadStore[g.id] || 0
     const lastMsg = sharedLastMsgMap.value['group:' + g.serverOrigin + ':' + g.id]
-    items.push({
+    const item = {
       key: 'conv_group_' + g.serverOrigin + '_' + g.id,
       name: g.name,
       id: g.id,
@@ -545,9 +613,10 @@ const sortedConversations = computed(() => {
       unread,
       dnd: getGroupDND(g.id),
       lastMsg: lastMsg?.message || '',
-      lastTime: lastMsg?.time || 0,
+      lastTime: lastMsg?.time ? new Date(lastMsg.time).getTime() : 0,
       _group: g
-    })
+    }
+    if (shouldShowConversation(item)) items.push(item)
   }
   // 免打扰排后，最后消息时间降序
   return items.sort((a, b) => {
@@ -556,19 +625,106 @@ const sortedConversations = computed(() => {
   })
 })
 
+const HIDDEN_CONVERSATIONS_KEY = 'hiddenConversations'
+const contactOverview = ref(null)
+
+function readHiddenConversations() {
+  try {
+    const raw = localStorage.getItem(HIDDEN_CONVERSATIONS_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+const hiddenConversations = ref(readHiddenConversations())
+
+function persistHiddenConversations() {
+  localStorage.setItem(HIDDEN_CONVERSATIONS_KEY, JSON.stringify(hiddenConversations.value))
+}
+
+function conversationKey(item) {
+  return item.type === 'user'
+    ? `user:${item.serverOrigin}:${item.username}`
+    : `group:${item.serverOrigin}:${item.id}`
+}
+
+// 有消息或未读才计入会话；被删除的会话隐藏，但联系人仍在
+function shouldShowConversation(item) {
+  if (hiddenConversations.value.includes(conversationKey(item))) return false
+  return item.lastTime > 0 || item.unread > 0 || isConversationActive(item)
+}
+
+function hideConversation(item) {
+  const key = conversationKey(item)
+  if (!hiddenConversations.value.includes(key)) {
+    hiddenConversations.value = [...hiddenConversations.value, key]
+    persistHiddenConversations()
+  }
+  if (isConversationActive(item)) {
+    if (item.type === 'user') selectedUser.value = null
+    else selectedGroup.value = null
+  }
+  ElMessage.success('会话已删除，可在联系人中找回')
+}
+
+function openContactOverview(contact) {
+  contactOverview.value = contact
+  selectedUser.value = null
+  selectedGroup.value = null
+}
+
+function isContactActive(contact) {
+  if (contactOverview.value) {
+    return contactOverview.value.username === contact.username && contactOverview.value.serverOrigin === contact.serverOrigin
+  }
+  return selectedUser.value?.username === contact.username && selectedUser.value?.serverOrigin === contact.serverOrigin
+}
+
+function startChatWith(contact) {
+  const key = `user:${contact.serverOrigin}:${contact.username}`
+  hiddenConversations.value = hiddenConversations.value.filter(item => item !== key)
+  persistHiddenConversations()
+  contactOverview.value = null
+  activeTab.value = 'conversations'
+  selectUser(contact)
+}
+
+function openGroup(group) {
+  contactOverview.value = null
+  selectGroup(group)
+}
+
+function handleMoreCommand(command) {
+  contactOverview.value = null
+  activeTab.value = command
+}
+
+const ROLE_LABELS = { admin: '管理员', teacher: '教师', head_teacher: '班主任', student: '学生', staff: '职工', guest: '访客' }
+function roleLabel(role) {
+  return ROLE_LABELS[role] || role || '未设置'
+}
+
+watch(activeTab, (value) => {
+  if (value !== 'contacts') contactOverview.value = null
+})
+
 // 联系人排序
 const sortedContacts = computed(() => {
   void dndTick.value
-  return [...allContacts.value].sort((a, b) => {
-    const aDND = getUserDND(a.username)
-    const bDND = getUserDND(b.username)
-    if (aDND !== bDND) return aDND ? 1 : -1
-    const aLast = sharedLastMsgMap.value['user:' + a.serverOrigin + ':' + a.username]
-    const bLast = sharedLastMsgMap.value['user:' + b.serverOrigin + ':' + b.username]
-    const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
-    const bTime = bLast?.time ? new Date(bLast.time).getTime() : 0
-    return bTime - aTime
-  })
+  const query = searchQuery.value.trim().toLowerCase()
+  return [...allContacts.value]
+    .filter(contact => !query || String(contact.name || '').toLowerCase().includes(query) || matchByPinyin(String(contact.name || ''), query))
+    .sort((a, b) => {
+      const aDND = getUserDND(a.username)
+      const bDND = getUserDND(b.username)
+      if (aDND !== bDND) return aDND ? 1 : -1
+      const aLast = sharedLastMsgMap.value['user:' + a.serverOrigin + ':' + a.username]
+      const bLast = sharedLastMsgMap.value['user:' + b.serverOrigin + ':' + b.username]
+      const aTime = aLast?.time ? new Date(aLast.time).getTime() : 0
+      const bTime = bLast?.time ? new Date(bLast.time).getTime() : 0
+      return bTime - aTime
+    })
 })
 
 // 群聊排序
@@ -595,6 +751,7 @@ const isConversationActive = (item) => {
 
 // 选择会话
 const selectConversation = (item) => {
+  contactOverview.value = null
   if (item.type === 'user') {
     selectUser(item._contact)
   } else if (item.type === 'group') {
@@ -708,7 +865,51 @@ onDeactivated(() => {
   selectedGroup.value = null
 })
 
+// 用本地消息缓存补全会话列表的最后一条消息
+function hydrateLastMessagesFromCache() {
+  const username = currentUsername.value
+  if (!username) return
+
+  const next = { ...sharedLastMsgMap.value }
+  let changed = false
+
+  const applyCached = (key, cacheType, convId) => {
+    if (next[key]) return
+    const cached = loadMessagesFromCache(username, cacheType, convId)
+    const last = cached && cached.length ? cached[cached.length - 1] : null
+    if (!last) return
+    next[key] = {
+      message: last.message,
+      time: last.timestamp || 0,
+      from: last.from || last.sender || ''
+    }
+    changed = true
+  }
+
+  for (const contact of allContacts.value) {
+    applyCached(
+      `user:${contact.serverOrigin}:${contact.username}`,
+      contact.serverOrigin === 'lan' ? 'lan_user' : 'pub_user',
+      contact.username
+    )
+  }
+  for (const group of allGroups.value) {
+    applyCached(
+      `group:${group.serverOrigin}:${group.id}`,
+      group.serverOrigin === 'lan' ? 'lan_group' : 'pub_group',
+      String(group.id)
+    )
+  }
+
+  if (changed) sharedLastMsgMap.value = next
+}
+
+watch([friendsList, lanFriendsList, lanGroupsList, publicGroupsList], () => {
+  hydrateLastMessagesFromCache()
+})
+
 onActivated(() => {
+  hydrateLastMessagesFromCache()
   autoScroll.value = true
   scrollToBottom()
   // 立即同步所有消息和未读计数，无需等待轮询间隔
@@ -718,6 +919,86 @@ onActivated(() => {
 </script>
 
 <style lang="scss" scoped>
+.more-dropdown {
+  margin-left: 6px;
+}
+
+.conv-delete-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  &:hover {
+    color: #f56c6c;
+  }
+}
+
+.user-item:hover .conv-delete-btn {
+  opacity: 1;
+}
+
+.contact-overview {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-primary);
+  overflow: auto;
+
+  .overview-card {
+    width: min(420px, 100%);
+    padding: 28px;
+    border-radius: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .overview-name {
+    margin: 0;
+    font-size: 20px;
+    color: var(--text-primary);
+  }
+
+  .overview-tags {
+    display: flex;
+    gap: 8px;
+  }
+
+  .overview-rows {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 6px;
+  }
+
+  .overview-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .overview-label {
+    color: var(--text-secondary);
+  }
+
+  .overview-start-btn {
+    width: 100%;
+    margin-top: 10px;
+  }
+}
+
 .chat-room-view {
   height: calc(100vh - 60px);
 
@@ -769,23 +1050,14 @@ onActivated(() => {
     display: flex;
     flex-direction: column;
 
-    &.compact {
-      .user-item, .request-item {
-        padding: 6px 12px;
-        gap: 8px;
+    .user-item, .request-item {
+      padding: var(--ui-item-pad-y) var(--ui-item-pad-x);
+      gap: var(--ui-gap);
 
-        :deep(.el-avatar) {
-          width: 32px !important;
-          height: 32px !important;
-          font-size: 14px;
-        }
-      }
-    }
-
-    &.relaxed {
-      .user-item, .request-item {
-        padding: 12px;
-        gap: 12px;
+      :deep(.el-avatar) {
+        width: var(--ui-avatar-size) !important;
+        height: var(--ui-avatar-size) !important;
+        font-size: 14px;
       }
     }
   }
@@ -842,8 +1114,8 @@ onActivated(() => {
     .user-item, .request-item {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 12px;
+      gap: var(--ui-gap);
+      padding: var(--ui-item-pad-y) var(--ui-item-pad-x);
       border-radius: 0;
       cursor: pointer;
       transition: all 0.15s;

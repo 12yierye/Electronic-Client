@@ -1,4 +1,4 @@
-// 浏览器环境下的 Mock API
+﻿// 浏览器环境下的 Mock API
 // login 和 register 调用真实服务端接口
 // 其余方法提供安全桩防止崩溃
 
@@ -10,11 +10,11 @@ function getServerBaseUrl() {
     if (raw) {
       const s = JSON.parse(raw)
       const ip = s.serverIP || '127.0.0.1'
-      const port = s.serverPort || '3000'
+      const port = s.serverPort || '3001'
       return `http://${ip}:${port}`
     }
   } catch {}
-  return 'http://localhost:3000'
+  return 'http://localhost:3001'
 }
 
 async function serverFetch(url, body) {

@@ -1,4 +1,4 @@
-// ============================================================
+﻿﻿// ============================================================
 // 全局 CSS 变量 — 灰色系深色主题
 // ============================================================
 :root {
@@ -542,3 +542,46 @@ html, body {
   pointer-events: none;
   user-select: none;
 }
+
+:root {
+    --ui-gap: 8px;
+    --ui-item-pad-y: 6px;
+    --ui-item-pad-x: 12px;
+    --ui-avatar-size: 32px;
+    --ui-section-gap: 16px;
+    --ui-form-gap: 14px;
+    --ui-content-pad: 20px;
+    --ui-row-pad-y: 6px;
+}
+// ============================================================
+// 界面密度 — 紧凑 / 标准，作用于根元素，全局生效
+// ============================================================
+html[data-density='compact'] {
+    --ui-gap: 8px;
+    --ui-item-pad-y: 6px;
+    --ui-item-pad-x: 12px;
+    --ui-avatar-size: 32px;
+    --ui-section-gap: 16px;
+    --ui-form-gap: 14px;
+    --ui-content-pad: 20px;
+    --ui-row-pad-y: 6px;
+}
+
+html[data-density='standard'] {
+    --ui-gap: 10px;
+    --ui-item-pad-y: 8px;
+    --ui-item-pad-x: 14px;
+    --ui-avatar-size: 36px;
+    --ui-section-gap: 18px;
+    --ui-form-gap: 18px;
+    --ui-content-pad: 22px;
+    --ui-row-pad-y: 8px;
+}
+
+html[data-density] {
+    .el-form-item { margin-bottom: var(--ui-form-gap); }
+    .el-dialog__body { padding: 16px 20px; }
+    .el-card__body { padding: var(--ui-content-pad); }
+}
+
+html[data-density='standard'] .el-dialog__body { padding: 20px 24px; }

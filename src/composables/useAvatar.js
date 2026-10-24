@@ -1,21 +1,10 @@
 import { ref } from 'vue'
+import { apiFetch } from '../utils/apiFetch'
+import { getServerBaseUrl } from '../utils/serverUrl'
 
 const cache = ref(new Map())
 const pendingFetches = new Set()
 const avatarVersion = ref(Date.now())
-
-function getServerBaseUrl() {
-  try {
-    const raw = localStorage.getItem('lanChatSettings')
-    if (raw) {
-      const s = JSON.parse(raw)
-      const ip = s.serverIP || '127.0.0.1'
-      const port = s.serverPort || '3000'
-      return `http://${ip}:${port}`
-    }
-  } catch {}
-  return 'http://localhost:3000'
-}
 
 export function getAvatarUrl(url) {
   // 读取 avatarVersion 建立 Vue 响应式依赖，版本变化时自动重新计算
@@ -65,7 +54,7 @@ export async function loadUserAvatar(username) {
     if (window.electronAPI?.getUserByUsername) {
       data = await window.electronAPI.getUserByUsername(username)
     } else {
-      const res = await fetch(`${getServerBaseUrl()}/user/${encodeURIComponent(username)}`)
+      const res = await apiFetch(`${getServerBaseUrl()}/user/${encodeURIComponent(username)}`)
       data = await res.json()
     }
     if (data.success && data.user?.avatar) {

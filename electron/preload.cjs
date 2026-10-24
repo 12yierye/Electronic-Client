@@ -266,6 +266,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setCloudModel: (model) => ipcRenderer.invoke('set-cloud-model', model),
   setCloudProvider: (provider) => ipcRenderer.invoke('set-cloud-provider', provider),
   getCloudConfig: () => ipcRenderer.invoke('get-cloud-config'),
+  listCloudModels: (payload) => ipcRenderer.invoke('list-cloud-models', payload),
   testCloudApi: (data) => ipcRenderer.invoke('test-cloud-api', data),
 
   // AI 图片生成

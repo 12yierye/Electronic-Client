@@ -1,7 +1,8 @@
 import { app } from 'electron'
+import axios from 'axios'
 
 // 服务端 API 地址（运行时可变）
-let apiBase = process.env.API_URL || 'http://127.0.0.1:3000'
+let apiBase = process.env.API_URL || 'http://127.0.0.1:3001'
 global.__apiBase = apiBase
 
 export const getAPIBase = () => global.__apiBase || apiBase
@@ -28,7 +29,14 @@ export const setLanServerUrl = (url) => { lanServerUrl = url }
 let authToken = ''
 let userId = ''
 export const getAuthToken = () => authToken
-export const setAuthToken = (token) => { authToken = token }
+export const setAuthToken = (token) => {
+    authToken = token || ''
+    if (authToken) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`
+    } else {
+        delete axios.defaults.headers.common['Authorization']
+    }
+}
 export const getUserId = () => userId
 export const setUserId = (id) => { userId = id }
 

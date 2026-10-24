@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="settings-view">
     <div class="settings-layout">
       <div class="settings-sidebar">
@@ -35,12 +35,55 @@
                   所有对话
                 </el-radio-button>
               </el-radio-group>
+              <SettingTip>端到端加密后，消息内容仅收发双方可以解读，服务端无法查看明文。开启加密后新建的对话生效，已有对话不会自动加密。</SettingTip>
             </el-form-item>
-            <p class="setting-tip">端到端加密后，消息内容仅收发双方可以解读，服务端无法查看明文。开启加密后新建的对话生效，已有对话不会自动加密。</p>
             <el-form-item label="加密强度：">
               <el-tag type="success">AES-256-GCM</el-tag>
             </el-form-item>
           </div>
+        </div>
+
+        <!-- 通用 -->
+        <div v-else-if="activeNav === 'general'" class="settings-section">
+          <h3>通用设置</h3>
+          <el-form-item :label="t('settings.language') + '：'">
+            <div class="language-selector">
+              <el-select
+                v-model="language"
+                :placeholder="t('settings.selectLanguage')"
+                @change="handleLanguageChange"
+              >
+                <el-option
+                  v-for="lang in languages"
+                  :key="lang.code"
+                  :label="lang.flag + ' ' + lang.nativeName"
+                  :value="lang.code"
+                >
+                  <span class="lang-option">
+                    <span class="lang-flag">{{ lang.flag }}</span>
+                    <span class="lang-name">{{ lang.nativeName }}</span>
+                  </span>
+                </el-option>
+              </el-select>
+              <SettingTip>{{ t('settings.languageTip') }}</SettingTip>
+            </div>
+          </el-form-item>
+
+          <el-form-item :label="t('settings.useSystemBrowser') + '：'">
+            <div class="switch-with-tip">
+              <el-switch v-model="useSystemBrowser" @change="handleUseSystemBrowserChange" />
+              <SettingTip>{{ t('settings.useSystemBrowserTip') }}</SettingTip>
+            </div>
+          </el-form-item>
+
+          <el-divider />
+
+          <el-form-item label="调试模式：">
+            <div class="switch-with-tip">
+              <el-switch v-model="settingsStore.debugMode" @change="handleDebugModeChange" />
+              <SettingTip>开启后左侧会显示“调试中心”，用于排查 AI 调用与文件生成问题。</SettingTip>
+            </div>
+          </el-form-item>
         </div>
 
         <!-- 外观 -->
@@ -62,35 +105,12 @@
               </el-radio-button>
             </el-radio-group>
           </el-form-item>
-
-          <el-form-item :label="t('settings.language') + '：'">
-            <div class="language-selector">
-              <el-select
-                v-model="language"
-                :placeholder="t('settings.selectLanguage')"
-                @change="handleLanguageChange"
-              >
-                <el-option
-                  v-for="lang in languages"
-                  :key="lang.code"
-                  :label="lang.flag + ' ' + lang.nativeName"
-                  :value="lang.code"
-                >
-                  <span class="lang-option">
-                    <span class="lang-flag">{{ lang.flag }}</span>
-                    <span class="lang-name">{{ lang.nativeName }}</span>
-                  </span>
-                </el-option>
-              </el-select>
-              <div class="setting-tip">{{ t('settings.languageTip') }}</div>
-            </div>
-          </el-form-item>
-
-          <el-form-item :label="t('settings.useSystemBrowser') + '：'">
-            <div class="switch-with-tip">
-              <el-switch v-model="useSystemBrowser" @change="handleUseSystemBrowserChange" />
-              <div class="setting-tip">{{ t('settings.useSystemBrowserTip') }}</div>
-            </div>
+          <el-form-item :label="t('settings.uiDensity') + '：'">
+            <el-radio-group v-model="uiDensity" @change="handleUiDensityChange">
+              <el-radio-button value="compact">{{ t('settings.compact') }}</el-radio-button>
+              <el-radio-button value="standard">{{ t('settings.standard') }}</el-radio-button>
+            </el-radio-group>
+            <SettingTip>{{ t('settings.uiDensityTip') }}</SettingTip>
           </el-form-item>
         </div>
 
@@ -102,21 +122,14 @@
               <el-radio-button value="Enter">Enter</el-radio-button>
               <el-radio-button value="Ctrl+Enter">Ctrl + Enter</el-radio-button>
             </el-radio-group>
-            <div class="setting-tip">{{ t('settings.sendKeyTip') }}</div>
-          </el-form-item>
-          <el-form-item :label="t('settings.friendListDensity') + '：'">
-            <el-radio-group v-model="friendListDensity" @change="handleFriendListDensityChange">
-              <el-radio-button value="compact">{{ t('settings.compact') }}</el-radio-button>
-              <el-radio-button value="relaxed">{{ t('settings.relaxed') }}</el-radio-button>
-            </el-radio-group>
-            <div class="setting-tip">{{ t('settings.friendListDensityTip') }}</div>
+            <SettingTip>{{ t('settings.sendKeyTip') }}</SettingTip>
           </el-form-item>
           <el-divider />
           <el-form-item :label="t('settings.cacheRetentionDays') + '：'">
             <el-select v-model="cacheRetentionDays" @change="handleCacheRetentionDaysChange" style="width: 180px">
               <el-option v-for="d in cacheDayOptions" :key="d" :label="t('settings.cacheDaysOption', { n: d })" :value="d" />
             </el-select>
-            <div class="setting-tip">{{ t('settings.cacheRetentionDaysTip') }}</div>
+            <SettingTip>{{ t('settings.cacheRetentionDaysTip') }}</SettingTip>
           </el-form-item>
           <el-divider />
           <el-form-item :label="t('settings.unreadBadgeDisplay') + '：'">
@@ -125,22 +138,22 @@
                 <div class="switch-with-label">
                   <el-switch v-model="showModeUnreadBadge" @change="handleShowModeUnreadBadgeChange" />
                   <span class="badge-label">{{ t('settings.showModeUnreadBadge') }}</span>
+                  <SettingTip inline>{{ t('settings.showModeUnreadBadgeTip') }}</SettingTip>
                 </div>
-                <div class="setting-tip-inline">{{ t('settings.showModeUnreadBadgeTip') }}</div>
               </div>
               <div class="badge-setting-row">
                 <div class="switch-with-label">
                   <el-switch v-model="showTabUnreadBadge" @change="handleShowTabUnreadBadgeChange" />
                   <span class="badge-label">{{ t('settings.showTabUnreadBadge') }}</span>
+                  <SettingTip inline>{{ t('settings.showTabUnreadBadgeTip') }}</SettingTip>
                 </div>
-                <div class="setting-tip-inline">{{ t('settings.showTabUnreadBadgeTip') }}</div>
               </div>
                 <div class="badge-setting-row">
                 <div class="switch-with-label">
                   <el-switch v-model="showOnlineStatus" @change="handleShowOnlineStatusChange" />
                   <span class="badge-label">显示在线状态</span>
+                  <SettingTip inline>在好友/群成员头像右下角显示在线(绿)或忙碌(橙)状态指示</SettingTip>
                 </div>
-                <div class="setting-tip-inline">在好友/群成员头像右下角显示在线(绿)或忙碌(橙)状态指示</div>
               </div>
             </div>
           </el-form-item>
@@ -149,7 +162,7 @@
           <el-form-item :label="t('settings.enablePinyinSearch') + '：'">
             <div class="switch-with-tip">
               <el-switch v-model="enablePinyinSearch" @change="savePinyinSearchSetting" />
-              <div class="setting-tip">{{ t('settings.enablePinyinSearchTip') }}</div>
+              <SettingTip>{{ t('settings.enablePinyinSearchTip') }}</SettingTip>
             </div>
           </el-form-item>
         </div>
@@ -165,7 +178,7 @@
           </el-form-item>
           <el-form-item label="上下文长度：">
             <el-slider v-model="contextTokens" :min="1000" :max="maxContextLimit" :step="1000" show-input @change="saveContextTokens" />
-            <div class="setting-tip">对话上下文最大 token 数。当前模型上限 {{ maxContextLimit.toLocaleString() }}。越大则 AI 能记住越多历史。</div>
+            <SettingTip>对话上下文最大 token 数。当前模型上限 {{ maxContextLimit.toLocaleString() }}。越大则 AI 能记住越多历史。</SettingTip>
           </el-form-item>
           <el-divider />
 
@@ -176,8 +189,8 @@
             </el-form-item>
             <el-form-item :label="t('settings.aiServerPort') + '：'">
               <el-input v-model="aiServerPort" :placeholder="t('settings.aiServerPortPlaceholder')" @blur="saveAiApiSettings" />
+              <SettingTip>{{ t('settings.aiServerTip') }}</SettingTip>
             </el-form-item>
-            <div class="setting-tip">{{ t('settings.aiServerTip') }}</div>
           </div>
 
           <div v-show="aiSettingsMode === 'cloud'">
@@ -188,16 +201,32 @@
               </el-select>
             </el-form-item>
             <el-form-item :label="t('settings.cloudModelName') + '：'">
-              <el-select v-if="cloudProviderId !== 'custom'" v-model="cloudModel" placeholder="选择模型" style="width:100%">
-                <el-option v-for="m in currentProviderModels" :key="m.id" :label="m.name" :value="m.id" />
-              </el-select>
-              <el-input v-else v-model="cloudModel" placeholder="输入模型标识符" />
+              <div class="model-select-row">
+                <el-select
+                  v-model="cloudModel"
+                  :placeholder="modelSelectPlaceholder"
+                  :disabled="!cloudProviderId || loadingModels"
+                  :loading="loadingModels"
+                  style="flex:1"
+                >
+                  <el-option v-for="m in currentProviderModels" :key="m.id" :label="m.name" :value="m.id" />
+                </el-select>
+                <el-button
+                  v-if="cloudProviderId"
+                  :icon="RefreshRight"
+                  size="small"
+                  circle
+                  :loading="loadingModels"
+                  @click="loadCloudModels(true)"
+                />
+              </div>
+              <div v-if="modelLoadError" class="setting-tip">{{ modelLoadError }}</div>
             </el-form-item>
             <el-form-item v-if="cloudProviderId === 'custom'" :label="t('settings.cloudApiBase') + '：'">
               <el-input v-model="cloudApiBase" placeholder="https://api.openai.com/v1" />
             </el-form-item>
             <el-form-item :label="t('settings.cloudApiKey') + '：'">
-              <el-input v-model="cloudApiKey" type="password" placeholder="sk-..." show-password />
+              <el-input v-model="cloudApiKey" type="password" placeholder="sk-..." show-password @change="onApiKeyChanged" />
             </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="saveCloudApiSettings">{{ t('common.save') }}</el-button>
@@ -267,7 +296,7 @@
           </el-form-item>
           <el-form-item label="模型：">
             <el-input v-model="imageGenModel" :placeholder="imageGenDefaultModel || 'dall-e-3'" />
-            <div class="setting-tip">默认自动填入提供商对应模型，可手动修改</div>
+            <SettingTip>默认自动填入提供商对应模型，可手动修改</SettingTip>
           </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="saveImageGenConfig">保存</el-button>
@@ -288,15 +317,14 @@
             <el-radio-button value="generate">AI 生图优先</el-radio-button>
           </el-radio-group>
           <div v-if="imageGenPriority === 'generate'" style="margin-top:12px">
-            <div class="setting-tip" style="margin-bottom:8px">AI 生图时的子优先级：</div>
+            <div class="setting-tip" style="margin-bottom:8px;display:flex;align-items:center;gap:4px">
+              AI 生图时的子优先级：
+              <SettingTip inline>图片服务端优先：先尝试图片服务端，失败则用选择的生图提供商，最后回退联网搜索。搜索获取优先：按选择的生图提供商生成，失败回退联网搜索。</SettingTip>
+            </div>
             <el-radio-group v-model="imageGenSubPriority" @change="saveImageGenSubPriority">
               <el-radio-button value="server">图片服务端优先</el-radio-button>
               <el-radio-button value="search">搜索获取优先</el-radio-button>
             </el-radio-group>
-            <div class="setting-tip" style="margin-top:6px">
-              <template v-if="imageGenSubPriority === 'server'">先尝试上方配置的「图片服务端」(IP:端口)，失败则尝试选择的生图提供商，最后回退到联网搜索。</template>
-              <template v-else>按当前选择的生图提供商进行 AI 生成，失败时回退到联网搜索。</template>
-            </div>
           </div>
           <div v-if="imageGenPriority === 'generate' && !hasImageGenKey" class="setting-tip" style="color:var(--el-color-warning);margin-top:6px">⚠️ 当前未配置 AI 图片生成，请在本页「AI 图片生成」中填写配置</div>
         </div>
@@ -309,7 +337,7 @@
               <el-input v-model="pptDir" placeholder="选择PPT课件的保存路径" @blur="savePPTDir" />
               <el-button @click="selectPPTDir" :icon="FolderOpened" />
             </div>
-            <div class="setting-tip">AI 生成的课件（.pptx 文件）将保存到此目录。留空则使用下载目录。</div>
+            <SettingTip>AI 生成的课件（.pptx 文件）将保存到此目录。留空则使用下载目录。</SettingTip>
           </el-form-item>
           <el-divider />
           <h3>{{ t('settings.downloadTitle') }}</h3>
@@ -323,7 +351,7 @@
               />
               <el-button @click="handleSelectDir" :icon="FolderOpened" />
             </div>
-            <div class="setting-tip">{{ t('settings.downloadDirTip') }}</div>
+            <SettingTip>{{ t('settings.downloadDirTip') }}</SettingTip>
           </el-form-item>
           <el-divider />
           <h3>课件模板</h3>
@@ -356,7 +384,7 @@
           <el-form-item label="公网服务器 URL：">
             <el-input
               v-model="primaryServerUrl"
-              placeholder="http://your-public-server.com:3000"
+              placeholder="http://your-public-server.com:3001"
               @blur="savePrimaryServerSetting"
             />
           </el-form-item>
@@ -371,7 +399,7 @@
               :placeholder="t('settings.serverIPPlaceholder')"
               @blur="saveServerSettings"
             />
-            <div class="setting-tip">{{ t('settings.serverIPTip') }}</div>
+            <SettingTip>{{ t('settings.serverIPTip') }}</SettingTip>
           </el-form-item>
           <el-form-item :label="t('settings.serverPort') + '：'">
             <el-input
@@ -461,10 +489,6 @@
               <span class="about-label">{{ t('app.reportIssue') }}</span>
               <el-link type="primary" :underline="false" @click="handleReportIssue">GitHub Issues</el-link>
             </div>
-            <div class="about-row">
-              <span class="about-label">调试模式</span>
-              <el-switch v-model="settingsStore.debugMode" @change="handleDebugModeChange" size="small" />
-            </div>
           </div>
         </div>
 
@@ -520,7 +544,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Moon, Sunny, Monitor, FolderOpened, Files, User, Setting, MagicStick, Link, Search, Picture, Folder, InfoFilled, Message, RefreshRight, Lock, View, Hide, Delete, PictureFilled } from '@element-plus/icons-vue'
+import { cloudProviders, getProviderModels } from '../../../electron/services/cloudProviders.js'
 import { useSettingsStore } from '../../stores/settings'
+import SettingTip from '../common/SettingTip.vue'
 import { useAIStore } from '../../stores/ai'
 import { useI18n } from '../../composables/useI18n'
 import { languages } from '../../utils/i18n'
@@ -538,7 +564,8 @@ const activeNav = ref('profile')
 const navItems = computed(() => {
   const items = [
     { key: 'profile', label: '用户', icon: User },
-    { key: 'appearance', label: '外观', icon: Setting },
+    { key: 'general', label: '通用', icon: Setting },
+    { key: 'appearance', label: '外观', icon: Sunny },
     { key: 'friendChat', label: '聊天', icon: Message },
     { key: 'aiModel', label: 'AI 模型', icon: MagicStick },
     { key: 'imageEngine', label: '图片引擎', icon: Picture },
@@ -555,14 +582,14 @@ const navItems = computed(() => {
 const theme = ref('dark')
 const language = ref('zh-CN')
 const serverIP = ref('127.0.0.1')
-const serverPort = ref('3000')
+const serverPort = ref('3001')
 const primaryServerUrl = ref('')
 const testingServer = ref(false)
 const enablePinyinSearch = ref(false)
 const useSystemBrowser = ref(false)
 const sendKey = ref('Enter')
 const e2eEncryption = ref('off')
-const friendListDensity = ref('compact')
+const uiDensity = ref('compact')
 const navFlashIntensity = ref('medium')
 const cacheRetentionDays = ref(30)
 const cacheDayOptions = [7, 14, 30, 60, 90, 180]
@@ -685,7 +712,10 @@ const aiSettingsMode = ref('local')
 const cloudProviderId = ref('')
 const cloudApiBase = ref('https://api.openai.com/v1')
 const cloudApiKey = ref('')
-const cloudModel = ref('gpt-4o')
+const cloudModel = ref('')
+const cloudModelList = ref([])
+const loadingModels = ref(false)
+const modelLoadError = ref('')
 const keyVisible = ref(false)
 const testingCloud = ref(false)
 const pptDir = ref('')
@@ -729,16 +759,93 @@ const maxContextLimit = computed(() => {
   return 100000
 })
 
-const PROVIDERS = [
-  { id: 'deepseek', name: 'DeepSeek', baseURL: 'https://api.deepseek.com/v1', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', thinking: 'optional', contextLimit: 1000000 }, { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', thinking: 'always', contextLimit: 1000000 }] },
-  { id: 'openai', name: 'OpenAI', baseURL: 'https://api.openai.com/v1', models: [{ id: 'gpt-4o', name: 'GPT-4o', thinking: 'none' }, { id: 'gpt-4o-mini', name: 'GPT-4o Mini', thinking: 'none' }, { id: 'o3-mini', name: 'o3-mini', thinking: 'optional' }, { id: 'o1', name: 'o1', thinking: 'always' }] },
-  { id: 'qwen', name: '通义千问', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: [{ id: 'qwen-plus', name: 'Qwen Plus', thinking: 'none' }, { id: 'qwen-max', name: 'Qwen Max', thinking: 'optional' }, { id: 'qwen-turbo', name: 'Qwen Turbo', thinking: 'none' }, { id: 'qwen-long', name: 'Qwen Long', thinking: 'none' }] },
-  { id: 'zhipu', name: '智谱AI', baseURL: 'https://open.bigmodel.cn/api/paas/v4', models: [{ id: 'glm-4-flash', name: 'GLM-4 Flash', thinking: 'none' }, { id: 'glm-4', name: 'GLM-4', thinking: 'optional' }, { id: 'glm-4-plus', name: 'GLM-4 Plus', thinking: 'optional' }] },
-  { id: 'moonshot', name: 'Moonshot', baseURL: 'https://api.moonshot.cn/v1', models: [{ id: 'moonshot-v1-8k', name: 'Moonshot v1 8K', thinking: 'none' }, { id: 'moonshot-v1-32k', name: 'Moonshot v1 32K', thinking: 'none' }, { id: 'moonshot-v1-128k', name: 'Moonshot v1 128K', thinking: 'none' }] },
-  { id: 'custom', name: '自定义', baseURL: '', models: [] }
-]
+const PROVIDERS = cloudProviders
 
 const providerList = PROVIDERS
+
+// 把 qwen2.5-72b-instruct 这类 id 显示成 Qwen2.5 72b Instruct
+const UPPER_TOKENS = new Set(['gpt', 'glm', 'llm', 'ai', 'api', 'vl', 'moe', 'omni'])
+function formatModelName(id) {
+  const parts = String(id).split(/[-_]/).filter(Boolean)
+  let out = ''
+  for (const part of parts) {
+    const lower = part.toLowerCase()
+    let token
+    if (UPPER_TOKENS.has(lower)) token = lower.toUpperCase()
+    else if (/^o\d/.test(lower)) token = lower
+    else if (/^\d/.test(lower)) token = lower
+    else token = lower.charAt(0).toUpperCase() + lower.slice(1)
+
+    if (!out) out = token
+    else if (/^\d/.test(token) || out.endsWith('GPT') || /^o\d/.test(token)) out += '-' + token
+    else out += ' ' + token
+  }
+  return out || String(id)
+}
+
+const modelSelectPlaceholder = computed(() => {
+  if (!cloudProviderId.value) return '请先选择提供商'
+  if (loadingModels.value) return '正在获取模型列表...'
+  return '选择模型'
+})
+
+const currentProviderModels = computed(() => {
+  if (cloudModelList.value.length > 0) return cloudModelList.value
+  return getProviderModels(cloudProviderId.value).map(m => ({ id: m.id, name: formatModelName(m.id) }))
+})
+
+const loadCloudModels = async (manual = false) => {
+  if (!cloudProviderId.value) return
+  if (!cloudApiBase.value) {
+    modelLoadError.value = '请先填写接口地址'
+    return
+  }
+  if (!cloudApiKey.value) {
+    if (manual) modelLoadError.value = '填写 API Key 后可获取该厂商的模型列表'
+    return
+  }
+
+  loadingModels.value = true
+  modelLoadError.value = ''
+  try {
+    const res = await window.electronAPI.listCloudModels({
+      baseURL: cloudApiBase.value,
+      apiKey: cloudApiKey.value
+    })
+    if (!res.success) {
+      modelLoadError.value = `获取模型列表失败：${res.message || '未知错误'}`
+      return
+    }
+    const models = res.models.map(item => ({ id: item.id, name: formatModelName(item.id) }))
+    cloudModelList.value = models
+    if (models.length === 0) {
+      modelLoadError.value = '该接口未返回可用模型'
+      return
+    }
+    if (!models.some(m => m.id === cloudModel.value)) {
+      cloudModel.value = models[0].id
+    }
+    saveCloudApiSettings()
+  } catch (e) {
+    modelLoadError.value = `获取模型列表失败：${e.message}`
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+const onApiKeyChanged = () => {
+  loadCloudModels(true)
+}
+
+const handleProviderChange = (providerId) => {
+  const p = PROVIDERS.find(item => item.id === providerId)
+  cloudModelList.value = []
+  modelLoadError.value = ''
+  cloudModel.value = ''
+  if (!p) return
+  if (p.baseURL) cloudApiBase.value = p.baseURL
+  loadCloudModels()
+}
 
 const IMAGE_GEN_PROVIDERS = [
   { id: 'openai', name: 'OpenAI (DALL-E)', baseURL: 'https://api.openai.com/v1/images/generations', defaultModel: 'dall-e-3' },
@@ -747,11 +854,6 @@ const IMAGE_GEN_PROVIDERS = [
   { id: 'server', name: '自建服务端 (IP:端口)', baseURL: '', defaultModel: '' },
   { id: 'custom', name: '自定义', baseURL: '', defaultModel: '' }
 ]
-
-const currentProviderModels = computed(() => {
-  const p = PROVIDERS.find(p => p.id === cloudProviderId.value)
-  return p ? p.models : []
-})
 
 const imageGenDefaultModel = computed(() => {
   const p = IMAGE_GEN_PROVIDERS.find(p => p.id === imageGenProviderId.value)
@@ -820,6 +922,10 @@ const saveAiApiSettings = () => {
 }
 
 const saveCloudApiSettings = () => {
+    if (cloudProviderId.value && !cloudModel.value) {
+        ElMessage.warning('请先选择模型')
+        return
+    }
     const data = { base: cloudApiBase.value, model: cloudModel.value, provider: cloudProviderId.value, key: cloudApiKey.value }
     localStorage.setItem(CLOUD_API_KEY, JSON.stringify(data))
     if (window.electronAPI?.setCloudApiBase) {
@@ -926,19 +1032,6 @@ const loadImageGenConfig = async () => {
       if (res.port) imageGenServerPort.value = res.port
     }
   }
-}
-
-const handleProviderChange = (providerId) => {
-    const p = PROVIDERS.find(p => p.id === providerId)
-    if (p) {
-        if (p.baseURL) {
-            cloudApiBase.value = p.baseURL
-        }
-        if (p.models.length > 0) {
-            cloudModel.value = p.models[0].id
-        }
-        cloudProviderId.value = providerId
-    }
 }
 
 const saveImgProviders = () => {
@@ -1080,7 +1173,7 @@ onMounted(() => {
     if (window.electronAPI?.getUseSystemBrowser) { window.electronAPI.getUseSystemBrowser().then(r => { if (r.success) useSystemBrowser.value = r.value }) }
     if (window.electronAPI?.setUseSystemBrowser) { window.electronAPI.setUseSystemBrowser(useSystemBrowser.value) }
     sendKey.value = settingsStore.sendKey || 'Enter'
-    friendListDensity.value = settingsStore.friendListDensity || 'compact'
+    uiDensity.value = settingsStore.uiDensity || 'compact'
     navFlashIntensity.value = settingsStore.navFlashIntensity || 'medium'
     cacheRetentionDays.value = settingsStore.cacheRetentionDays || 30
     showModeUnreadBadge.value = settingsStore.showModeUnreadBadge !== undefined ? settingsStore.showModeUnreadBadge : true
@@ -1099,11 +1192,15 @@ onMounted(() => {
     if (cloudRaw) {
         const s = JSON.parse(cloudRaw)
         cloudApiBase.value = s.base || 'https://api.openai.com/v1'
-        cloudModel.value = s.model || 'gpt-4o'
+        cloudModel.value = s.model || ''
         cloudProviderId.value = s.provider || ''
         cloudApiKey.value = s.key || ''
     }
-    saveCloudApiSettings()
+    if (cloudProviderId.value && cloudApiKey.value) {
+        loadCloudModels()
+    } else {
+        saveCloudApiSettings()
+    }
 
     const savedMode = localStorage.getItem('aiMode')
     if (savedMode) aiSettingsMode.value = savedMode
@@ -1114,7 +1211,7 @@ onMounted(() => {
     if (raw) {
         const s = JSON.parse(raw)
         serverIP.value = s.serverIP || s.lanServerIP || '127.0.0.1'
-        serverPort.value = s.serverPort || s.lanServerPort || '3000'
+        serverPort.value = s.serverPort || s.lanServerPort || '3001'
         enablePinyinSearch.value = s.enablePinyinSearch || false
     }
 
@@ -1191,8 +1288,8 @@ const handleE2EChange = (value) => {
   localStorage.setItem('e2eEncryption', value)
 }
 
-const handleFriendListDensityChange = (value) => {
-    settingsStore.setFriendListDensity(value)
+const handleUiDensityChange = (value) => {
+  settingsStore.setUiDensity(value)
 }
 
 const handleNavFlashIntensityChange = (value) => {
@@ -1231,12 +1328,19 @@ const saveServerSettings = async () => {
     }
 }
 
-const savePrimaryServerSetting = () => {
+const savePrimaryServerSetting = async () => {
     if (primaryServerUrl.value) {
-        localStorage.setItem(PRIMARY_SERVER_KEY, JSON.stringify({ url: primaryServerUrl.value }))
+        const url = primaryServerUrl.value.replace(/\/+$/, '')
+        primaryServerUrl.value = url
+        localStorage.setItem(PRIMARY_SERVER_KEY, JSON.stringify({ url }))
+        if (window.electronAPI?.setApiBaseUrl) {
+            await window.electronAPI.setApiBaseUrl(url)
+        }
         ElMessage.success('主服务器地址已保存')
     } else {
         localStorage.removeItem(PRIMARY_SERVER_KEY)
+        saveServerSettings()
+        ElMessage.success('已恢复使用内网服务器地址')
     }
 }
 
@@ -1359,6 +1463,13 @@ const handleInstallUpdate = () => {
 </script>
 
 <style lang="scss" scoped>
+.model-select-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
 .settings-view {
     height: calc(100vh - 60px);
     padding: 0;
@@ -1379,7 +1490,7 @@ const handleInstallUpdate = () => {
                 display: flex;
                 align-items: center;
                 gap: 10px;
-                padding: 12px 20px;
+                padding: var(--ui-item-pad-y) 20px;
                 cursor: pointer;
                 color: var(--text-secondary);
                 transition: all 0.2s;
@@ -1405,29 +1516,48 @@ const handleInstallUpdate = () => {
 
         .settings-content {
             flex: 1;
-            padding: 30px 40px;
+            padding: var(--ui-content-pad);
             overflow-y: auto;
             background: var(--bg-primary);
 
             .settings-section {
-                max-width: 600px;
+                max-width: 640px;
 
                 h3 {
-                    margin: 0 0 20px;
+                    margin: 0 0 var(--ui-section-gap);
                     color: var(--text-primary);
                     font-size: 18px;
                     font-weight: 600;
+                    line-height: 1.4;
+
+                    &:not(:first-child) {
+                        margin-top: var(--ui-section-gap);
+                    }
+                }
+
+                h4 {
+                    margin: var(--ui-section-gap) 0 8px;
+                    color: var(--text-primary);
+                    font-size: 15px;
+                    font-weight: 600;
+                    line-height: 1.4;
+                }
+
+                .el-divider {
+                    margin: 12px 0;
                 }
 
                 .el-form-item {
-                    margin-bottom: 18px;
+                    position: relative;
+                    padding-right: 20px;
+                    margin-bottom: var(--ui-form-gap);
                     display: block !important;
 
                     :deep(.el-form-item__label) {
                         display: block;
                         color: var(--text-primary);
                         font-weight: 500;
-                        margin-bottom: 6px;
+                        margin-bottom: 4px;
                         padding: 0;
                         line-height: 1.4;
                         float: none;
@@ -1444,7 +1574,7 @@ const handleInstallUpdate = () => {
                 .badge-settings-list {
                     display: flex;
                     flex-direction: column;
-                    gap: 12px;
+                    gap: var(--ui-gap);
 
                     .badge-setting-row {
                         display: flex;
@@ -1462,12 +1592,6 @@ const handleInstallUpdate = () => {
                             color: var(--text-primary);
                             font-weight: 500;
                         }
-                    }
-
-                    .setting-tip-inline {
-                        font-size: 12px;
-                        color: var(--text-secondary);
-                        padding-left: 44px;
                     }
                 }
 
@@ -1496,7 +1620,7 @@ const handleInstallUpdate = () => {
                 .setting-tip {
                     font-size: 12px;
                     color: var(--text-secondary);
-                    margin-top: 6px;
+                    margin-top: 4px;
                     display: block;
                     line-height: 1.5;
                 }
@@ -1517,14 +1641,14 @@ const handleInstallUpdate = () => {
                 }
 
                 .template-actions {
-                    margin-bottom: 18px;
+                    margin-bottom: var(--ui-section-gap);
                 }
 
                 .about-info-list {
                     .about-row {
                         display: flex;
                         align-items: center;
-                        padding: 10px 0;
+                        padding: var(--ui-row-pad-y) 0;
                         border-bottom: 1px solid var(--border-color);
 
                         &:last-child {
@@ -1554,7 +1678,7 @@ const handleInstallUpdate = () => {
                     .about-row {
                         display: flex;
                         align-items: center;
-                        padding: 10px 0;
+                        padding: var(--ui-row-pad-y) 0;
                         border-bottom: 1px solid var(--border-color);
 
                         .about-label {
@@ -1572,14 +1696,14 @@ const handleInstallUpdate = () => {
                     }
 
                     .update-actions {
-                        margin-top: 20px;
+                        margin-top: 12px;
                         display: flex;
                         gap: 12px;
                         flex-wrap: wrap;
                     }
 
                     .update-progress-section {
-                        margin-top: 16px;
+                        margin-top: 12px;
 
                         .el-progress {
                             max-width: 400px;
@@ -1595,7 +1719,7 @@ const handleInstallUpdate = () => {
                     }
 
                     .update-message {
-                        margin-top: 16px;
+                        margin-top: 12px;
                         padding: 10px 16px;
                         border-radius: 8px;
                         font-size: 14px;
@@ -1636,7 +1760,7 @@ const handleInstallUpdate = () => {
   .debug-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
   .debug-topic-row { display: flex; gap: 8px; align-items: center; }
   .debug-progress { font-size: 13px; color: var(--text-secondary); margin: 12px 0; padding: 8px 12px; background: var(--bg-secondary); border-radius: 6px; }
-  .debug-result { margin-top: 16px; padding: 14px 16px; border-radius: 8px; border: 1px solid;
+  .debug-result { margin-top: 12px; padding: 14px 16px; border-radius: 8px; border: 1px solid;
     &.success { background: rgba(103,194,58,0.08); border-color: rgba(103,194,58,0.2); }
     &.error { background: rgba(245,108,108,0.08); border-color: rgba(245,108,108,0.2); }
     .debug-result-title { font-weight: 600; font-size: 15px; margin-bottom: 6px; }

@@ -81,6 +81,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { SwitchButton, Close, Loading } from '@element-plus/icons-vue'
 import { useI18n } from '../../composables/useI18n'
 import { getUserAvatar } from '../../composables/useAvatar'
+import { getServerBaseUrl } from '../../utils/serverUrl'
 import { useUserStore } from '../../stores/user'
 
 const props = defineProps({
@@ -129,16 +130,7 @@ const handleUpdateVisible = (val) => {
 
 // 心跳包连接检测 - 5秒间隔
 const checkConnection = async () => {
-  const raw = localStorage.getItem('lanChatSettings')
-  let serverUrl = 'http://localhost:3000'
-  if (raw) {
-    try {
-      const s = JSON.parse(raw)
-      const ip = s.serverIP || '127.0.0.1'
-      const port = s.serverPort || '3000'
-      serverUrl = `http://${ip}:${port}`
-    } catch (_) {}
-  }
+  const serverUrl = getServerBaseUrl()
 
   try {
     const start = Date.now()
@@ -202,15 +194,15 @@ onUnmounted(() => {
 }
 
 .sidebar-content {
-  padding: 10px;
+  padding: var(--ui-item-pad-x);
 }
 
 .user-info-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 15px;
-  padding: 20px 0;
+  gap: var(--ui-gap);
+  padding: var(--ui-content-pad) 0;
   
   .avatar-wrapper {
     position: relative;
@@ -248,7 +240,7 @@ onUnmounted(() => {
 }
 
 .status-row {
-  padding: 10px 0;
+  padding: var(--ui-item-pad-y) 0;
 }
 
 .status-option {

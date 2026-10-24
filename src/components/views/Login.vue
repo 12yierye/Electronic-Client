@@ -1,4 +1,4 @@
-<template>
+﻿﻿<template>
   <div class="login-container">
     <el-card class="login-card">
       <template #header>
@@ -72,7 +72,7 @@
       <el-form label-width="100px" label-position="left">
         <h4 style="margin:0 0 8px 0;font-size:13px;color:var(--text-secondary)">公网服务器（认证 & 日常聊天）</h4>
         <el-form-item label="公网 URL">
-          <el-input v-model="publicServerUrl" placeholder="http://your-public-server.com:3000" />
+          <el-input v-model="publicServerUrl" placeholder="http://your-public-server.com:3001" />
         </el-form-item>
         <el-divider style="margin:12px 0" />
         <h4 style="margin:0 0 8px 0;font-size:13px;color:var(--text-secondary)">内网 LAN 服务器（可选）</h4>
@@ -107,12 +107,12 @@ const testingConnection = ref(false)
 const autoLogin = ref(false)
 const autoLoginChecked = ref(false)
 const autoLoginSuccess = ref(false)
-const apiBase = ref('http://localhost:3000')
+const apiBase = ref('http://localhost:3001')
 
 // 服务器地址编辑
 const serverDialogVisible = ref(false)
 const serverIP = ref('127.0.0.1')
-const serverPort = ref('3000')
+const serverPort = ref('3001')
 const publicServerUrl = ref('')
 const savingServer = ref(false)
 
@@ -123,7 +123,7 @@ const loadServerSettings = () => {
         try {
             const s = JSON.parse(raw)
             const ip = s.serverIP || '127.0.0.1'
-            const port = s.serverPort || '3000'
+            const port = s.serverPort || '3001'
             serverIP.value = ip
             serverPort.value = port
             apiBase.value = `http://${ip}:${port}`
@@ -157,7 +157,7 @@ const saveServerSettings = async () => {
         // 保存 LAN 服务器设置
         if (serverIP.value.trim()) {
             const ip = serverIP.value.trim()
-            const port = serverPort.value.trim() || '3000'
+            const port = serverPort.value.trim() || '3001'
             const url = `http://${ip}:${port}`
             const settings = { serverIP: ip, serverPort: port }
             localStorage.setItem(SERVER_SETTINGS_KEY, JSON.stringify(settings))
@@ -269,16 +269,18 @@ const handleRegisterSubmit = async () => {
 // 同步保存的服务器地址到主进程
 const syncServerSettingsToMain = async () => {
     let url = apiBase.value
-    const raw = localStorage.getItem(SERVER_SETTINGS_KEY)
-    if (raw) {
-        try {
-            const s = JSON.parse(raw)
-            const ip = s.serverIP || '127.0.0.1'
-            const port = s.serverPort || '3000'
-            url = `http://${ip}:${port}`
-        } catch (e) {
-            // ignore
+    try {
+        const primaryRaw = localStorage.getItem('primaryServer')
+        const lanRaw = localStorage.getItem(SERVER_SETTINGS_KEY)
+        if (primaryRaw) {
+            const primary = JSON.parse(primaryRaw)
+            if (primary.url) url = primary.url
+        } else if (lanRaw) {
+            const s = JSON.parse(lanRaw)
+            url = `http://${s.serverIP || '127.0.0.1'}:${s.serverPort || '3001'}`
         }
+    } catch (e) {
+        // ignore
     }
     if (window.electronAPI?.setApiBaseUrl) {
         await window.electronAPI.setApiBaseUrl(url)

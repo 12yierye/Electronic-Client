@@ -35,6 +35,30 @@ export function registerSettingsIpc() {
     }
   })
 
+  // 从厂商的 OpenAI 兼容 /models 接口拉取可用模型
+  ipcMain.handle('list-cloud-models', async (event, { baseURL, apiKey } = {}) => {
+    if (!baseURL) return { success: false, message: '缺少接口地址' }
+    const url = `${String(baseURL).replace(/\/+$/, '')}/models`
+    try {
+      const response = await axios.get(url, {
+        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+        timeout: 10000
+      })
+      const raw = response.data?.data || response.data?.models || []
+      const models = raw
+        .map(item => ({
+          id: item?.id || item?.name || '',
+          ownedBy: item?.owned_by || ''
+        }))
+        .filter(item => item.id)
+      return { success: true, models }
+    } catch (error) {
+      const status = error.response?.status
+      const detail = error.response?.data?.error?.message || error.response?.data?.message || error.message
+      return { success: false, status, message: detail }
+    }
+  })
+
   ipcMain.handle('set-ppt-dir', async (event, dir) => {
     setPPTDir(dir)
     return { success: true }

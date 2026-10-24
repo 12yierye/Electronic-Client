@@ -68,6 +68,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { clearAvatarCache, getAvatarUrl } from '../../../composables/useAvatar'
+import { apiFetch } from '../../../utils/apiFetch'
+import { getServerBaseUrl } from '../../../utils/serverUrl'
 
 const avatarInputRef = ref(null)
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp']
@@ -126,7 +128,7 @@ const handleAvatarSelected = async (e) => {
 
   try {
     const arrayBuffer = await file.arrayBuffer()
-    const res = await fetch(`${baseUrl}/user/avatar/upload?username=${encodeURIComponent(username)}`, {
+    const res = await apiFetch(`${baseUrl}/user/avatar/upload?username=${encodeURIComponent(username)}`, {
       method: 'POST',
       headers: { 'Content-Type': file.type },
       body: arrayBuffer
@@ -158,25 +160,12 @@ const handleAvatarSelected = async (e) => {
   e.target.value = ''
 }
 
-function getServerBaseUrl() {
-  try {
-    const raw = localStorage.getItem('lanChatSettings')
-    if (raw) {
-      const s = JSON.parse(raw)
-      const ip = s.serverIP || '127.0.0.1'
-      const port = s.serverPort || '3000'
-      return `http://${ip}:${port}`
-    }
-  } catch {}
-  return 'http://localhost:3000'
-}
-
 const handleSave = async () => {
   const username = getCurrentUsername()
   const baseUrl = getServerBaseUrl()
 
   try {
-    const res = await fetch(`${baseUrl}/user/profile`, {
+    const res = await apiFetch(`${baseUrl}/user/profile`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -1,5 +1,5 @@
 import { Notification, app } from 'electron'
-import { getAPIBase, getMainWindow } from '../config.js'
+import { getAPIBase, getMainWindow, getAuthToken } from '../config.js'
 import { join } from 'node:path'
 import fs from 'fs'
 import WebSocket from 'ws'
@@ -79,7 +79,7 @@ export function connectWebSocket(username) {
       if (ws !== socket) return
       console.log('[WS] Connected')
       loadOfflineQueue()
-      socket.send(JSON.stringify({ type: 'auth', username }))
+      socket.send(JSON.stringify({ type: 'auth', username, token: getAuthToken() }))
       flushOfflineQueue()
     })
 
