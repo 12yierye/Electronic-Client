@@ -1419,6 +1419,11 @@ function setupUpdateListeners() {
         updateMessage.value = t('settings.downloadComplete')
         updateMessageType.value = 'success'
         break
+      case 'manual-download':
+        updateStatus.value = 'available'
+        updateMessage.value = data.message || '已打开下载页面'
+        updateMessageType.value = 'info'
+        break
       case 'error':
         updateStatus.value = 'error'
         checkingUpdate.value = false
@@ -1447,7 +1452,7 @@ const handleCheckUpdate = () => {
     updateProgress.value = 0
     updateSpeed.value = ''
     canInstall.value = false
-    window.electronAPI?.checkForUpdate(false)
+    window.electronAPI?.checkForUpdate(false, true)
 }
 
 // 下载更新

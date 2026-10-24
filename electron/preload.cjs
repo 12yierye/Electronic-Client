@@ -229,7 +229,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // 自动更新
-  checkForUpdate: (silent) => ipcRenderer.invoke('update:check', silent),
+  checkForUpdate: (silent, force) => ipcRenderer.invoke('update:check', silent, force),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
   onUpdateStatus: (callback) => {
