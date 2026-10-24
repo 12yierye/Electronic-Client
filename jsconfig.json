@@ -1,0 +1,8 @@
+{
+    "compilerOptions": {
+        "allowJs": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": false
+    },
+    "exclude": ["node_modules", "dist", "dist-electron", "release"]
+}

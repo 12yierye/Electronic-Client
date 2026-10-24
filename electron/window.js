@@ -50,6 +50,14 @@ export function createWindow() {
     console.log('[Main] Page Loaded')
   })
 
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log('[Renderer]', message, sourceId ? `${sourceId}:${line}` : '')
+  })
+
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.log('[Main] Renderer gone:', details.reason, details.exitCode)
+  })
+
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDesc) => {
     console.log('[Main] Page Load Failed:', errorCode, errorDesc)
   })

@@ -1,4 +1,4 @@
-﻿﻿<template>
+<template>
   <div class="login-container">
     <el-card class="login-card">
       <template #header>
